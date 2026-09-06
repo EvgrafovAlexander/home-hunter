@@ -102,3 +102,79 @@ def test_browser_starts_once_and_closes():
     driver.chromium.launch_persistent_context.assert_awaited_once()
     context.close.assert_awaited_once()
     driver.stop.assert_awaited_once()
+
+
+@pytest.mark.parametrize('proxy', ['', 'socks5://cian-tunnel:1080'])
+def test_browser_uses_configured_proxy(settings, proxy):
+    from unittest.mock import patch
+    settings.AVITO_PROXY_URL = proxy
+    driver = AsyncMock()
+    start = AsyncMock(return_value=driver)
+    async def check():
+        async with AvitoCollector(headless=False) as collector:
+            await collector._start()
+    with patch('collectors.avito.collector.async_playwright', return_value=SimpleNamespace(start=start)):
+        asyncio.run(check())
+    kwargs = driver.chromium.launch_persistent_context.call_args.kwargs
+    assert kwargs['headless'] is False
+    if proxy:
+        assert kwargs['proxy'] == {'server': proxy}
+    else:
+        assert 'proxy' not in kwargs
+
+
+@pytest.mark.parametrize('proxy', ['localhost:1080', 'socks5://host', 'socks5://user:secret@host:1080',
+                                  'http://host:1080/path', 'http://host:99999'])
+def test_invalid_proxy_does_not_start_browser(settings, proxy):
+    from unittest.mock import patch
+    settings.AVITO_PROXY_URL = proxy
+    with patch('collectors.avito.collector.async_playwright') as driver:
+        collector = AvitoCollector()
+        with pytest.raises(ValueError):
+            asyncio.run(collector._start())
+        assert collector.stop_requested
+        driver.assert_not_called()
+
+
+def test_proxy_failure_stops_without_retry(settings):
+    from playwright.async_api import Error
+    settings.AVITO_PROXY_URL = 'socks5://cian-tunnel:1080'
+    collector = AvitoCollector()
+    collector._start = AsyncMock()
+    collector.page = AsyncMock()
+    collector.page.goto.side_effect = Error('net::ERR_PROXY_CONNECTION_FAILED')
+    with pytest.raises(CollectionError, match='ERR_PROXY_CONNECTION_FAILED'):
+        asyncio.run(collector.collect(SEARCH, mode='fast'))
+    assert collector.stop_requested
+    collector.page.goto.assert_awaited_once()
+
+
+def test_fresh_profile_cleanup_preserves_request_state(settings):
+    from unittest.mock import patch
+    settings.AVITO_PERSISTENT_PROFILE = False
+    driver = AsyncMock()
+    start = AsyncMock(return_value=driver)
+    async def check():
+        async with AvitoCollector() as collector:
+            collector.state.update(blocked_until=123, next_request_at=456)
+            await collector._start()
+            profile = Path(driver.chromium.launch_persistent_context.call_args.args[0])
+            assert profile.is_dir()
+            assert profile != settings.AVITO_STATE_DIR / 'chromium'
+        assert not profile.exists()
+        assert collector.state.read() == {'blocked_until': 123, 'next_request_at': 456}
+    with patch('collectors.avito.collector.async_playwright', return_value=SimpleNamespace(start=start)):
+        asyncio.run(check())
+
+
+def test_fresh_profile_does_not_bypass_cooldown(settings):
+    import time
+    from unittest.mock import patch
+    settings.AVITO_PERSISTENT_PROFILE = False
+    collector = AvitoCollector()
+    collector.state.update(blocked_until=time.time() + 3600)
+    with patch('collectors.avito.collector.async_playwright') as driver:
+        with pytest.raises(CollectionError, match='cooldown'):
+            asyncio.run(collector.collect(SEARCH, mode='fast'))
+        driver.assert_not_called()
+    assert collector.temporary_profile is None

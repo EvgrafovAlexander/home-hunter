@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 import time
+from tempfile import TemporaryDirectory
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -46,6 +47,7 @@ class AvitoCollector(BaseCollector):
         self.stop_requested = False
         self.state = SessionState(settings.AVITO_STATE_DIR)
         self.headless = headless
+        self.temporary_profile = None
         self.playwright = None
         self.browser = None
         self.context = None
@@ -60,8 +62,12 @@ class AvitoCollector(BaseCollector):
             if self.context:
                 await self.context.close()
         finally:
-            if self.playwright:
-                await self.playwright.stop()
+            try:
+                if self.playwright:
+                    await self.playwright.stop()
+            finally:
+                if self.temporary_profile:
+                    self.temporary_profile.cleanup()
 
     async def _start(self) -> None:
         if self.start_error is not None:
@@ -69,15 +75,28 @@ class AvitoCollector(BaseCollector):
         if self.page is not None:
             return
         try:
+            proxy_options = {}
+            if settings.AVITO_PROXY_URL:
+                proxy = urlsplit(settings.AVITO_PROXY_URL)
+                if (proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname
+                        or proxy.username or proxy.password or not proxy.port
+                        or proxy.path not in {"", "/"} or proxy.query or proxy.fragment):
+                    raise ValueError("AVITO_PROXY_URL must be a proxy URL with port and without credentials")
+                proxy_options["proxy"] = {"server": settings.AVITO_PROXY_URL}
             self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+            profile = self.state.directory / "chromium"
+            if not settings.AVITO_PERSISTENT_PROFILE:
+                self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
+                profile = self.temporary_profile.name
             self.playwright = await async_playwright().start()
             self.context = await self.playwright.chromium.launch_persistent_context(
-                str(self.state.directory / "chromium"), headless=self.headless, channel="chromium",
-                viewport={"width": 1440, "height": 1000}, locale="ru-RU",
+                str(profile), headless=self.headless, channel="chromium",
+                viewport={"width": 1440, "height": 1000}, locale="ru-RU", **proxy_options,
             )
             self.browser = self.context.browser
             self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
         except Exception as exc:
+            self.stop_requested = True
             self.start_error = exc
             raise
 
@@ -146,7 +165,11 @@ class AvitoCollector(BaseCollector):
 
     async def _load_page(self, url: str) -> str:
         await self._pace_request()
-        response = await self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        try:
+            response = await self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        except PlaywrightError:
+            self.stop_requested = True
+            raise  # No retry or direct fallback when the configured route fails.
         status = response.status if response else None
         headers = await response.all_headers() if response else {}
         # HTTP blocks can be handled immediately; successful pages may still be rendering.

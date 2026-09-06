@@ -45,18 +45,25 @@ services:
     init: true
     shm_size: 256mb
     volumes:
-      - avito_state:/app/.avito-state
+      - avito_proxy_state:/app/.avito-state
     env_file: .env
     environment:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       DJANGO_DEBUG: "false"
       AVITO_STATE_DIR: /app/.avito-state
+      AVITO_PROXY_URL: socks5://cian-tunnel:1080
+      AVITO_PERSISTENT_PROFILE: "false"
+      AVITO_FAST_SCAN_PAGES: "1"
+      AVITO_FULL_SCAN_ENABLED: "false"
+    command: ["xvfb-run", "-a", "-s", "-screen 0 1440x1000x24 -nolisten tcp", "python", "manage.py", "collect_listings", "--source", "avito", "--mode", "fast", "--headed"]
     depends_on:
       db:
         condition: service_healthy
+      cian-tunnel:
+        condition: service_healthy
   cian-tunnel:
-    profiles: ["cian"]
+    profiles: ["cian", "collector"]
     build:
       context: .
       target: collector
@@ -121,4 +128,5 @@ volumes:
   caddy_data:
   caddy_config:
   avito_state:
+  avito_proxy_state:
   cian_state:

@@ -1,10 +1,10 @@
 [Unit]
-Description=Home Hunter hourly fast scan
+Description=Home Hunter fast scan every three hours
 
 [Timer]
-OnCalendar=hourly
+OnCalendar=*-*-* 00/3:15:00
 Persistent=true
-RandomizedDelaySec=5m
+RandomizedDelaySec=0
 
 [Install]
 WantedBy=timers.target

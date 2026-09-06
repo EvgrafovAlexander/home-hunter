@@ -54,7 +54,7 @@ PostgreSQL advisory lock защищает и ручные одновременн
   сбор прекращается для всех оставшихся поисков. Следующий запуск не отправляет запросы
   до истечения паузы. Если `Retry-After` требует ждать дольше, используется его срок.
 - `AVITO_FULL_SCAN_ENABLED=false`: полные обходы отключены по умолчанию.
-  Fast по умолчанию читает одну страницу. Существующее расписание fast — раз в час.
+  Fast по умолчанию читает одну страницу. Расписание Avito fast — раз в три часа.
 - `--headed --wait-for-captcha 300`: при блокировке оставляет окно на пять минут для
   ручного прохождения капчи. Сборщик читает уже открытую выдачу без повторного перехода,
   затем сохраняет объявления обычным способом. Капчу он автоматически не решает.
@@ -135,19 +135,19 @@ docker compose exec web python manage.py check
 docker compose ps
 ```
 
-Постоянно работают только db, web, caddy. Caddy публикует порт 80,
+Постоянно работают db, web, caddy и общий SSH SOCKS `cian-tunnel`. Caddy публикует порт 80,
 web:8000 и PostgreSQL:5432 наружу не опубликованы.
 Разрешите firewall только 80/tcp и 22/tcp для SSH.
 Откройте http://SERVER_IP/admin/. Данные защищены стандартным Django login.
 Admin static files собираются при build и раздаются WhiteNoise через web.
 
 ```bash
-docker compose run --rm collector python manage.py collect_listings --source avito --mode fast
+docker compose --profile collector run --rm collector
 # Только для явно разрешённого полного обхода:
-docker compose run --rm -e AVITO_FULL_SCAN_ENABLED=true collector python manage.py collect_listings --source avito --mode full
+docker compose --profile collector run --rm -e AVITO_FULL_SCAN_ENABLED=true collector xvfb-run -a python manage.py collect_listings --source avito --mode full --headed
 ```
 
-Docker volume `avito_state` сохраняет профиль, паузы и диагностику в `/app/.avito-state`
+Docker volume `avito_proxy_state` сохраняет паузы и диагностику в `/app/.avito-state`
 между одноразовыми контейнерами collector. В image каталог принадлежит пользователю app.
 
 Collector существует только до завершения команды. Для обновления: соберите оба
@@ -186,7 +186,8 @@ journalctl -u home-hunter-avito-full.service
 docker compose logs web caddy
 ```
 
-Fast — hourly с разбросом до 5 минут. Full — 03:30 по timezone сервера
+Avito fast — каждые три часа в 00:15, 03:15, …, 21:15 по timezone сервера.
+Full выключен; его шаблон — 03:30 по timezone сервера
 1, 4, 7… числа каждого месяца (примерно каждые 3 дня, интервал на границе месяца
 может быть короче). Persistent запускает пропущенное срабатывание после включения.
 Если lock занят, scan пропускается до следующего запуска.
@@ -213,7 +214,7 @@ docker compose exec web python manage.py makemigrations --check --dry-run
 docker compose exec web python manage.py migrate --check
 docker compose exec web python manage.py check
 docker compose exec web sh -c '! command -v chromium && ! command -v chromium-browser && test ! -d /ms-playwright'
-docker compose run --rm collector python manage.py collect_listings --source avito --mode fast
+docker compose --profile collector run --rm collector
 curl -I http://SERVER_IP/admin/
 ```
 
@@ -235,3 +236,36 @@ docker compose run --rm -T collector python manage.py shell < collectors/tests/d
 Docker-сервисы `cian-tunnel` и `cian-collector` находятся в профиле `cian`.
 Fast читает новые объявления раз в час; полный обход запускается явно.
 [Подробная документация, схема туннеля и команды](docs/CIAN.md).
+
+### Avito через второй VPS
+
+Docker `collector` запускает Chromium с окном под Xvfb и новым временным профилем
+на каждый запуск (`AVITO_PERSISTENT_PROFILE=false`). Профиль удаляется при
+завершении; все поиски одного запуска используют одну сессию. Отдельный том
+`avito_proxy_state` хранит общие паузы и диагностику. Старый `avito_state` не используется
+и сохранён для отката. `AVITO_PROXY_URL` в Compose закреплён на
+`socks5://cian-tunnel:1080`; туннель доступен в профилях `collector` и `cian`.
+Его SSH-ключ и настройка второго VPS описаны в [docs/CIAN.md](docs/CIAN.md).
+До первого запуска на новом сервере необходимо настроить этот туннель.
+Ноутбук в маршруте не участвует. SOCKS наружу не публикуется.
+
+Команда `docker compose --profile collector run --rm collector` читает одну
+страницу сохранённых активных поисков Avito. Для новых объявлений сохраните
+поиск с сортировкой «По дате» (`s=104`). Приложение добавляет новые объявления,
+обновляет известные и сохраняет изменения цен; уникальность source/external_id
+защищает от дублей. Fast не снимает с активности объявления, отсутствующие
+на первой странице. За три часа часть новых объявлений может уйти за её пределы.
+
+При 403/429/439 или капче сбор прекращается, пауза хранится в томе и учитывает
+Retry-After. Ошибка прокси останавливает оставшиеся поиски без повторов и
+без прямого доступа. После блокировки нет немедленного запуска с другим профилем: общая пауза
+проверяется до создания браузера, независимо от временного профиля.
+Успешный единичный запрос не гарантирует стабильность следующих запусков.
+
+При развёртывании 2026-09-07 повторный запрос с успешным ранее сохранённым
+профилем получил 403 (Scan 6, 0 новых). Поэтому расписание использует временные
+профили, как в успешных диагностических запросах с пустым профилем. Сохранённые
+профили оставлены для анализа и не используются плановым сбором.
+Стабильность нескольких плановых запусков ещё не подтверждена.
+Расписание включается только для `home-hunter-avito-fast.timer`.
+Общий flock и PostgreSQL advisory lock исключают одновременный сбор с ЦИАН.
