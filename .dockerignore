@@ -1,0 +1,14 @@
+*
+!config/
+!config/*.py
+!listings/
+!listings/**/*.py
+!listings/*.py
+!collectors/
+!collectors/**/*.py
+!collectors/*.py
+!manage.py
+!requirements*.txt
+!Dockerfile
+**/__pycache__
+**/tests

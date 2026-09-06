@@ -1,0 +1,5 @@
+# Explicit local override; never include this on a public server.
+services:
+  db:
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"

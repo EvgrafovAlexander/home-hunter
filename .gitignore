@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Home Hunter generated/local files
+staticfiles/
+.idea/
+.env.*
+!.env.example

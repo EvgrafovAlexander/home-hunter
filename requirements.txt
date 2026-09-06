@@ -1,0 +1,4 @@
+-r requirements-web.txt
+-r requirements-collector.txt
+pytest>=8,<10
+pytest-django>=4.11,<5

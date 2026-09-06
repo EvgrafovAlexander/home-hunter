@@ -1,0 +1,62 @@
+from dataclasses import replace
+import pytest
+from django.utils import timezone
+from collectors.base import BaseCollector, CollectionError, CollectionResult
+from listings.models import ListingSearchQuery, Scan, SearchQuery
+from listings.services.persistence import process_listing
+from listings.services.scans import run_scan
+from .test_persistence import search, item
+
+pytestmark = pytest.mark.django_db(transaction=True)
+
+
+class FakeCollector(BaseCollector):
+    def __init__(self, result, fail=False):
+        self.result, self.fail = result, fail
+
+    async def collect(self, search, *, mode):
+        if self.fail:
+            raise CollectionError("blocked", self.result)
+        return self.result
+
+
+def test_full_deactivates_only_missing(search, item):
+    missing = process_listing(search, item, timezone.now()).listing
+    found = replace(item, external_id="2")
+    scan = run_scan(search, FakeCollector(CollectionResult([found], 2, 1, True)), mode="full")
+    missing.refresh_from_db()
+    assert scan.status == "success" and scan.new_items == 1
+    assert not missing.is_active
+    assert not ListingSearchQuery.objects.get(listing=missing).is_active
+
+
+@pytest.mark.parametrize("mode,complete,fail", [("fast", True, False), ("full", False, False), ("full", True, True)])
+def test_partial_failed_fast_do_not_deactivate(search, item, mode, complete, fail):
+    listing = process_listing(search, item, timezone.now()).listing
+    scan = run_scan(search, FakeCollector(CollectionResult([], 1, 0, complete), fail), mode=mode)
+    listing.refresh_from_db()
+    assert listing.is_active and ListingSearchQuery.objects.get().is_active
+    assert scan.status == ("success" if mode == "fast" else "failed")
+    assert scan.finished_at is not None
+
+
+def test_other_search_keeps_listing_active(search, item):
+    listing = process_listing(search, item, timezone.now()).listing
+    other = SearchQuery.objects.create(name="Other", source="avito", url=search.url)
+    process_listing(other, item, timezone.now())
+    run_scan(search, FakeCollector(CollectionResult(complete=True)), mode="full")
+    listing.refresh_from_db()
+    assert listing.is_active
+    run_scan(other, FakeCollector(CollectionResult(complete=True)), mode="full")
+    listing.refresh_from_db()
+    assert not listing.is_active
+    process_listing(search, item, timezone.now())
+    listing.refresh_from_db()
+    assert listing.is_active
+
+
+def test_failed_scan_keeps_observations_and_deduplicates(search, item):
+    scan = run_scan(search, FakeCollector(CollectionResult([item, item], 1, 2), True), mode="full")
+    assert scan.status == "failed"
+    assert scan.items_seen == 2 and scan.unique_items_seen == scan.new_items == 1
+    assert "blocked" in scan.error

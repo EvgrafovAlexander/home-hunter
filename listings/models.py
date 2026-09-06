@@ -1,0 +1,99 @@
+from django.db import models
+from django.utils import timezone
+
+
+class SearchQuery(models.Model):
+    class Source(models.TextChoices):
+        AVITO = "avito", "Avito"
+        CIAN = "cian", "CIAN"
+
+    name = models.CharField(max_length=255)
+    source = models.CharField(max_length=20, choices=Source.choices)
+    url = models.TextField()
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Listing(models.Model):
+    source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
+    external_id = models.CharField(max_length=100)
+    url = models.TextField()
+    title = models.CharField(max_length=1000)
+    description = models.TextField(blank=True, null=True)
+    price = models.BigIntegerField(null=True, blank=True, db_index=True)
+    price_per_sqm = models.BigIntegerField(null=True, blank=True)
+    rooms = models.IntegerField(null=True, blank=True, db_index=True)
+    area = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, db_index=True)
+    floor = models.IntegerField(null=True, blank=True)
+    floors_total = models.IntegerField(null=True, blank=True)
+    address = models.TextField(null=True, blank=True)
+    district = models.CharField(max_length=255, null=True, blank=True)
+    published_text = models.CharField(max_length=255, null=True, blank=True)
+    image_url = models.TextField(null=True, blank=True)
+    first_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
+    last_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    search_queries = models.ManyToManyField(SearchQuery, through="ListingSearchQuery")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["source", "external_id"], name="unique_source_listing")]
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class ListingSearchQuery(models.Model):
+    listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="search_relations")
+    search_query = models.ForeignKey(SearchQuery, on_delete=models.CASCADE, related_name="listing_relations")
+    first_seen_at = models.DateTimeField(default=timezone.now)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["listing", "search_query"], name="unique_listing_search")]
+
+
+class PriceHistory(models.Model):
+    listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="price_history")
+    price = models.BigIntegerField(null=True, blank=True)
+    observed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-observed_at"]
+
+
+class ListingSnapshot(models.Model):
+    listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="snapshots")
+    observed_at = models.DateTimeField(default=timezone.now)
+    data = models.JSONField()
+
+
+class Scan(models.Model):
+    class Mode(models.TextChoices):
+        FAST = "fast", "Fast"
+        FULL = "full", "Full"
+
+    class Status(models.TextChoices):
+        RUNNING = "running", "Running"
+        SUCCESS = "success", "Success"
+        FAILED = "failed", "Failed"
+
+    search_query = models.ForeignKey(SearchQuery, on_delete=models.CASCADE, related_name="scans")
+    source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
+    mode = models.CharField(max_length=10, choices=Mode.choices)
+    started_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    pages_scanned = models.PositiveIntegerField(default=0)
+    items_seen = models.PositiveIntegerField(default=0)
+    unique_items_seen = models.PositiveIntegerField(default=0)
+    new_items = models.PositiveIntegerField(default=0)
+    updated_items = models.PositiveIntegerField(default=0)
+    price_changes = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.RUNNING)
+    error = models.TextField(blank=True)
