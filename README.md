@@ -34,14 +34,42 @@ python manage.py runserver
 
 ```bash
 python manage.py collect_listings --source avito --mode fast --headed
-python manage.py collect_listings --source avito --mode full --headed
-python manage.py collect_listings --source avito --mode full --search-id 1
+python manage.py collect_listings --source avito --mode fast --headed --wait-for-captcha 300
+# Full отключён по умолчанию; включать только после проверки стабильности доступа:
+AVITO_FULL_SCAN_ENABLED=true python manage.py collect_listings --source avito --mode full --search-id 1
 ```
 
 Без `--headed` используется headless; также есть явный `--headless`.
 Один command открывает один browser и обходит enabled-поиски последовательно.
 PostgreSQL advisory lock защищает и ручные одновременные запуски.
-После завершения Chromium закрывается.
+После завершения Chromium закрывается, профиль сохраняется в `AVITO_STATE_DIR/chromium`.
+По умолчанию это `.avito-state/` в каталоге проекта; каталог исключён из Git.
+
+### Сессия, ручная капча и паузы
+
+- `AVITO_PAGE_DELAY_SECONDS=120`: минимальный интервал между поисковыми переходами,
+  включая разные поиски и последовательные запуски. Это экспериментальный интервал,
+  а не установленный лимит Авито; он не ограничивает фоновые запросы самого браузера.
+- `AVITO_BLOCK_COOLDOWN_SECONDS=3600`: после HTTP 403/429/439 или страницы блокировки
+  сбор прекращается для всех оставшихся поисков. Следующий запуск не отправляет запросы
+  до истечения паузы. Если `Retry-After` требует ждать дольше, используется его срок.
+- `AVITO_FULL_SCAN_ENABLED=false`: полные обходы отключены по умолчанию.
+  Fast по умолчанию читает одну страницу. Существующее расписание fast — раз в час.
+- `--headed --wait-for-captcha 300`: при блокировке оставляет окно на пять минут для
+  ручного прохождения капчи. Сборщик читает уже открытую выдачу без повторного перехода,
+  затем сохраняет объявления обычным способом. Капчу он автоматически не решает.
+  Для этого режима нужен графический экран; в Docker — настроенный X/VNC.
+  Действующую паузу между запусками этот флаг не отменяет.
+
+Состояние пауз хранится в `request-state.json`, диагностика последнего ответа — в
+`last-response.json` внутри `AVITO_STATE_DIR`: время UTC, URL, HTTP-код, заголовок
+страницы, количество карточек, `Retry-After` и `Content-Type`. Cookies в диагностику
+не записываются. После ручного восстановления HTTP-код равен `null`, поскольку
+читается текущий DOM, а новый запрос не выполняется. Сохранение `storage_state()`
+в цикле не используется. Не запускайте два браузера с одним профилем одновременно.
+
+При обновлении старой установки явно замените `AVITO_PAGE_DELAY_SECONDS=2` в `.env`
+на `120`: существующие значения окружения имеют приоритет над новыми defaults.
 
 Проверьте Listing, PriceHistory, ListingSnapshot и Scan в Admin.
 Повторный неизменившийся scan обновляет last_seen_at без дублей истории.
@@ -115,8 +143,12 @@ Admin static files собираются при build и раздаются White
 
 ```bash
 docker compose run --rm collector python manage.py collect_listings --source avito --mode fast
-docker compose run --rm collector python manage.py collect_listings --source avito --mode full
+# Только для явно разрешённого полного обхода:
+docker compose run --rm -e AVITO_FULL_SCAN_ENABLED=true collector python manage.py collect_listings --source avito --mode full
 ```
+
+Docker volume `avito_state` сохраняет профиль, паузы и диагностику в `/app/.avito-state`
+между одноразовыми контейнерами collector. В image каталог принадлежит пользователю app.
 
 Collector существует только до завершения команды. Для обновления: соберите оба
 image, выполните migrate и `docker compose up -d`. Не используйте
@@ -145,7 +177,8 @@ homehunter.example.com {
 sudo cp deploy/systemd/* /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now home-hunter-avito-fast.timer
-sudo systemctl enable --now home-hunter-avito-full.timer
+# На существующем сервере временно отключите полный обход:
+sudo systemctl disable --now home-hunter-avito-full.timer
 systemctl list-timers
 systemctl status home-hunter-avito-fast.service
 journalctl -u home-hunter-avito-fast.service

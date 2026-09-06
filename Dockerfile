@@ -15,6 +15,7 @@ USER app
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "2", "--timeout", "60"]
 
 FROM base AS collector
+RUN mkdir -p /app/.avito-state && chown app:app /app/.avito-state && chmod 700 /app/.avito-state
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 COPY requirements-collector.txt .
 RUN pip install --no-cache-dir -r requirements-collector.txt \

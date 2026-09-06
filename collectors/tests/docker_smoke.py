@@ -3,6 +3,7 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
 from django.core.management import call_command
+from django.test import override_settings
 from collectors.avito.collector import AvitoCollector
 from listings.models import Listing, Scan, SearchQuery
 
@@ -28,7 +29,7 @@ async def start_with_fixture(self):
 assert not Listing.objects.filter(external_id="docker-smoke").exists()
 search = SearchQuery.objects.create(name="Docker smoke fixture", source="avito", url="https://www.avito.ru/fixture")
 try:
-    with patch.object(AvitoCollector, "_start", start_with_fixture):
+    with override_settings(AVITO_FULL_SCAN_ENABLED=True, AVITO_PAGE_DELAY_SECONDS=0), patch.object(AvitoCollector, "_start", start_with_fixture):
         for mode in ("fast", "full"):
             call_command("collect_listings", source="avito", mode=mode, search_id=search.pk)
     listing = Listing.objects.get(external_id="docker-smoke", source="avito")

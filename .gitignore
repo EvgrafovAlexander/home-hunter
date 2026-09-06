@@ -225,3 +225,6 @@ staticfiles/
 
 # Local task history and working materials
 /.tasks/
+
+# Browser profile, request cooldown and diagnostics
+.avito-state/

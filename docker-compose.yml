@@ -44,11 +44,14 @@ services:
       target: collector
     init: true
     shm_size: 256mb
+    volumes:
+      - avito_state:/app/.avito-state
     env_file: .env
     environment:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       DJANGO_DEBUG: "false"
+      AVITO_STATE_DIR: /app/.avito-state
     depends_on:
       db:
         condition: service_healthy
@@ -56,3 +59,4 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  avito_state:

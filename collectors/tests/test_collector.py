@@ -73,7 +73,7 @@ def test_damaged_card_prevents_deactivation(settings):
 def test_page_errors_fail(status, html, error):
     collector = AvitoCollector()
     collector.page = AsyncMock()
-    collector.page.goto.return_value = SimpleNamespace(status=status)
+    collector.page.goto.return_value = SimpleNamespace(status=status, all_headers=AsyncMock(return_value={}))
     collector.page.content.return_value = html
     with pytest.raises(RuntimeError, match=error):
         asyncio.run(collector._load_page(SEARCH.url))
@@ -82,14 +82,14 @@ def test_page_errors_fail(status, html, error):
 def test_recognized_empty_page():
     collector = AvitoCollector()
     collector.page = AsyncMock()
-    collector.page.goto.return_value = SimpleNamespace(status=200)
+    collector.page.goto.return_value = SimpleNamespace(status=200, all_headers=AsyncMock(return_value={}))
     collector.page.content.return_value = '<div data-marker="search-results/empty">Ничего не найдено</div>'
     assert asyncio.run(collector._load_page(SEARCH.url))
 
 
 def test_browser_starts_once_and_closes():
     driver = AsyncMock()
-    browser = driver.chromium.launch.return_value
+    context = driver.chromium.launch_persistent_context.return_value
     start = AsyncMock(return_value=driver)
     from unittest.mock import patch
     async def check():
@@ -99,6 +99,6 @@ def test_browser_starts_once_and_closes():
     with patch("collectors.avito.collector.async_playwright", return_value=SimpleNamespace(start=start)):
         asyncio.run(check())
     start.assert_awaited_once()
-    driver.chromium.launch.assert_awaited_once_with(headless=True)
-    browser.close.assert_awaited_once()
+    driver.chromium.launch_persistent_context.assert_awaited_once()
+    context.close.assert_awaited_once()
     driver.stop.assert_awaited_once()

@@ -1,6 +1,9 @@
+import math
+
 from asgiref.sync import async_to_sync, sync_to_async
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
+from django.conf import settings
 
 from collectors.registry import get_collector
 from listings.models import Scan, SearchQuery
@@ -20,8 +23,15 @@ class Command(BaseCommand):
         group.add_argument("--headed", dest="headless", action="store_false")
         group.add_argument("--headless", dest="headless", action="store_true")
         parser.set_defaults(headless=True)
+        parser.add_argument("--wait-for-captcha", type=float, default=0, metavar="SECONDS",
+                            help="With --headed, wait for manual captcha without reloading the page")
 
     def handle(self, *args, **options):
+        if options["mode"] == "full" and not settings.AVITO_FULL_SCAN_ENABLED:
+            raise CommandError("Full scans disabled; set AVITO_FULL_SCAN_ENABLED=true explicitly")
+        wait = options["wait_for_captcha"]
+        if not math.isfinite(wait) or wait < 0 or (wait and options["headless"]):
+            raise CommandError("--wait-for-captcha requires --headed and a finite non-negative timeout")
         searches = SearchQuery.objects.filter(source=options["source"], enabled=True).order_by("pk")
         if options["search_id"] is not None:
             searches = searches.filter(pk=options["search_id"])
@@ -46,9 +56,13 @@ class Command(BaseCommand):
 
     async def collect_searches(self, searches, options) -> int:
         failed = 0
-        async with get_collector(options["source"], headless=options["headless"]) as collector:
+        async with get_collector(options["source"], headless=options["headless"],
+                                 manual_wait_seconds=options.get("wait_for_captcha", 0)) as collector:
             for search in searches:
                 scan = await sync_to_async(run_scan)(search, collector, mode=options["mode"])
                 self.stdout.write(f"Scan {scan.pk}: {scan.status}, new={scan.new_items}, price_changes={scan.price_changes}")
                 failed += scan.status == Scan.Status.FAILED
+                if getattr(collector, "stop_requested", False):
+                    self.stderr.write("Avito blocked: stopping all remaining searches; cooldown saved")
+                    break
         return failed

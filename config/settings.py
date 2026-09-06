@@ -64,7 +64,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AVITO_FAST_SCAN_PAGES = int(os.getenv("AVITO_FAST_SCAN_PAGES", "1"))
 AVITO_MAX_PAGES = int(os.getenv("AVITO_MAX_PAGES", "50"))
 AVITO_NO_NEW_PAGES_LIMIT = int(os.getenv("AVITO_NO_NEW_PAGES_LIMIT", "2"))
-AVITO_PAGE_DELAY_SECONDS = float(os.getenv("AVITO_PAGE_DELAY_SECONDS", "2"))
+# Navigation spacing also applies between searches and across collector runs.
+AVITO_PAGE_DELAY_SECONDS = float(os.getenv("AVITO_PAGE_DELAY_SECONDS", "120"))
+AVITO_BLOCK_COOLDOWN_SECONDS = float(os.getenv("AVITO_BLOCK_COOLDOWN_SECONDS", "3600"))
+AVITO_STATE_DIR = Path(os.getenv("AVITO_STATE_DIR", str(BASE_DIR / ".avito-state")))
+AVITO_FULL_SCAN_ENABLED = os.getenv("AVITO_FULL_SCAN_ENABLED", "false").lower() == "true"
 LOGGING = {
     "version": 1, "disable_existing_loggers": False,
     "handlers": {"console": {"class": "logging.StreamHandler"}},
