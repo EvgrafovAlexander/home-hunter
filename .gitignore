@@ -222,3 +222,6 @@ staticfiles/
 .idea/
 .env.*
 !.env.example
+
+# Local task history and working materials
+/.tasks/
