@@ -2,4 +2,7 @@ def get_collector(source: str, *, headless: bool = True, manual_wait_seconds: fl
     if source == "avito":
         from collectors.avito.collector import AvitoCollector
         return AvitoCollector(headless=headless, manual_wait_seconds=manual_wait_seconds)
+    if source == "cian":
+        from collectors.cian.collector import CianCollector
+        return CianCollector(headless=headless, manual_wait_seconds=manual_wait_seconds)
     raise ValueError(f"Unsupported collector: {source}")

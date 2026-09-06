@@ -228,3 +228,5 @@ staticfiles/
 
 # Browser profile, request cooldown and diagnostics
 .avito-state/
+
+.cian-state/

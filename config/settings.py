@@ -74,3 +74,11 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+CIAN_STATE_DIR = Path(os.getenv("CIAN_STATE_DIR", str(BASE_DIR / ".cian-state")))
+CIAN_PROXY_URL = os.getenv("CIAN_PROXY_URL", "")
+CIAN_FAST_SCAN_PAGES = int(os.getenv("CIAN_FAST_SCAN_PAGES", "1"))
+CIAN_MAX_PAGES = int(os.getenv("CIAN_MAX_PAGES", "50"))
+CIAN_PAGE_DELAY_SECONDS = float(os.getenv("CIAN_PAGE_DELAY_SECONDS", "120"))
+CIAN_BLOCK_COOLDOWN_SECONDS = float(os.getenv("CIAN_BLOCK_COOLDOWN_SECONDS", "3600"))
+CIAN_FULL_SCAN_ENABLED = os.getenv("CIAN_FULL_SCAN_ENABLED", "false").lower() == "true"

@@ -16,19 +16,22 @@ class Command(BaseCommand):
     help = "Collect enabled searches sequentially with one Chromium browser."
 
     def add_arguments(self, parser):
-        parser.add_argument("--source", required=True, choices=["avito"])
+        parser.add_argument("--source", required=True, choices=["avito", "cian"])
         parser.add_argument("--mode", required=True, choices=["fast", "full"])
         parser.add_argument("--search-id", type=int)
         group = parser.add_mutually_exclusive_group()
         group.add_argument("--headed", dest="headless", action="store_false")
         group.add_argument("--headless", dest="headless", action="store_true")
-        parser.set_defaults(headless=True)
+        parser.set_defaults(headless=None)
         parser.add_argument("--wait-for-captcha", type=float, default=0, metavar="SECONDS",
                             help="With --headed, wait for manual captcha without reloading the page")
 
     def handle(self, *args, **options):
-        if options["mode"] == "full" and not settings.AVITO_FULL_SCAN_ENABLED:
-            raise CommandError("Full scans disabled; set AVITO_FULL_SCAN_ENABLED=true explicitly")
+        if options["headless"] is None:
+            options["headless"] = options["source"] != "cian"
+        full_setting = f"{options["source"].upper()}_FULL_SCAN_ENABLED"
+        if options["mode"] == "full" and not getattr(settings, full_setting):
+            raise CommandError(f"Full scans disabled; set {full_setting}=true explicitly")
         wait = options["wait_for_captcha"]
         if not math.isfinite(wait) or wait < 0 or (wait and options["headless"]):
             raise CommandError("--wait-for-captcha requires --headed and a finite non-negative timeout")
@@ -63,6 +66,6 @@ class Command(BaseCommand):
                 self.stdout.write(f"Scan {scan.pk}: {scan.status}, new={scan.new_items}, price_changes={scan.price_changes}")
                 failed += scan.status == Scan.Status.FAILED
                 if getattr(collector, "stop_requested", False):
-                    self.stderr.write("Avito blocked: stopping all remaining searches; cooldown saved")
+                    self.stderr.write(f"{options["source"]}: stopping remaining searches; inspect diagnostics")
                     break
         return failed

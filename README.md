@@ -219,7 +219,8 @@ curl -I http://SERVER_IP/admin/
 
 Web image не устанавливает Playwright и Chromium. Collector использует одну browser
 instance на command (Chromium имеет внутренние дочерние процессы).
-Архитектура расширяется через BaseCollector и registry; CIAN в MVP не реализован.
+ЦИАН реализован через BaseCollector и registry. Подробное описание и эксплуатация:
+[Сбор ЦИАН и туннель между VPS](docs/CIAN.md).
 
 Дополнительная Docker-проверка без live-запросов к Avito (на отдельной dev-БД):
 ```bash
@@ -227,3 +228,10 @@ docker compose run --rm -T collector python manage.py shell < collectors/tests/d
 ```
 Она запускает настоящий Chromium с перехватом URL и HTML fixture, выполняет fast/full,
 проверяет историю в PostgreSQL и удаляет созданные тестовые записи.
+
+## ЦИАН
+
+Сборщик ЦИАН использует Chromium с Xvfb, постоянный профиль и обязательный SOCKS/HTTP proxy.
+Docker-сервисы `cian-tunnel` и `cian-collector` находятся в профиле `cian`.
+Fast читает новые объявления раз в час; полный обход запускается явно.
+[Подробная документация, схема туннеля и команды](docs/CIAN.md).

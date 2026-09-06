@@ -55,8 +55,70 @@ services:
     depends_on:
       db:
         condition: service_healthy
+  cian-tunnel:
+    profiles: ["cian"]
+    build:
+      context: .
+      target: collector
+    restart: unless-stopped
+    init: true
+    command:
+      - ssh
+      - -NT
+      - -D
+      - 0.0.0.0:1080
+      - -i
+      - /run/cian-ssh/id_ed25519
+      - -o
+      - UserKnownHostsFile=/run/cian-ssh/known_hosts
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - BatchMode=yes
+      - -o
+      - ExitOnForwardFailure=yes
+      - -o
+      - ServerAliveInterval=30
+      - -o
+      - ServerAliveCountMax=3
+      - -o
+      - ConnectTimeout=15
+      - ${CIAN_SSH_DESTINATION:-cian-tunnel@81.19.139.155}
+    volumes:
+      - ${CIAN_SSH_DIR:-/etc/home-hunter/cian-ssh}:/run/cian-ssh:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',1080),3); s.sendall(bytes([5,1,0])); assert s.recv(2)==bytes([5,0]); s.close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt: ["no-new-privileges:true"]
+  cian-collector:
+    profiles: ["cian"]
+    build:
+      context: .
+      target: collector
+    init: true
+    shm_size: 256mb
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DJANGO_DEBUG: "false"
+      CIAN_STATE_DIR: /app/.cian-state
+      CIAN_PROXY_URL: socks5://cian-tunnel:1080
+    volumes:
+      - cian_state:/app/.cian-state
+    command: ["xvfb-run", "-a", "-s", "-screen 0 1440x1000x24 -nolisten tcp", "python", "manage.py", "collect_listings", "--source", "cian", "--mode", "fast", "--headed"]
+    depends_on:
+      db:
+        condition: service_healthy
+      cian-tunnel:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   caddy_data:
   caddy_config:
   avito_state:
+  cian_state:

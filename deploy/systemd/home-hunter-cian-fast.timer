@@ -1,0 +1,11 @@
+[Unit]
+Description=Home Hunter CIAN hourly scan
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=300
+Persistent=true
+Unit=home-hunter-cian-fast.service
+
+[Install]
+WantedBy=timers.target
