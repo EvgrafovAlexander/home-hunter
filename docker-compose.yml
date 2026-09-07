@@ -67,7 +67,7 @@ services:
       cian-tunnel:
         condition: service_healthy
   cian-tunnel:
-    profiles: ["cian", "collector"]
+    profiles: ["cian", "collector", "domclick"]
     build:
       context: .
       target: collector
@@ -139,6 +139,7 @@ services:
       POSTGRES_PORT: 5432
       DJANGO_DEBUG: "false"
       DOMCLICK_STATE_DIR: /app/.domclick-state
+      DOMCLICK_PROXY_URL: socks5://cian-tunnel:1080
       DOMCLICK_FAST_SCAN_PAGES: "1"
       DOMCLICK_FULL_SCAN_ENABLED: "false"
     volumes:
@@ -146,6 +147,8 @@ services:
     command: ["xvfb-run", "-a", "-s", "-screen 0 1440x1000x24 -nolisten tcp", "python", "manage.py", "collect_listings", "--source", "domclick", "--mode", "fast", "--headed"]
     depends_on:
       db:
+        condition: service_healthy
+      cian-tunnel:
         condition: service_healthy
 
 volumes:

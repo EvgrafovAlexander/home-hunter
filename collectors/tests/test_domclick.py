@@ -22,6 +22,7 @@ def page(ids=("100",), *, time="час назад"):
 @pytest.fixture(autouse=True)
 def config(settings, tmp_path):
     settings.DOMCLICK_STATE_DIR = tmp_path / "domclick"
+    settings.DOMCLICK_PROXY_URL = "socks5://localhost:1080"
     settings.DOMCLICK_PAGE_DELAY_SECONDS = 0
     settings.DOMCLICK_FULL_SCAN_ENABLED = True
     settings.DOMCLICK_MAX_PAGES = 50
@@ -66,4 +67,13 @@ def test_invalid_url_is_not_requested():
     collector._start = AsyncMock()
     with pytest.raises(CollectionError, match="Domclick /search"):
         asyncio.run(collector.collect(SimpleNamespace(url="https://evil.test/search"), mode="fast"))
+    collector._start.assert_not_awaited()
+
+
+def test_proxy_is_required_before_browser(settings):
+    settings.DOMCLICK_PROXY_URL = ""
+    collector = DomclickCollector()
+    collector._start = AsyncMock()
+    with pytest.raises(CollectionError, match="direct fallback"):
+        asyncio.run(collector.collect(SEARCH, mode="fast"))
     collector._start.assert_not_awaited()

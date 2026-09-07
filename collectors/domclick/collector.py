@@ -46,6 +46,11 @@ class DomclickCollector(BaseCollector):
         parts = urlsplit(url)
         if parts.scheme != "https" or not (parts.hostname or "").endswith("domclick.ru") or parts.path != "/search":
             raise ValueError("Expected an HTTPS Domclick /search URL")
+        proxy = urlsplit(settings.DOMCLICK_PROXY_URL)
+        if (proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname
+                or proxy.username or proxy.password or not proxy.port
+                or proxy.path not in {"", "/"} or proxy.query or proxy.fragment):
+            raise ValueError("DOMCLICK_PROXY_URL must be an explicit proxy URL without credentials; direct fallback is disabled")
         for value in (settings.DOMCLICK_PAGE_DELAY_SECONDS, settings.DOMCLICK_BLOCK_COOLDOWN_SECONDS):
             if not math.isfinite(value) or value < 0:
                 raise ValueError("Invalid Domclick timing settings")
@@ -67,6 +72,7 @@ class DomclickCollector(BaseCollector):
         self.context = await self.playwright.chromium.launch_persistent_context(
             str(self.state.directory / "chromium"), headless=self.headless, channel="chromium",
             viewport={"width": 1440, "height": 1000}, locale="ru-RU",
+            proxy={"server": settings.DOMCLICK_PROXY_URL},
         )
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
 
@@ -90,7 +96,7 @@ class DomclickCollector(BaseCollector):
                 pass
         html = await self.page.content()
         text = BeautifulSoup(html, "html.parser").get_text(" ", strip=True).lower()
-        blocked = status in {403, 429, 439} or any(word in text for word in BLOCK_TEXT)
+        blocked = status in {401, 403, 429, 439} or any(word in text for word in BLOCK_TEXT)
         self.state.write_json("last-response.json", {"time": datetime.now(timezone.utc).isoformat(),
             "url": url, "status": status, "blocked": blocked, "cards": html.count("/card/")})
         if blocked:
