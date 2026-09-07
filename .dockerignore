@@ -4,11 +4,17 @@
 !listings/
 !listings/**/*.py
 !listings/*.py
+!listings/static/
+!listings/static/**
+!listings/templates/
+!listings/templates/**
 !collectors/
 !collectors/**/*.py
 !collectors/*.py
 !manage.py
 !requirements*.txt
 !Dockerfile
+!templates/
+!templates/**
 **/__pycache__
 **/tests
