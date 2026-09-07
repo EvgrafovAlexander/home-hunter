@@ -36,6 +36,14 @@ def test_cards():
     assert second.price == 8000000
 
 
+def test_district_falls_back_to_address():
+    html = '''<div data-marker="item" data-item-id="1">
+      <a data-marker="item-title" href="/1">2-к. квартира, 50 м², 3/9 эт.</a>
+      <span data-marker="item-address">ул. Ленина, 1 · 4,7 · 9 отзывов р-н Кировский</span>
+    </div>'''
+    assert parse_page(html).listings[0].district == "Кировский"
+
+
 def test_date_does_not_change_fallback_description():
     html = '<div data-marker="item" data-item-id="1"><a data-marker="item-title" href="/1">Flat</a><span data-marker="item-date">{}</span></div>'
     a = parse_page(html.format("Вчера")).listings[0]

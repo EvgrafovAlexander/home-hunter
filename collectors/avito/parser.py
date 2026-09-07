@@ -5,6 +5,7 @@ from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 from collectors.base import NormalizedListing
+from listings.services.enrichment import district_from_address
 from . import selectors as sel
 from .types import ParsedPage
 
@@ -66,10 +67,12 @@ def parse_card(card: Tag) -> NormalizedListing:
         for node in stable.select(sel.DATE):
             node.decompose()
         description = stable.get_text(" ", strip=True)
+    address = text_at(card, sel.ADDRESS)
+    district = text_at(card, sel.DISTRICT) or district_from_address(address)
     return NormalizedListing(
         source="avito", external_id=str(external_id), title=title, url=url, price=price,
         price_per_sqm=parse_money(sqm.group(1)) if sqm else None,
-        address=text_at(card, sel.ADDRESS), district=text_at(card, sel.DISTRICT),
+        address=address, district=district,
         description=description, published_text=text_at(card, sel.DATE),
         image_url=urljoin("https://www.avito.ru", image_url) if image_url else None,
         raw_data={"visible_text": visible_text}, **parse_title(title),

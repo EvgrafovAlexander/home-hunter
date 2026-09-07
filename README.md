@@ -150,6 +150,13 @@ docker compose --profile collector run --rm -e AVITO_FULL_SCAN_ENABLED=true coll
 Docker volume `avito_proxy_state` сохраняет паузы и диагностику в `/app/.avito-state`
 между одноразовыми контейнерами collector. В image каталог принадлежит пользователю app.
 
+Данные PostgreSQL находятся в именованном volume `postgres_data`, поэтому остановка,
+перезапуск или пересоздание контейнера `db` их не удаляет. При штатной остановке Compose
+даёт PostgreSQL до 60 секунд на checkpoint; после аварийного завершения PostgreSQL
+восстанавливается из WAL при следующем запуске. Volume удаляется только явной командой
+`docker compose down -v` (или `docker volume rm`), поэтому для защиты от потери VPS
+нужна копия `pg_dump` вне сервера.
+
 Collector существует только до завершения команды. Для обновления: соберите оба
 image, выполните migrate и `docker compose up -d`. Не используйте
 `docker compose down -v`, если данные должны сохраниться.

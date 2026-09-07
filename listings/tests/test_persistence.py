@@ -62,6 +62,22 @@ def test_missing_price_preserves_last_known(search, item):
     assert PriceHistory.objects.count() == 1
 
 
+def test_enriches_missing_price_per_sqm_and_district(search, item):
+    result = process_listing(search, replace(
+        item, price_per_sqm=None, address="ул. Ленина, 1 · 4,7 · 9 отзывов р-н Кировский",
+    ), timezone.now())
+    assert result.listing.price_per_sqm == 110922
+    assert result.listing.district == "Кировский"
+
+
+def test_keeps_source_price_per_sqm_and_district(search, item):
+    result = process_listing(search, replace(
+        item, price_per_sqm=111000, district="Советский", address="р-н Кировский",
+    ), timezone.now())
+    assert result.listing.price_per_sqm == 111000
+    assert result.listing.district == "Советский"
+
+
 def test_initial_unknown_price(search, item):
     process_listing(search, replace(item, price=None), timezone.now())
     process_listing(search, item, timezone.now())
