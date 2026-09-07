@@ -7,6 +7,7 @@ RUN useradd --create-home --uid 10001 app
 COPY config config
 COPY listings listings
 COPY collectors collectors
+COPY templates templates
 COPY manage.py .
 RUN DJANGO_SECRET_KEY=build-only-static-key python manage.py collectstatic --noinput
 
