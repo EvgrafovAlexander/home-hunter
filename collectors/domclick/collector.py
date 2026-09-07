@@ -15,10 +15,17 @@ from .parser import parse_page
 BLOCK_TEXT = ("доступ ограничен", "проверка безопасности", "капча", "captcha", "слишком много запросов")
 
 
-def set_offset(url: str, offset: int) -> str:
+def set_page(url: str, number: int) -> str:
     parts = urlsplit(url)
-    query = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True) if key != "offset"]
-    query.append(("offset", str(offset)))
+    if parts.path == "/search":
+        key, value = "offset", str((number - 1) * 20)
+    else:
+        key, value = "page", str(number)
+    query = [(item_key, item_value) for item_key, item_value in parse_qsl(
+        parts.query, keep_blank_values=True,
+    ) if item_key != key]
+    if number > 1:
+        query.append((key, value))
     return urlunsplit(parts._replace(query=urlencode(query)))
 
 
@@ -44,8 +51,10 @@ class DomclickCollector(BaseCollector):
 
     def _validate(self, url: str) -> None:
         parts = urlsplit(url)
-        if parts.scheme != "https" or not (parts.hostname or "").endswith("domclick.ru") or parts.path != "/search":
-            raise ValueError("Expected an HTTPS Domclick /search URL")
+        is_public_listing = parts.path.startswith("/pokupka/") or parts.path.startswith("/arenda/")
+        if (parts.scheme != "https" or not (parts.hostname or "").endswith("domclick.ru")
+                or not (parts.path == "/search" or is_public_listing)):
+            raise ValueError("Expected an HTTPS Domclick search or public listing URL")
         proxy = urlsplit(settings.DOMCLICK_PROXY_URL)
         if (proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname
                 or proxy.username or proxy.password or not proxy.port
@@ -106,7 +115,8 @@ class DomclickCollector(BaseCollector):
         if status is None or status >= 400:
             raise RuntimeError(f"Domclick HTTP error: {status}")
         final = urlsplit(self.page.url)
-        if final.hostname != urlsplit(url).hostname or final.path != "/search":
+        expected = urlsplit(url)
+        if final.hostname != expected.hostname or final.path != expected.path:
             raise RuntimeError("Unexpected Domclick redirect")
         return html
 
@@ -122,8 +132,9 @@ class DomclickCollector(BaseCollector):
             await self._start()
             limit = settings.DOMCLICK_FAST_SCAN_PAGES if mode == "fast" else settings.DOMCLICK_MAX_PAGES
             seen, stale = set(), 0
-            for number in range(limit):
-                parsed = parse_page(await self._load_page(set_offset(search.url, number * 20)), search.url)
+            for number in range(1, limit + 1):
+                page_url = set_page(search.url, number)
+                parsed = parse_page(await self._load_page(page_url), page_url)
                 result.pages_scanned += 1
                 result.items_seen += parsed.card_count
                 if parsed.errors:

@@ -264,6 +264,10 @@ Docker `collector` запускает Chromium с окном под Xvfb и но
 python manage.py collect_listings --source domclick --mode fast --headed
 ```
 
+Для DomClick предпочтительны публичные URL выдачи, например
+`https://ufa.domclick.ru/pokupka/kvartiry/odnokomnatnaja`. Они используют
+пагинацию `?page=2`; технический маршрут `/search` оставлен для совместимости.
+
 Полный обход выключен по умолчанию и требует `DOMCLICK_FULL_SCAN_ENABLED=true`.
 В production таймер `home-hunter-domclick-fast.timer` запускает fast-проверку каждый
 час в `HH:15`, оставляя не менее десяти минут после запуска ЦИАН (у него возможна

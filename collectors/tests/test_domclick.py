@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from collectors.base import CollectionError
-from collectors.domclick.collector import DomclickCollector, set_offset
+from collectors.domclick.collector import DomclickCollector, set_page
 from collectors.domclick.parser import parse_page
 
 URL = "https://ufa.domclick.ru/search?deal_type=sale&rooms=2&offset=0"
@@ -40,9 +40,15 @@ def test_parser_reads_domclick_card_and_ignores_relative_date_in_description():
     assert "час назад" not in item.description
 
 
-def test_offset_preserves_repeated_filters():
-    assert set_offset("https://ufa.domclick.ru/search?rooms=2&rooms=3&offset=40", 20) == \
+def test_page_preserves_repeated_filters_for_technical_search():
+    assert set_page("https://ufa.domclick.ru/search?rooms=2&rooms=3&offset=40", 2) == \
         "https://ufa.domclick.ru/search?rooms=2&rooms=3&offset=20"
+
+
+def test_page_uses_public_listing_pagination_and_keeps_first_page_canonical():
+    url = "https://ufa.domclick.ru/pokupka/kvartiry/odnokomnatnaja?sort=price"
+    assert set_page(url, 1) == url
+    assert set_page(url, 2) == url + "&page=2"
 
 
 def test_collector_fast_and_full_completion():
@@ -65,9 +71,19 @@ def test_damaged_page_fails_closed_and_preserves_items():
 def test_invalid_url_is_not_requested():
     collector = DomclickCollector()
     collector._start = AsyncMock()
-    with pytest.raises(CollectionError, match="Domclick /search"):
+    with pytest.raises(CollectionError, match="Domclick search or public listing"):
         asyncio.run(collector.collect(SimpleNamespace(url="https://evil.test/search"), mode="fast"))
     collector._start.assert_not_awaited()
+
+
+def test_public_listing_url_is_accepted():
+    collector = DomclickCollector()
+    collector._start = AsyncMock()
+    collector._load_page = AsyncMock(return_value=page(()))
+    search = SimpleNamespace(url="https://ufa.domclick.ru/pokupka/kvartiry/odnokomnatnaja")
+    result = asyncio.run(collector.collect(search, mode="fast"))
+    assert result.complete
+    collector._load_page.assert_awaited_once_with(search.url)
 
 
 def test_proxy_is_required_before_browser(settings):
