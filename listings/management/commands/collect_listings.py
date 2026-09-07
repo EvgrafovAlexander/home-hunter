@@ -16,7 +16,7 @@ class Command(BaseCommand):
     help = "Collect enabled searches sequentially with one Chromium browser."
 
     def add_arguments(self, parser):
-        parser.add_argument("--source", required=True, choices=["avito", "cian"])
+        parser.add_argument("--source", required=True, choices=["avito", "cian", "domclick"])
         parser.add_argument("--mode", required=True, choices=["fast", "full"])
         parser.add_argument("--search-id", type=int)
         group = parser.add_mutually_exclusive_group()
@@ -28,7 +28,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if options["headless"] is None:
-            options["headless"] = options["source"] != "cian"
+            options["headless"] = options["source"] not in {"cian", "domclick"}
         full_setting = f"{options["source"].upper()}_FULL_SCAN_ENABLED"
         if options["mode"] == "full" and not getattr(settings, full_setting):
             raise CommandError(f"Full scans disabled; set {full_setting}=true explicitly")

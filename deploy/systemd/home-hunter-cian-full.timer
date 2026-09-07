@@ -1,0 +1,11 @@
+[Unit]
+Description=Home Hunter daily cautious CIAN full batch scan
+
+[Timer]
+OnCalendar=*-*-* 00:10:00
+RandomizedDelaySec=1200
+Persistent=true
+Unit=home-hunter-cian-full.service
+
+[Install]
+WantedBy=timers.target

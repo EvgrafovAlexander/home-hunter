@@ -1,0 +1,11 @@
+[Unit]
+Description=Home Hunter Domclick hourly scan at quarter past the hour
+
+[Timer]
+OnCalendar=*-*-* *:15:00
+Persistent=true
+RandomizedDelaySec=0
+Unit=home-hunter-domclick-fast.service
+
+[Install]
+WantedBy=timers.target

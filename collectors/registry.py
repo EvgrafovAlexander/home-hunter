@@ -5,4 +5,7 @@ def get_collector(source: str, *, headless: bool = True, manual_wait_seconds: fl
     if source == "cian":
         from collectors.cian.collector import CianCollector
         return CianCollector(headless=headless, manual_wait_seconds=manual_wait_seconds)
+    if source == "domclick":
+        from collectors.domclick.collector import DomclickCollector
+        return DomclickCollector(headless=headless, manual_wait_seconds=manual_wait_seconds)
     raise ValueError(f"Unsupported collector: {source}")

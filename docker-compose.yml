@@ -126,6 +126,27 @@ services:
         condition: service_healthy
       cian-tunnel:
         condition: service_healthy
+  domclick-collector:
+    profiles: ["domclick"]
+    build:
+      context: .
+      target: collector
+    init: true
+    shm_size: 256mb
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DJANGO_DEBUG: "false"
+      DOMCLICK_STATE_DIR: /app/.domclick-state
+      DOMCLICK_FAST_SCAN_PAGES: "1"
+      DOMCLICK_FULL_SCAN_ENABLED: "false"
+    volumes:
+      - domclick_state:/app/.domclick-state
+    command: ["xvfb-run", "-a", "-s", "-screen 0 1440x1000x24 -nolisten tcp", "python", "manage.py", "collect_listings", "--source", "domclick", "--mode", "fast", "--headed"]
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   postgres_data:
@@ -134,3 +155,4 @@ volumes:
   avito_state:
   avito_proxy_state:
   cian_state:
+  domclick_state:

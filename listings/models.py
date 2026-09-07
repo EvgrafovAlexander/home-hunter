@@ -6,6 +6,7 @@ class SearchQuery(models.Model):
     class Source(models.TextChoices):
         AVITO = "avito", "Avito"
         CIAN = "cian", "CIAN"
+        DOMCLICK = "domclick", "Домклик"
 
     name = models.CharField(max_length=255)
     source = models.CharField(max_length=20, choices=Source.choices)

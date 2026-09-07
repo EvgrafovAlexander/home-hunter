@@ -1,5 +1,6 @@
 import logging
 from asgiref.sync import async_to_sync
+from asgiref.sync import sync_to_async
 from django.db import transaction
 from django.utils import timezone
 
@@ -8,6 +9,15 @@ from listings.models import CianFullScanCheckpoint, Listing, ListingSearchQuery,
 from .persistence import process_listing
 
 logger = logging.getLogger(__name__)
+
+
+def update_scan_progress(scan_id: int, pages_scanned: int, items_seen: int, unique_items_seen: int) -> None:
+    """Persist progress while a long CIAN batch is still running."""
+    Scan.objects.filter(pk=scan_id, status=Scan.Status.RUNNING).update(
+        pages_scanned=pages_scanned,
+        items_seen=items_seen,
+        unique_items_seen=unique_items_seen,
+    )
 
 
 @transaction.atomic
@@ -38,6 +48,12 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Sca
         collection_error = None
         try:
             kwargs = {"start_page": start_page} if checkpoint else {}
+            if checkpoint:
+                async def progress_callback(pages_scanned, items_seen, unique_items_seen):
+                    await sync_to_async(update_scan_progress)(
+                        scan.pk, pages_scanned, items_seen, unique_items_seen,
+                    )
+                kwargs["progress_callback"] = progress_callback
             result = async_to_sync(collector.collect)(search, mode=mode, **kwargs)
         except CollectionError as exc:
             result = exc.result
@@ -58,6 +74,9 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Sca
             scan.updated_items += int(saved.updated)
             scan.price_changes += int(saved.price_changed)
         if collection_error:
+            if checkpoint and checkpoint.expected_total not in (None, result.expected_total):
+                checkpoint.next_page, checkpoint.expected_total, checkpoint.external_ids = 1, None, []
+                checkpoint.save()
             raise collection_error
         if checkpoint and not collection_error:
             checkpoint.refresh_from_db()

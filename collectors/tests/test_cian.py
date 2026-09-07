@@ -89,6 +89,17 @@ def test_full_follows_links_and_completes():
     assert result.complete and result.pages_scanned==2 and len(result.listings)==2
 
 
+def test_reports_progress_after_each_page():
+    reported = []
+
+    async def progress(*values):
+        reported.append(values)
+
+    c = collector([html(total=2,next_page=2),html((330738484,),page=2,total=2)])
+    asyncio.run(c.collect(SEARCH, mode='full', progress_callback=progress))
+    assert reported == [(1, 1, 1), (2, 2, 2)]
+
+
 def test_partial_and_repeat_protect_deactivation(settings):
     result = asyncio.run(collector([html(total=641)]).collect(SEARCH,mode='full'))
     assert not result.complete

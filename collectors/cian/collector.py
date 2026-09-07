@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import logging
 import math
 import random
@@ -138,7 +139,7 @@ class CianCollector(BaseCollector):
             self.stop_requested = True
             raise
 
-    async def collect(self, search, *, mode, start_page=1, page_budget=None):
+    async def collect(self, search, *, mode, start_page=1, page_budget=None, progress_callback=None):
         result = CollectionResult()
         try:
             self._validate()
@@ -158,7 +159,10 @@ class CianCollector(BaseCollector):
                 parsed = parse_page(await self._load_page(url), url)
                 result.pages_scanned += 1
                 result.items_seen += parsed.card_count
-                expected_total = max(expected_total, parsed.total)
+                if expected_total and parsed.total != expected_total:
+                    result.expected_total = parsed.total
+                    raise ValueError("CIAN total changed during batch")
+                expected_total = parsed.total
                 result.expected_total = expected_total
                 # Detect servers silently returning another page/filter (unsafe for deactivation).
                 def normalized_query(query):
@@ -177,6 +181,10 @@ class CianCollector(BaseCollector):
                 logger.info("CIAN search=%s page=%s cards=%s total=%s", search.pk, number, parsed.card_count, parsed.total)
                 if parsed.errors:
                     raise ValueError(f"CIAN damaged/mismatched cards: {parsed.errors}")
+                if progress_callback:
+                    progress = progress_callback(result.pages_scanned, result.items_seen, len(seen))
+                    if inspect.isawaitable(progress):
+                        await progress
                 if not parsed.next_url:
                     # From page one we can immediately detect a truncated
                     # response.  Later batches rely on their persisted ID set
