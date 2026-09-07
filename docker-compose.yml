@@ -140,6 +140,7 @@ services:
       DJANGO_DEBUG: "false"
       DOMCLICK_STATE_DIR: /app/.domclick-state
       DOMCLICK_PROXY_URL: socks5://cian-tunnel:1080
+      DOMCLICK_PERSISTENT_PROFILE: "false"
       DOMCLICK_FAST_SCAN_PAGES: "1"
       DOMCLICK_FULL_SCAN_ENABLED: "false"
     volumes:

@@ -1,11 +1,13 @@
 import asyncio
+import time
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from collectors.base import CollectionError
-from collectors.domclick.collector import DomclickCollector, set_page
+from collectors.domclick.collector import DomclickBlocked, DomclickCollector, set_page
 from collectors.domclick.parser import parse_page
 
 URL = "https://ufa.domclick.ru/search?deal_type=sale&rooms=2&offset=0"
@@ -23,6 +25,7 @@ def page(ids=("100",), *, time="час назад"):
 def config(settings, tmp_path):
     settings.DOMCLICK_STATE_DIR = tmp_path / "domclick"
     settings.DOMCLICK_PROXY_URL = "socks5://localhost:1080"
+    settings.DOMCLICK_PERSISTENT_PROFILE = True
     settings.DOMCLICK_PAGE_DELAY_SECONDS = 0
     settings.DOMCLICK_FULL_SCAN_ENABLED = True
     settings.DOMCLICK_MAX_PAGES = 50
@@ -93,3 +96,58 @@ def test_proxy_is_required_before_browser(settings):
     with pytest.raises(CollectionError, match="direct fallback"):
         asyncio.run(collector.collect(SEARCH, mode="fast"))
     collector._start.assert_not_awaited()
+
+
+def test_fresh_profile_cleanup_preserves_request_state(settings):
+    settings.DOMCLICK_PERSISTENT_PROFILE = False
+    driver = AsyncMock()
+    start = AsyncMock(return_value=driver)
+
+    async def check():
+        async with DomclickCollector() as collector:
+            collector.state.update(blocked_until=123, next_request_at=456)
+            await collector._start()
+            profile = Path(driver.chromium.launch_persistent_context.call_args.args[0])
+            assert profile.is_dir()
+            assert profile != settings.DOMCLICK_STATE_DIR / "chromium"
+        assert not profile.exists()
+        assert collector.state.read() == {"blocked_until": 123, "next_request_at": 456}
+
+    with patch("collectors.domclick.collector.async_playwright", return_value=SimpleNamespace(start=start)):
+        asyncio.run(check())
+
+
+def test_fresh_profile_does_not_bypass_cooldown(settings):
+    settings.DOMCLICK_PERSISTENT_PROFILE = False
+    collector = DomclickCollector()
+    collector.state.update(blocked_until=time.time() + 3600)
+    with patch("collectors.domclick.collector.async_playwright") as driver:
+        with pytest.raises(CollectionError, match="cooldown"):
+            asyncio.run(collector.collect(SEARCH, mode="fast"))
+        driver.assert_not_called()
+    assert collector.temporary_profile is None
+
+
+def test_manual_recovery_reads_open_page_without_second_navigation():
+    collector = DomclickCollector(headless=False, manual_wait_seconds=10)
+    collector.page = AsyncMock()
+    collector.page.goto.return_value = SimpleNamespace(status=401, all_headers=AsyncMock(return_value={}))
+    collector.page.content.side_effect = ["<title>Доступ ограничен</title>", page()]
+    collector.page.url = URL
+    collector.page.wait_for_function = AsyncMock()
+    assert asyncio.run(collector._load_page(URL)) == page()
+    collector.page.goto.assert_awaited_once()
+    assert collector.state.read()["blocked_until"] == 0
+    assert not collector.stop_requested
+
+
+def test_manual_timeout_keeps_block_and_sends_no_retries():
+    collector = DomclickCollector(headless=False, manual_wait_seconds=1)
+    collector.page = AsyncMock()
+    collector.page.goto.return_value = SimpleNamespace(status=401, all_headers=AsyncMock(return_value={}))
+    collector.page.content.return_value = "<title>Доступ ограничен</title>"
+    collector.page.url = URL
+    with patch("collectors.domclick.collector.time", SimpleNamespace(time=time.time, monotonic=Mock(side_effect=[0, 2]))):
+        with pytest.raises(DomclickBlocked, match="manual wait timeout"):
+            asyncio.run(collector._load_page(URL))
+    collector.page.goto.assert_awaited_once()
