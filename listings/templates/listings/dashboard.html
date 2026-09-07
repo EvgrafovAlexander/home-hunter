@@ -1,0 +1,11 @@
+{% extends 'listings/base.html' %}
+{% load humanize %}
+{% block title %}Аналитика · Home Hunter{% endblock %}
+{% block content %}
+<section class="hero"><p class="eyebrow">Рынок в вашей выборке</p><h1>Аналитика</h1><p>Все цифры пересчитываются с выбранными фильтрами.</p></section>
+{% include 'listings/_filters.html' %}
+<section class="metrics"><article><span>Объявлений</span><strong>{{ total|intcomma }}</strong></article><article><span>Медианная цена</span><strong>{% if median_price %}{{ median_price|intcomma }} ₽{% else %}—{% endif %}</strong></article><article><span>Медиана за м²</span><strong>{% if median_sqm_price %}{{ median_sqm_price|intcomma }} ₽{% else %}—{% endif %}</strong></article></section>
+<section class="charts"><article class="chart"><h2>Новые объявления за 14 дней</h2><div class="bar-chart">{% for item in daily %}<div class="bar-column"><span>{{ item.count }}</span><i style="height:{% widthratio item.count daily_max 100 %}%"></i><small>{{ item.label }}</small></div>{% endfor %}</div></article><article class="chart"><h2>Цена за м² по районам</h2><div class="districts">{% for row in district_stats %}<div><span>{{ row.district }}</span><b>{{ row.average|floatformat:0|intcomma }} ₽</b><small>{{ row.count }} шт.</small></div>{% empty %}<p class="muted">Недостаточно данных по районам.</p>{% endfor %}</div></article></section>
+<section class="chart scatter-card"><h2>Площадь и цена</h2><p class="muted">Каждая точка — объявление; показаны до 150 последних.</p><canvas id="scatter" data-points='[{% for row in scatter %}{"area":{{ row.area }},"price":{{ row.price }}}{% if not forloop.last %},{% endif %}{% endfor %}]'></canvas></section>
+<script>const c=document.querySelector('#scatter'),x=c.getContext('2d'),p=JSON.parse(c.dataset.points);c.width=c.clientWidth*devicePixelRatio;c.height=260*devicePixelRatio;x.scale(devicePixelRatio,devicePixelRatio);const w=c.clientWidth,h=260;if(p.length){const a=Math.max(...p.map(v=>+v.area)),q=Math.max(...p.map(v=>+v.price));x.fillStyle='#edf1ee';x.fillRect(0,0,w,h);x.fillStyle='#0f766e';p.forEach(v=>{x.beginPath();x.arc(28+(+v.area/a)*(w-48),h-28-(+v.price/q)*(h-48),4,0,Math.PI*2);x.fill()})}</script>
+{% endblock %}
