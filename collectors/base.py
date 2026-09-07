@@ -34,6 +34,8 @@ class CollectionResult:
     items_seen: int = 0
     complete: bool = False
     stop_reason: str = ""
+    next_page: int | None = None
+    expected_total: int | None = None
 
 
 class CollectionError(RuntimeError):

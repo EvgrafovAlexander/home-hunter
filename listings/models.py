@@ -59,6 +59,15 @@ class ListingSearchQuery(models.Model):
         constraints = [models.UniqueConstraint(fields=["listing", "search_query"], name="unique_listing_search")]
 
 
+class CianFullScanCheckpoint(models.Model):
+    search_query = models.OneToOneField(SearchQuery, on_delete=models.CASCADE, related_name="cian_full_checkpoint")
+    search_url = models.TextField()
+    next_page = models.PositiveIntegerField(default=1)
+    expected_total = models.PositiveIntegerField(null=True, blank=True)
+    external_ids = models.JSONField(default=list)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class PriceHistory(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="price_history")
     price = models.BigIntegerField(null=True, blank=True)

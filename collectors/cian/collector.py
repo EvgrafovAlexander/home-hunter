@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import math
+import random
 import time
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -63,10 +64,13 @@ class CianCollector(BaseCollector):
         proxy = urlsplit(settings.CIAN_PROXY_URL)
         if proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname or proxy.username or proxy.password:
             raise ValueError("CIAN_PROXY_URL must be an explicit proxy URL without credentials; direct fallback is disabled")
-        for value in (settings.CIAN_PAGE_DELAY_SECONDS, settings.CIAN_BLOCK_COOLDOWN_SECONDS):
+        for value in (settings.CIAN_PAGE_DELAY_MIN_SECONDS, settings.CIAN_PAGE_DELAY_MAX_SECONDS,
+                      settings.CIAN_BLOCK_COOLDOWN_SECONDS):
             if not math.isfinite(value) or value <= 0:
                 raise ValueError("CIAN timing settings must be finite and positive")
-        if min(settings.CIAN_FAST_SCAN_PAGES, settings.CIAN_MAX_PAGES) < 1:
+        if (min(settings.CIAN_FAST_SCAN_PAGES, settings.CIAN_MAX_PAGES,
+                settings.CIAN_FULL_BATCH_PAGES) < 1
+                or settings.CIAN_PAGE_DELAY_MIN_SECONDS > settings.CIAN_PAGE_DELAY_MAX_SECONDS):
             raise ValueError("CIAN page limits must be positive")
 
     def _check_cooldown(self):
@@ -94,7 +98,9 @@ class CianCollector(BaseCollector):
             logger.info("CIAN waiting %.1fs before next navigation", delay)
             await asyncio.sleep(delay)
         self._check_cooldown()
-        self.state.update(next_request_at=time.time() + settings.CIAN_PAGE_DELAY_SECONDS)
+        think_time = random.uniform(settings.CIAN_PAGE_DELAY_MIN_SECONDS,
+                                    settings.CIAN_PAGE_DELAY_MAX_SECONDS)
+        self.state.update(next_request_at=time.time() + think_time)
         try:
             response = await self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
             status = response.status if response else None
@@ -132,7 +138,7 @@ class CianCollector(BaseCollector):
             self.stop_requested = True
             raise
 
-    async def collect(self, search, *, mode):
+    async def collect(self, search, *, mode, start_page=1, page_budget=None):
         result = CollectionResult()
         try:
             self._validate()
@@ -140,17 +146,20 @@ class CianCollector(BaseCollector):
                 raise ValueError("Unknown mode")
             if mode == "full" and not settings.CIAN_FULL_SCAN_ENABLED:
                 raise ValueError("CIAN full scans disabled")
-            url = search_url(search.url, newest=mode == "fast")
+            if start_page < 1:
+                raise ValueError("Invalid CIAN start page")
+            url = search_url(search.url, page=start_page, newest=mode == "fast")
             self._check_cooldown()
             await self._start()
             seen = set()
             expected_total = 0
-            limit = settings.CIAN_FAST_SCAN_PAGES if mode == "fast" else settings.CIAN_MAX_PAGES
-            for number in range(1, limit + 1):
+            limit = settings.CIAN_FAST_SCAN_PAGES if mode == "fast" else (page_budget or settings.CIAN_FULL_BATCH_PAGES)
+            for number in range(start_page, start_page + limit):
                 parsed = parse_page(await self._load_page(url), url)
                 result.pages_scanned += 1
                 result.items_seen += parsed.card_count
                 expected_total = max(expected_total, parsed.total)
+                result.expected_total = expected_total
                 # Detect servers silently returning another page/filter (unsafe for deactivation).
                 def normalized_query(query):
                     pairs = parse_qsl(query, keep_blank_values=True)
@@ -169,7 +178,10 @@ class CianCollector(BaseCollector):
                 if parsed.errors:
                     raise ValueError(f"CIAN damaged/mismatched cards: {parsed.errors}")
                 if not parsed.next_url:
-                    result.complete = mode == "fast" or len(seen) >= expected_total
+                    # From page one we can immediately detect a truncated
+                    # response.  Later batches rely on their persisted ID set
+                    # for the same check in the scan service.
+                    result.complete = mode == "fast" or start_page > 1 or len(seen) >= expected_total
                     result.stop_reason = "end of results" if result.complete else "missing next link before total reached"
                     return result
                 if not fresh:
@@ -181,7 +193,8 @@ class CianCollector(BaseCollector):
                     raise ValueError("CIAN next link changed host")
                 url = next_url
             result.complete = mode == "fast"
-            result.stop_reason = "fast page budget" if mode == "fast" else "max pages reached"
+            result.stop_reason = "fast page budget" if mode == "fast" else "batch page budget"
+            result.next_page = start_page + limit
             return result
         except Exception as exc:
             raise CollectionError(f"{type(exc).__name__}: {str(exc)[:500]}", result) from exc

@@ -14,7 +14,7 @@ class FakeCollector(BaseCollector):
     def __init__(self, result, fail=False):
         self.result, self.fail = result, fail
 
-    async def collect(self, search, *, mode):
+    async def collect(self, search, *, mode, **kwargs):
         if self.fail:
             raise CollectionError("blocked", self.result)
         return self.result
@@ -28,6 +28,15 @@ def test_full_deactivates_only_missing(search, item):
     assert scan.status == "success" and scan.new_items == 1
     assert not missing.is_active
     assert not ListingSearchQuery.objects.get(listing=missing).is_active
+
+
+def test_cian_full_never_deactivates_missing_listing(item):
+    search = SearchQuery.objects.create(name="CIAN", source="cian", url="https://ufa.cian.ru/cat.php?region=1")
+    missing = process_listing(search, replace(item, source="cian"), timezone.now()).listing
+    scan = run_scan(search, FakeCollector(CollectionResult(complete=True, expected_total=0)), mode="full")
+    missing.refresh_from_db()
+    assert scan.status == "success"
+    assert missing.is_active and ListingSearchQuery.objects.get(listing=missing).is_active
 
 
 @pytest.mark.parametrize("mode,complete,fail", [("fast", True, False), ("full", False, False), ("full", True, True)])

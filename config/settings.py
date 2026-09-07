@@ -81,6 +81,11 @@ CIAN_STATE_DIR = Path(os.getenv("CIAN_STATE_DIR", str(BASE_DIR / ".cian-state"))
 CIAN_PROXY_URL = os.getenv("CIAN_PROXY_URL", "")
 CIAN_FAST_SCAN_PAGES = int(os.getenv("CIAN_FAST_SCAN_PAGES", "1"))
 CIAN_MAX_PAGES = int(os.getenv("CIAN_MAX_PAGES", "50"))
-CIAN_PAGE_DELAY_SECONDS = float(os.getenv("CIAN_PAGE_DELAY_SECONDS", "120"))
+# Keep the legacy setting as the lower bound when it is explicitly configured.
+CIAN_PAGE_DELAY_MIN_SECONDS = float(os.getenv(
+    "CIAN_PAGE_DELAY_MIN_SECONDS", os.getenv("CIAN_PAGE_DELAY_SECONDS", "90"),
+))
+CIAN_PAGE_DELAY_MAX_SECONDS = float(os.getenv("CIAN_PAGE_DELAY_MAX_SECONDS", "210"))
+CIAN_FULL_BATCH_PAGES = int(os.getenv("CIAN_FULL_BATCH_PAGES", "2"))
 CIAN_BLOCK_COOLDOWN_SECONDS = float(os.getenv("CIAN_BLOCK_COOLDOWN_SECONDS", "3600"))
 CIAN_FULL_SCAN_ENABLED = os.getenv("CIAN_FULL_SCAN_ENABLED", "false").lower() == "true"

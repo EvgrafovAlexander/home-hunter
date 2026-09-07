@@ -39,7 +39,9 @@ def html(ids=(330738483,), *, page=1, next_page=None, total=None, newest=False, 
 def config(settings, tmp_path):
     settings.CIAN_STATE_DIR = tmp_path/'cian'
     settings.CIAN_PROXY_URL = 'socks5://localhost:1080'
-    settings.CIAN_PAGE_DELAY_SECONDS = 0.01
+    settings.CIAN_PAGE_DELAY_MIN_SECONDS = 0.01
+    settings.CIAN_PAGE_DELAY_MAX_SECONDS = 0.01
+    settings.CIAN_FULL_BATCH_PAGES = 50
     settings.CIAN_FULL_SCAN_ENABLED = True
 
 
@@ -90,10 +92,10 @@ def test_full_follows_links_and_completes():
 def test_partial_and_repeat_protect_deactivation(settings):
     result = asyncio.run(collector([html(total=641)]).collect(SEARCH,mode='full'))
     assert not result.complete
-    settings.CIAN_MAX_PAGES=1
+    settings.CIAN_FULL_BATCH_PAGES=1
     result = asyncio.run(collector([html(total=641,next_page=2)]).collect(SEARCH,mode='full'))
     assert not result.complete
-    settings.CIAN_MAX_PAGES=50
+    settings.CIAN_FULL_BATCH_PAGES=50
     c = collector([html(total=3,next_page=2),html(page=2,total=3,next_page=3)])
     with pytest.raises(CollectionError,match='repeated page') as error:
         asyncio.run(c.collect(SEARCH,mode='full'))

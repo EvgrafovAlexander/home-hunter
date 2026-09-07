@@ -4,7 +4,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from collectors.base import BaseCollector, CollectionError
-from listings.models import Listing, ListingSearchQuery, Scan, SearchQuery
+from listings.models import CianFullScanCheckpoint, Listing, ListingSearchQuery, Scan, SearchQuery
 from .persistence import process_listing
 
 logger = logging.getLogger(__name__)
@@ -24,9 +24,21 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Sca
     scan = Scan.objects.create(search_query=search, source=search.source, mode=mode)
     logger.info("scan start id=%s search=%s mode=%s", scan.pk, search.name, mode)
     try:
+        checkpoint = None
+        start_page = 1
+        if search.source == SearchQuery.Source.CIAN and mode == Scan.Mode.FULL:
+            checkpoint, _ = CianFullScanCheckpoint.objects.get_or_create(
+                search_query=search, defaults={"search_url": search.url},
+            )
+            if checkpoint.search_url != search.url:
+                checkpoint.search_url, checkpoint.next_page = search.url, 1
+                checkpoint.expected_total, checkpoint.external_ids = None, []
+                checkpoint.save()
+            start_page = checkpoint.next_page
         collection_error = None
         try:
-            result = async_to_sync(collector.collect)(search, mode=mode)
+            kwargs = {"start_page": start_page} if checkpoint else {}
+            result = async_to_sync(collector.collect)(search, mode=mode, **kwargs)
         except CollectionError as exc:
             result = exc.result
             collection_error = exc
@@ -47,10 +59,41 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Sca
             scan.price_changes += int(saved.price_changed)
         if collection_error:
             raise collection_error
-        if mode == Scan.Mode.FULL and not result.complete:
+        if checkpoint and not collection_error:
+            checkpoint.refresh_from_db()
+            if checkpoint.expected_total not in (None, result.expected_total):
+                # The search changed while batches were being collected: start a
+                # fresh pass later, never deactivate from a mixed result set.
+                checkpoint.next_page, checkpoint.expected_total, checkpoint.external_ids = 1, None, []
+                checkpoint.save()
+                raise RuntimeError("CIAN total changed; checkpoint reset")
+            checkpoint.expected_total = result.expected_total
+            checkpoint.external_ids = sorted(set(checkpoint.external_ids).union(
+                external_id for _, external_id in seen_keys
+            ))
+            if result.complete:
+                if len(checkpoint.external_ids) != checkpoint.expected_total:
+                    checkpoint.next_page = 1
+                    checkpoint.expected_total, checkpoint.external_ids = None, []
+                    checkpoint.save()
+                    raise RuntimeError("CIAN full checkpoint count does not match total")
+                completed_keys = set(checkpoint.external_ids)
+                seen_ids = set(ListingSearchQuery.objects.filter(
+                    search_query=search, listing__source=SearchQuery.Source.CIAN,
+                    listing__external_id__in=completed_keys,
+                ).values_list("listing_id", flat=True))
+                checkpoint.delete()
+            else:
+                checkpoint.next_page = result.next_page
+                checkpoint.save()
+        if mode == Scan.Mode.FULL and not result.complete and not checkpoint:
             raise RuntimeError(f"Partial full scan: {result.stop_reason}")
         with transaction.atomic():
-            if mode == Scan.Mode.FULL:
+            # CIAN pages are a live, shifting result set.  A multi-run pass is
+            # useful for collecting data, but is not proof that an unseen
+            # listing disappeared, so it must never deactivate CIAN records.
+            if (mode == Scan.Mode.FULL and result.complete
+                    and search.source != SearchQuery.Source.CIAN):
                 finalize_full_scan(search, seen_ids)
             scan.status = Scan.Status.SUCCESS
             scan.finished_at = timezone.now()

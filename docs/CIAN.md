@@ -112,7 +112,9 @@ Retry-After может увеличить её. До конца паузы но�
 | CIAN_STATE_DIR | .cian-state | Профиль, паузы, диагностика |
 | CIAN_FAST_SCAN_PAGES | 1 | Бюджет fast |
 | CIAN_MAX_PAGES | 50 | Максимум full |
-| CIAN_PAGE_DELAY_SECONDS | 120 | Интервал навигаций |
+| CIAN_PAGE_DELAY_MIN_SECONDS | 90 | Нижняя граница случайной паузы между переходами |
+| CIAN_PAGE_DELAY_MAX_SECONDS | 210 | Верхняя граница случайной паузы между переходами |
+| CIAN_FULL_BATCH_PAGES | 2 | Число страниц full scan за один запуск; продолжение хранится в checkpoint. CIAN full scan только добавляет и обновляет объявления, но не деактивирует их. |
 | CIAN_BLOCK_COOLDOWN_SECONDS | 3600 | Пауза после блокировки |
 | CIAN_FULL_SCAN_ENABLED | false | Разрешение full |
 | CIAN_SSH_DESTINATION | cian-tunnel@81.19.139.155 | Адрес SSH |
