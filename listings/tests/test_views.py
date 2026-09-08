@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from listings.models import Listing, Scan, SearchQuery
+from listings.models import Listing, PriceHistory, Scan, SearchQuery
 
 
 class ListingViewsTests(TestCase):
@@ -49,11 +49,18 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "В Дёмском")
 
     def test_dashboard_uses_filtered_population(self):
+        PriceHistory.objects.create(listing=self.match, price=6_700_000,
+                                    observed_at=timezone.now() - timedelta(days=2))
+        PriceHistory.objects.create(listing=self.match, price=6_500_000,
+                                    observed_at=timezone.now() - timedelta(days=1))
         self.client.force_login(self.user)
-        response = self.client.get(reverse("dashboard"), {"district": "Кировский"})
+        response = self.client.get(reverse("dashboard"), {"district": "Кировский", "stats_days": 7})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["total"], 1)
         self.assertEqual(response.context["median_price"], 6_500_000)
+        self.assertEqual(response.context["period_days"], 7)
+        self.assertEqual(response.context["price_drop_count"], 1)
+        self.assertContains(response, "Самые заметные снижения")
 
     def test_scan_statistics_shows_three_latest_scans_per_source(self):
         search = SearchQuery.objects.create(name="Avito search", source="avito", url="https://example.test")

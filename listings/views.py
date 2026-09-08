@@ -3,12 +3,12 @@ from decimal import Decimal, InvalidOperation
 from statistics import median
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Q
 from django.db.models.functions import TruncDate
 from django.shortcuts import render
 from django.utils import timezone
 
-from .models import Listing, Scan, SearchQuery
+from .models import Listing, PriceHistory, Scan, SearchQuery
 
 
 def _integer(value):
@@ -120,26 +120,50 @@ def scan_statistics(request):
 @login_required
 def dashboard(request):
     listings, filters = filtered_listings(request)
+    period_days = _integer(request.GET.get("stats_days", 30))
+    if period_days not in (7, 30, 90):
+        period_days = 30
+    period_since = timezone.now() - timedelta(days=period_days - 1)
     prices = list(listings.exclude(price__isnull=True).values_list("price", flat=True))
     sqm_prices = list(listings.exclude(price_per_sqm__isnull=True).values_list("price_per_sqm", flat=True))
-    since = timezone.now() - timedelta(days=13)
-    daily_raw = (listings.filter(first_seen_at__gte=since).annotate(day=TruncDate("first_seen_at"))
+    daily_raw = (listings.filter(first_seen_at__gte=period_since).annotate(day=TruncDate("first_seen_at"))
                  .values("day").annotate(count=Count("id")).order_by("day"))
     by_day = {row["day"]: row["count"] for row in daily_raw}
     daily = []
-    for offset in range(14):
-        day = (since + timedelta(days=offset)).date()
+    for offset in range(period_days):
+        day = (period_since + timedelta(days=offset)).date()
         daily.append({"label": day.strftime("%d.%m"), "count": by_day.get(day, 0)})
     district_stats = list(listings.exclude(district__isnull=True).exclude(district="")
                           .exclude(price_per_sqm__isnull=True).values("district")
-                          .annotate(count=Count("id"), average=Avg("price_per_sqm"))
+                          .annotate(count=Count("id"), average=Avg("price_per_sqm"),
+                                    average_area=Avg("area"),
+                                    new_count=Count("id", filter=Q(first_seen_at__gte=period_since)))
                           .order_by("-count", "district")[:8])
+    price_history = (PriceHistory.objects.filter(listing__in=listings, observed_at__gte=period_since,
+                                                  price__isnull=False)
+                     .select_related("listing").order_by("listing_id", "observed_at", "id"))
+    price_changes = {}
+    for observation in price_history:
+        change = price_changes.setdefault(observation.listing_id, {"listing": observation.listing,
+                                                                     "first": observation.price,
+                                                                     "last": observation.price})
+        change["last"] = observation.price
+    changes = [
+        {**change, "difference": change["last"] - change["first"]}
+        for change in price_changes.values() if change["last"] != change["first"]
+    ]
+    price_drops = sorted((change for change in changes if change["difference"] < 0),
+                         key=lambda change: change["difference"])[:10]
     scatter = list(listings.exclude(area__isnull=True).exclude(price__isnull=True)
                    .order_by("-first_seen_at").values("area", "price")[:150])
     return render(request, "listings/dashboard.html", {
         "filters": filters, "filter_options": filter_options(), "total": listings.count(),
         "median_price": int(median(prices)) if prices else None,
         "median_sqm_price": int(median(sqm_prices)) if sqm_prices else None,
-        "daily": daily, "daily_max": max((item["count"] for item in daily), default=1) or 1,
+        "period_days": period_days, "daily": daily,
+        "daily_max": max((item["count"] for item in daily), default=1) or 1,
         "district_stats": district_stats, "scatter": scatter,
+        "price_drop_count": len(price_drops),
+        "price_increase_count": sum(change["difference"] > 0 for change in changes),
+        "price_drops": price_drops,
     })
