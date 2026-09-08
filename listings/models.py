@@ -131,3 +131,11 @@ class SourcePollingControl(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["source", "mode"], name="unique_source_polling_mode")]
+
+
+class DealAlert(models.Model):
+    listing = models.OneToOneField(Listing, on_delete=models.CASCADE, related_name="deal_alert")
+    discount_percent = models.IntegerField()
+    market_reference = models.CharField(max_length=100)
+    sample_size = models.PositiveIntegerField()
+    sent_at = models.DateTimeField(auto_now_add=True)

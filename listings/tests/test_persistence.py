@@ -98,6 +98,15 @@ def test_hides_zaton_microdistrict(search, item):
     assert not result.listing.is_visible
 
 
+@pytest.mark.parametrize("microdistrict", ["Сипайлово", "Черниковка"])
+def test_hides_other_excluded_microdistricts(search, item, microdistrict):
+    result = process_listing(search, replace(
+        item, address=f"Республика Башкортостан, Уфа, мкр. {microdistrict}, улица Тестовая, 1",
+    ), timezone.now())
+    assert result.listing.microdistrict == microdistrict
+    assert not result.listing.is_visible
+
+
 def test_hides_listing_without_parsed_address(search, item):
     result = process_listing(search, replace(item, address=None), timezone.now())
     assert not result.listing.is_visible

@@ -59,6 +59,24 @@ def send_telegram_message(text: str) -> bool:
         return False
 
 
+def send_telegram_photo(photo_url: str, caption: str) -> bool:
+    if not settings.TG_BOT_TOKEN or not settings.TG_CHAT_ID or not photo_url:
+        return False
+    proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} \
+        if settings.TELEGRAM_PROXY_URL else None
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/sendPhoto",
+            data={"chat_id": settings.TG_CHAT_ID, "photo": photo_url, "caption": caption},
+            proxies=proxies, timeout=20,
+        )
+        response.raise_for_status()
+        return True
+    except requests.RequestException:
+        logger.warning("Telegram photo notification failed; falling back to text", exc_info=True)
+        return False
+
+
 def check_source_health(source: str) -> SourceHealth:
     if not polling_enabled(source, Scan.Mode.FAST):
         return SourceHealth("disabled", "Отключено", "Опросы отключены в интерфейсе")

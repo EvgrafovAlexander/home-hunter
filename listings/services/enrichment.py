@@ -8,7 +8,7 @@ DISTRICT_COMPONENT_PATTERN = re.compile(r"^(?:р-н|район)\s+(.+)$|^(.+?)\s
 MICRODISTRICT_PATTERN = re.compile(r"^(?:мкр\.?|микрорайон)\s+(.+)$|^(.+?)\s+мкр\.?$", re.IGNORECASE)
 IGNORED_ADDRESS_COMPONENTS = {"республика башкортостан", "башкортостан", "уфа", "г. уфа", "город уфа"}
 HIDDEN_DISTRICTS = {"дёмский", "демский", "калининский"}
-HIDDEN_MICRODISTRICTS = {"затон"}
+HIDDEN_MICRODISTRICTS = {"затон", "сипайлово", "черниковка"}
 
 
 @dataclass(frozen=True)

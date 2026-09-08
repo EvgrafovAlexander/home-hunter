@@ -82,4 +82,7 @@ def process_listing(
         defaults={"last_seen_at": observed_at, "is_active": True},
         create_defaults={"first_seen_at": observed_at, "last_seen_at": observed_at, "is_active": True},
     )
+    if created:
+        from listings.services.deal_alerts import notify_new_deal
+        transaction.on_commit(lambda listing_id=listing.pk: notify_new_deal(listing_id))
     return PersistenceResult(listing, created, not created and bool(changed), price_changed)
