@@ -16,6 +16,9 @@ from .services.polling import default_polling_enabled
 SCAN_STALE_AFTER = timedelta(hours=6)
 SCHEDULE_TIME_ZONE = ZoneInfo("Europe/Moscow")
 DISPLAY_TIME_ZONE = ZoneInfo("Asia/Yekaterinburg")
+MARKET_MIN_SIMILAR = 5
+MARKET_MIN_ROOM_GROUP = 8
+MARKET_MIN_DISTRICT_GROUP = 12
 
 
 def _next_at(now, hour: int, minute: int):
@@ -119,6 +122,73 @@ def filter_options(*, visible: bool = True):
     }
 
 
+def add_market_position(listings):
+    """Compare within a microdistrict first; avoid mixing distinct local markets."""
+    comparable = (Listing.objects.filter(is_active=True, price_per_sqm__isnull=False)
+                  .exclude(district__isnull=True).exclude(district="")
+                  .exclude(rooms__isnull=True).exclude(area__isnull=True)
+                  .values("id", "district", "microdistrict", "rooms", "area", "price_per_sqm"))
+    by_microdistrict, by_unclassified_district = {}, {}
+    for row in comparable:
+        entry = (row["id"], row["rooms"], float(row["area"]), row["price_per_sqm"])
+        if row["microdistrict"]:
+            by_microdistrict.setdefault((row["district"], row["microdistrict"]), []).append(entry)
+        else:
+            by_unclassified_district.setdefault(row["district"], []).append(entry)
+
+    for listing in listings:
+        listing.market_delta_pct = None
+        listing.market_reference = ""
+        listing.market_samples = 0
+        listing.market_state = ""
+        listing.market_label = ""
+        listing.market_state = ""
+        listing.market_label = ""
+        if (listing.price_per_sqm is None or not listing.district
+                or listing.rooms is None or listing.area is None):
+            continue
+        if listing.microdistrict:
+            local_prices = by_microdistrict.get((listing.district, listing.microdistrict), [])
+            location_label = "микрорайону"
+        else:
+            local_prices = by_unclassified_district.get(listing.district, [])
+            location_label = "району"
+        same_room = [(area, price) for pk, rooms, area, price in local_prices
+                     if pk != listing.pk and rooms == listing.rooms]
+        all_local_prices = [price for pk, _, _, price in local_prices if pk != listing.pk]
+        similar = [price for area, price in same_room if abs(area - float(listing.area)) <= 10]
+        if len(similar) >= MARKET_MIN_SIMILAR:
+            prices, reference = similar, "похожим квартирам"
+        elif len(same_room) >= MARKET_MIN_ROOM_GROUP:
+            prices, reference = [price for _, price in same_room], f"{location_label} и комнатности"
+        elif len(all_local_prices) >= MARKET_MIN_DISTRICT_GROUP:
+            prices, reference = all_local_prices, location_label
+        else:
+            continue
+        listing.market_samples = len(prices)
+        listing.market_reference = reference
+        listing.market_delta_pct = round((float(listing.price_per_sqm) / float(median(prices)) - 1) * 100)
+        if listing.market_delta_pct <= -4:
+            listing.market_state = "below"
+            listing.market_label = f"На {abs(listing.market_delta_pct)}% ниже рынка"
+        elif listing.market_delta_pct >= 4:
+            listing.market_state = "above"
+            listing.market_label = f"На {listing.market_delta_pct}% выше рынка"
+        else:
+            listing.market_state = "neutral"
+            listing.market_label = "В пределах рынка"
+        if listing.market_delta_pct <= -4:
+            listing.market_state = "below"
+            listing.market_label = f"На {abs(listing.market_delta_pct)}% ниже рынка"
+        elif listing.market_delta_pct >= 4:
+            listing.market_state = "above"
+            listing.market_label = f"На {listing.market_delta_pct}% выше рынка"
+        else:
+            listing.market_state = "neutral"
+            listing.market_label = "В пределах рынка"
+    return listings
+
+
 @login_required
 def listing_feed(request):
     listings, filters = filtered_listings(request)
@@ -129,8 +199,9 @@ def listing_feed(request):
     }
     if ordering not in sortings:
         ordering = "new"
+    page_listings = list(listings.order_by(sortings[ordering], "-id")[:200])
     return render(request, "listings/feed.html", {
-        "listings": listings.order_by(sortings[ordering], "-id")[:200],
+        "listings": add_market_position(page_listings),
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(),
         "sort": ordering,
     })
@@ -146,8 +217,9 @@ def hidden_listing_feed(request):
     }
     if ordering not in sortings:
         ordering = "new"
+    page_listings = list(listings.order_by(sortings[ordering], "-id")[:200])
     return render(request, "listings/feed.html", {
-        "listings": listings.order_by(sortings[ordering], "-id")[:200],
+        "listings": add_market_position(page_listings),
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(visible=False),
         "sort": ordering, "hidden_feed": True,
     })
@@ -215,6 +287,7 @@ def listing_map(request):
     listings, filters = filtered_listings(request)
     map_listings = list(listings.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
                         .order_by("-first_seen_at")[:500])
+    add_market_position(map_listings)
     return render(request, "listings/map.html", {
         "listings": map_listings, "result_count": len(map_listings), "filters": filters,
         "filter_options": filter_options(),

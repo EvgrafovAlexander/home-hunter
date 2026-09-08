@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from listings.models import Listing, PriceHistory, Scan, SearchQuery, SourcePollingControl
-from listings.views import next_poll_runs
+from listings.views import add_market_position, next_poll_runs
 
 
 class ListingViewsTests(TestCase):
@@ -45,6 +45,33 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "Двушка")
         self.assertNotContains(response, "Трешка")
         self.assertEqual(response.context["result_count"], 1)
+
+    def test_feed_shows_market_position_with_enough_comparables(self):
+        for index in range(5):
+            Listing.objects.create(
+                source="avito", external_id=f"comparison-{index}", url="https://example.test/comparison",
+                title="Сравнение", price=7_500_000, price_per_sqm=150_000, rooms=2, area="52.00",
+                district="Кировский",
+            )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_feed"))
+        self.assertContains(response, "На 17% ниже рынка")
+        self.assertContains(response, "похожим квартирам, 5 аналогов")
+
+    def test_market_position_does_not_mix_microdistricts_inside_one_district(self):
+        zaton = Listing.objects.create(
+            source="avito", external_id="zaton", url="https://example.test/zaton", title="Затон",
+            price=4_000_000, price_per_sqm=80_000, rooms=2, area="50.00",
+            district="Ленинский", microdistrict="Затон", is_visible=False,
+        )
+        for index in range(12):
+            Listing.objects.create(
+                source="cian", external_id=f"center-{index}", url="https://example.test/center",
+                title="Центр", price=8_000_000, price_per_sqm=160_000, rooms=2, area="50.00",
+                district="Ленинский", microdistrict="Центр",
+            )
+        add_market_position([zaton])
+        self.assertEqual(zaton.market_label, "")
 
     def test_feed_excludes_hidden_listing_and_separate_feed_shows_it(self):
         self.client.force_login(self.user)

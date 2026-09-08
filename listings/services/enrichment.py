@@ -8,6 +8,7 @@ DISTRICT_COMPONENT_PATTERN = re.compile(r"^(?:р-н|район)\s+(.+)$|^(.+?)\s
 MICRODISTRICT_PATTERN = re.compile(r"^(?:мкр\.?|микрорайон)\s+(.+)$|^(.+?)\s+мкр\.?$", re.IGNORECASE)
 IGNORED_ADDRESS_COMPONENTS = {"республика башкортостан", "башкортостан", "уфа", "г. уфа", "город уфа"}
 HIDDEN_DISTRICTS = {"дёмский", "демский", "калининский"}
+HIDDEN_MICRODISTRICTS = {"затон"}
 
 
 @dataclass(frozen=True)
@@ -53,5 +54,9 @@ def parse_address(address: str | None, district: str | None = None) -> ParsedAdd
         else:
             kept.append(component)
     normalized_address = ", ".join(kept) or None
-    is_visible = bool(normalized_address) and (parsed_district or "").casefold() not in HIDDEN_DISTRICTS
+    is_visible = (
+        bool(normalized_address)
+        and (parsed_district or "").casefold() not in HIDDEN_DISTRICTS
+        and (microdistrict or "").casefold() not in HIDDEN_MICRODISTRICTS
+    )
     return ParsedAddress(normalized_address, parsed_district, microdistrict, is_visible)

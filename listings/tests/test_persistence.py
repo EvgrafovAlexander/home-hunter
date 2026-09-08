@@ -90,6 +90,14 @@ def test_hides_kalininsky_district(search, item):
     assert not result.listing.is_visible
 
 
+def test_hides_zaton_microdistrict(search, item):
+    result = process_listing(search, replace(
+        item, address="Республика Башкортостан, Уфа, мкр. Затон, Ахметова улица, 300",
+    ), timezone.now())
+    assert result.listing.microdistrict == "Затон"
+    assert not result.listing.is_visible
+
+
 def test_hides_listing_without_parsed_address(search, item):
     result = process_listing(search, replace(item, address=None), timezone.now())
     assert not result.listing.is_visible
