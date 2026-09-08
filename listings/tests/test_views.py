@@ -45,6 +45,18 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "Двушка")
         self.assertNotContains(response, "Трешка")
         self.assertEqual(response.context["result_count"], 1)
+        self.assertContains(response, reverse("listing_detail", args=[self.match.pk]))
+        self.assertContains(response, 'href="https://example.test/match"')
+
+    def test_listing_detail_shows_price_history_and_source_link(self):
+        PriceHistory.objects.create(listing=self.match, price=6_700_000, observed_at=timezone.now() - timedelta(days=1))
+        PriceHistory.objects.create(listing=self.match, price=6_500_000, observed_at=timezone.now())
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_detail", args=[self.match.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "История цены")
+        self.assertContains(response, "6 700 000")
+        self.assertContains(response, "Открыть на CIAN")
 
     def test_feed_shows_market_position_with_enough_comparables(self):
         for index in range(5):

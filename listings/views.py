@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count, Q
 from django.db.models.functions import TruncDate
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .models import Listing, PriceHistory, Scan, SearchQuery, SourcePollingControl
@@ -222,6 +222,30 @@ def hidden_listing_feed(request):
         "listings": add_market_position(page_listings),
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(visible=False),
         "sort": ordering, "hidden_feed": True,
+    })
+
+
+@login_required
+def listing_detail(request, listing_id: int):
+    listing = get_object_or_404(Listing, pk=listing_id)
+    add_market_position([listing])
+    price_history = list(listing.price_history.exclude(price__isnull=True).order_by("observed_at", "id"))
+    chart_points = ""
+    if price_history:
+        prices = [item.price for item in price_history]
+        low, high = min(prices), max(prices)
+        spread = high - low or 1
+        chart_points = " ".join(
+            f"{round(index / max(len(price_history) - 1, 1) * 680 + 10, 1)},"
+            f"{round(170 - (item.price - low) / spread * 140, 1)}"
+            for index, item in enumerate(price_history)
+        )
+    snapshots = list(listing.snapshots.order_by("-observed_at", "-id")[:12])
+    return render(request, "listings/detail.html", {
+        "item": listing, "price_history": price_history, "chart_points": chart_points,
+        "price_low": min((entry.price for entry in price_history), default=None),
+        "price_high": max((entry.price for entry in price_history), default=None),
+        "snapshots": snapshots,
     })
 
 
