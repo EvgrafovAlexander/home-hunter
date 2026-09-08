@@ -34,7 +34,7 @@ class Listing(models.Model):
     address = models.TextField(null=True, blank=True)
     district = models.CharField(max_length=255, null=True, blank=True)
     microdistrict = models.CharField(max_length=255, null=True, blank=True)
-    is_visible = models.BooleanField(default=True, db_index=True)
+    is_visible = models.BooleanField(default=True, db_default=True, db_index=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     geocode_status = models.CharField(max_length=20, null=True, blank=True)
