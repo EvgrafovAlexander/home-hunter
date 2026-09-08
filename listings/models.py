@@ -139,3 +139,19 @@ class DealAlert(models.Model):
     market_reference = models.CharField(max_length=100)
     sample_size = models.PositiveIntegerField()
     sent_at = models.DateTimeField(auto_now_add=True)
+
+
+class ManualDomclickJob(models.Model):
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Ожидает ноутбук"
+        RUNNING = "running", "Выполняется на ноутбуке"
+        SUCCESS = "success", "Готово"
+        FAILED = "failed", "Ошибка"
+
+    search_query = models.ForeignKey(SearchQuery, on_delete=models.PROTECT, related_name="manual_domclick_jobs")
+    scan = models.OneToOneField(Scan, on_delete=models.SET_NULL, null=True, blank=True, related_name="manual_domclick_job")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)

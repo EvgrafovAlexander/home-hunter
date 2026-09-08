@@ -149,6 +149,7 @@ activemq-data/
 
 # Environments
 .env
+scripts/*.local.sh
 .envrc
 .venv
 env/

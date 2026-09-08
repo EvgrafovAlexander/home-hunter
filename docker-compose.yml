@@ -74,6 +74,10 @@ services:
       target: collector
     restart: unless-stopped
     init: true
+    # The SOCKS listener stays private to the host. The local Domclick agent
+    # reaches it only through its authenticated SSH port forward.
+    ports:
+      - "127.0.0.1:19082:1080"
     command:
       - ssh
       - -NT

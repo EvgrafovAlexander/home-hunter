@@ -56,7 +56,7 @@ class ListingViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "История цены")
         self.assertContains(response, "6 700 000")
-        self.assertContains(response, "Открыть на CIAN")
+        self.assertContains(response, "Открыть на сайте")
 
     def test_feed_shows_market_position_with_enough_comparables(self):
         for index in range(5):
@@ -139,6 +139,14 @@ class ListingViewsTests(TestCase):
         self.assertRedirects(response, reverse("scan_statistics"))
         self.assertTrue(SourcePollingControl.objects.get(source="cian", mode="fast").enabled)
 
+    def test_scan_statistics_can_queue_manual_domclick_job(self):
+        SearchQuery.objects.create(name="Домклик", source="domclick", url="https://ufa.domclick.ru/search")
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("scan_statistics"), {"action": "manual_domclick"})
+        self.assertRedirects(response, reverse("scan_statistics"))
+        from listings.models import ManualDomclickJob
+        self.assertEqual(ManualDomclickJob.objects.count(), 1)
+
     def test_scan_statistics_does_not_allow_enabling_avito_full(self):
         self.client.force_login(self.user)
         response = self.client.post(reverse("scan_statistics"), {"source": "avito", "mode": "full", "enabled": "1"})
@@ -148,7 +156,7 @@ class ListingViewsTests(TestCase):
     def test_next_poll_time_is_shown_in_yekaterinburg_time(self):
         runs = next_poll_runs("avito", datetime(2026, 9, 8, 7, 0, tzinfo=datetime_timezone.utc))
         fast_run = runs[0][2]
-        self.assertEqual((fast_run.hour, fast_run.minute), (12, 15))
+        self.assertEqual((fast_run.hour, fast_run.minute), (14, 15))
         self.assertEqual(fast_run.tzinfo.key, "Asia/Yekaterinburg")
 
     def test_map_shows_only_visible_listings_with_coordinates(self):

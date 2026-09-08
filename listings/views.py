@@ -9,7 +9,7 @@ from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .models import Listing, PriceHistory, Scan, SearchQuery, SourcePollingControl
+from .models import Listing, ManualDomclickJob, PriceHistory, Scan, SearchQuery, SourcePollingControl
 from .services.polling import default_polling_enabled
 
 
@@ -31,6 +31,14 @@ def _next_hourly_at(now, minute: int):
     return candidate if candidate > now else candidate + timedelta(hours=1)
 
 
+def _next_every_three_hours_at(now, minute: int):
+    """Return the next ``00/3:<minute>`` systemd calendar slot."""
+    candidate = now.replace(minute=minute, second=0, microsecond=0)
+    hours_to_add = (-candidate.hour) % 3
+    candidate += timedelta(hours=hours_to_add)
+    return candidate if candidate > now else candidate + timedelta(hours=3)
+
+
 def _next_avito_full(now):
     for offset in range(4):
         day = now.date() + timedelta(days=offset)
@@ -44,7 +52,7 @@ def next_poll_runs(source: str, now):
     """Mirror systemd timers (MSK) and present their dates in Yekaterinburg time."""
     now = now.astimezone(SCHEDULE_TIME_ZONE)
     if source == SearchQuery.Source.AVITO:
-        runs = [(Scan.Mode.FAST, "Быстрый", _next_hourly_at(now, 15), ""),
+        runs = [(Scan.Mode.FAST, "Быстрый", _next_every_three_hours_at(now, 15), ""),
                 (Scan.Mode.FULL, "Полный", _next_avito_full(now), "")]
     elif source == SearchQuery.Source.CIAN:
         runs = [
@@ -142,8 +150,6 @@ def add_market_position(listings):
         listing.market_samples = 0
         listing.market_state = ""
         listing.market_label = ""
-        listing.market_state = ""
-        listing.market_label = ""
         if (listing.price_per_sqm is None or not listing.district
                 or listing.rooms is None or listing.area is None):
             continue
@@ -168,15 +174,6 @@ def add_market_position(listings):
         listing.market_samples = len(prices)
         listing.market_reference = reference
         listing.market_delta_pct = round((float(listing.price_per_sqm) / float(median(prices)) - 1) * 100)
-        if listing.market_delta_pct <= -4:
-            listing.market_state = "below"
-            listing.market_label = f"На {abs(listing.market_delta_pct)}% ниже рынка"
-        elif listing.market_delta_pct >= 4:
-            listing.market_state = "above"
-            listing.market_label = f"На {listing.market_delta_pct}% выше рынка"
-        else:
-            listing.market_state = "neutral"
-            listing.market_label = "В пределах рынка"
         if listing.market_delta_pct <= -4:
             listing.market_state = "below"
             listing.market_label = f"На {abs(listing.market_delta_pct)}% ниже рынка"
@@ -252,6 +249,15 @@ def listing_detail(request, listing_id: int):
 @login_required
 def scan_statistics(request):
     if request.method == "POST":
+        if request.POST.get("action") == "manual_domclick":
+            active_job = ManualDomclickJob.objects.filter(
+                status__in=[ManualDomclickJob.Status.QUEUED, ManualDomclickJob.Status.RUNNING],
+            ).first()
+            if not active_job:
+                search = SearchQuery.objects.filter(source=SearchQuery.Source.DOMCLICK, enabled=True).first()
+                if search:
+                    ManualDomclickJob.objects.create(search_query=search)
+            return redirect("scan_statistics")
         source = request.POST.get("source")
         mode = request.POST.get("mode")
         enabled = request.POST.get("enabled")
@@ -303,7 +309,10 @@ def scan_statistics(request):
             "failed_in_a_row": failed_in_a_row, "health": health,
             "health_label": health_label, "health_reason": health_reason,
         })
-    return render(request, "listings/scan_statistics.html", {"sources": sources})
+    manual_domclick_job = ManualDomclickJob.objects.select_related("scan").order_by("-id").first()
+    return render(request, "listings/scan_statistics.html", {
+        "sources": sources, "manual_domclick_job": manual_domclick_job,
+    })
 
 
 @login_required
