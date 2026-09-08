@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from listings.models import Listing, ListingSnapshot, PriceHistory, Scan, SearchQuery, SourcePollingControl
+from listings.models import Listing, ListingSnapshot, PriceHistory, Scan, ScoringPreference, SearchQuery, SourcePollingControl
 from listings.views import add_listing_score, add_market_position, next_poll_runs
 
 
@@ -129,6 +129,27 @@ class ListingViewsTests(TestCase):
         self.assertEqual(response.context["sort"], "score")
         self.assertEqual(response.context["listings"][0], candidate)
         self.assertContains(response, "Сначала интересные")
+
+    def test_scoring_settings_save_personal_conditions_and_weights(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("scoring_settings"), {
+            "min_area": "60", "floor_min": "3", "floor_max": "12", "preferred_districts": ["Кировский"],
+            "prefer_photo": "1", "market_weight": "60", "freshness_weight": "10", "data_weight": "5",
+            "floor_weight": "5", "price_history_weight": "10", "preference_weight": "40",
+        })
+        self.assertRedirects(response, reverse("scoring_settings"))
+        preference = ScoringPreference.objects.get(user=self.user)
+        self.assertEqual(preference.min_area, 60)
+        self.assertEqual(preference.preferred_districts, ["Кировский"])
+        self.assertTrue(preference.prefer_photo)
+        self.assertEqual(preference.market_weight, 60)
+        self.assertContains(self.client.get(reverse("scoring_settings")), "Настройки оценки")
+
+    def test_listing_score_explains_unmet_personal_condition(self):
+        preference = ScoringPreference.objects.create(user=self.user, min_area="60.00", preference_weight=50)
+        self.match.market_delta_pct = 0
+        add_listing_score([self.match], preference)
+        self.assertIn("площадь меньше вашей цели", self.match.score_reasons)
 
     def test_shortlist_shows_recent_below_market_listings(self):
         candidate = Listing.objects.create(

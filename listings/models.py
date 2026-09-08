@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -65,6 +66,23 @@ class StreetAssignment(models.Model):
 
     def __str__(self) -> str:
         return self.street
+
+
+class ScoringPreference(models.Model):
+    """Personal scoring settings, deliberately separate from shared market data."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="scoring_preference")
+    min_area = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    floor_min = models.PositiveSmallIntegerField(null=True, blank=True)
+    floor_max = models.PositiveSmallIntegerField(null=True, blank=True)
+    preferred_districts = models.JSONField(default=list, blank=True)
+    prefer_photo = models.BooleanField(default=False)
+    market_weight = models.PositiveSmallIntegerField(default=45)
+    freshness_weight = models.PositiveSmallIntegerField(default=20)
+    data_weight = models.PositiveSmallIntegerField(default=15)
+    floor_weight = models.PositiveSmallIntegerField(default=10)
+    price_history_weight = models.PositiveSmallIntegerField(default=10)
+    preference_weight = models.PositiveSmallIntegerField(default=20)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class Listing(models.Model):

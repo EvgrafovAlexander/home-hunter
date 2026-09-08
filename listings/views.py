@@ -9,8 +9,8 @@ from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
-from .models import (District, Listing, ListingSnapshot, ManualDomclickJob, Microdistrict, PriceHistory, Scan,
-                     SearchQuery, SourcePollingControl, StreetAssignment)
+from .models import (District, Listing, ListingSnapshot, ManualDomclickJob, Microdistrict, PriceHistory,
+                     Scan, ScoringPreference, SearchQuery, SourcePollingControl, StreetAssignment)
 from .services.enrichment import location_is_visible, parse_address
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
@@ -195,57 +195,95 @@ def add_market_position(listings):
     return listings
 
 
-def add_listing_score(listings):
+def scoring_preference_for(user):
+    return ScoringPreference.objects.filter(user=user).first() or ScoringPreference(user=user)
+
+
+def add_listing_score(listings, preferences=None):
     """Attach an explainable 0–100 search score to each listing."""
     listings = list(listings)
+    preferences = preferences or ScoringPreference()
     history = {}
     for entry in (PriceHistory.objects.filter(listing_id__in=[item.pk for item in listings], price__isnull=False)
                   .order_by("listing_id", "observed_at", "id")):
         history.setdefault(entry.listing_id, [entry.price, entry.price])[1] = entry.price
     now = timezone.now()
     for item in listings:
-        score, reasons = 50, []
+        reasons = []
         if item.market_delta_pct is not None:
             if item.market_delta_pct <= -10:
-                score += 25; reasons.append("существенно ниже рынка")
+                market_score = 100; reasons.append("существенно ниже рынка")
             elif item.market_delta_pct <= -4:
-                score += 18; reasons.append("ниже рынка")
+                market_score = 85; reasons.append("ниже рынка")
             elif item.market_delta_pct < 0:
-                score += 8; reasons.append("чуть ниже рынка")
+                market_score = 68; reasons.append("чуть ниже рынка")
             elif item.market_delta_pct >= 10:
-                score -= 20; reasons.append("существенно выше рынка")
+                market_score = 0; reasons.append("существенно выше рынка")
             elif item.market_delta_pct >= 4:
-                score -= 12; reasons.append("выше рынка")
+                market_score = 22; reasons.append("выше рынка")
+            else:
+                market_score = 50
+        else:
+            market_score = 50
         age_days = max(0, (now - item.first_seen_at).total_seconds() / 86400) if item.first_seen_at else 999
         if age_days <= 1:
-            score += 12; reasons.append("добавлено сегодня")
+            freshness_score = 100; reasons.append("добавлено сегодня")
         elif age_days <= 3:
-            score += 8; reasons.append("свежее")
+            freshness_score = 80; reasons.append("свежее")
         elif age_days <= 7:
-            score += 4; reasons.append("добавлено за неделю")
-        elif age_days > 30:
-            score -= 5
-        if item.address:
-            score += 4
-        if item.district:
-            score += 2
-        if item.microdistrict:
-            score += 2
+            freshness_score = 65; reasons.append("добавлено за неделю")
+        elif age_days <= 30:
+            freshness_score = 42
+        else:
+            freshness_score = 20
+        data_score = 0
+        for value, points in ((item.address, 35), (item.district, 15), (item.microdistrict, 15),
+                              (item.price, 15), (item.area, 10)):
+            data_score += points if value not in (None, "") else 0
         if item.image_url:
-            score += 4; reasons.append("есть фото")
+            data_score += 10; reasons.append("есть фото")
         else:
             reasons.append("нет фото")
         if item.floor and item.floors_total:
             if item.floor == 1 or item.floor == item.floors_total:
-                score -= 5; reasons.append("крайний этаж")
+                floor_score = 20; reasons.append("крайний этаж")
             else:
-                score += 3
+                floor_score = 100
+        else:
+            floor_score = 55
         first_last = history.get(item.pk)
         if first_last and first_last[1] < first_last[0]:
-            score += 8; reasons.append("цена снижалась")
+            history_score = 100; reasons.append("цена снижалась")
         elif first_last and first_last[1] > first_last[0]:
-            score -= 3; reasons.append("цена повышалась")
-        item.score = max(0, min(100, score))
+            history_score = 25; reasons.append("цена повышалась")
+        else:
+            history_score = 55
+        preference_checks = []
+        if preferences.min_area is not None:
+            preference_checks.append(item.area is not None and item.area >= preferences.min_area)
+            if not preference_checks[-1]: reasons.append("площадь меньше вашей цели")
+        if preferences.floor_min is not None:
+            preference_checks.append(item.floor is not None and item.floor >= preferences.floor_min)
+            if not preference_checks[-1]: reasons.append("этаж ниже вашей цели")
+        if preferences.floor_max is not None:
+            preference_checks.append(item.floor is not None and item.floor <= preferences.floor_max)
+            if not preference_checks[-1]: reasons.append("этаж выше вашей цели")
+        if preferences.preferred_districts:
+            preference_checks.append(item.district in preferences.preferred_districts)
+            if not preference_checks[-1]: reasons.append("район не в ваших предпочтениях")
+        if preferences.prefer_photo:
+            preference_checks.append(bool(item.image_url))
+            if not preference_checks[-1]: reasons.append("нет обязательного фото")
+        components = {
+            "market_weight": market_score, "freshness_weight": freshness_score,
+            "data_weight": data_score, "floor_weight": floor_score,
+            "price_history_weight": history_score,
+        }
+        if preference_checks:
+            components["preference_weight"] = 100 * sum(preference_checks) / len(preference_checks)
+        total_weight = sum(getattr(preferences, weight) for weight in components)
+        score = sum(value * getattr(preferences, weight) for weight, value in components.items()) / total_weight if total_weight else 0
+        item.score = round(max(0, min(100, score)))
         item.score_reasons = reasons[:3]
         item.score_label = "Высокий интерес" if item.score >= 75 else (
             "Стоит посмотреть" if item.score >= 60 else "Нейтрально"
@@ -326,6 +364,7 @@ def microdistrict_market_stats(listings, period_since, filters):
 @login_required
 def listing_feed(request):
     listings, filters = filtered_listings(request)
+    preferences = scoring_preference_for(request.user)
     ordering = request.GET.get("sort", "new")
     sortings = {
         "new": "-first_seen_at", "price_up": "price", "price_down": "-price",
@@ -336,13 +375,13 @@ def listing_feed(request):
     if ordering == "score":
         page_listings = list(listings.order_by("-first_seen_at", "-id")[:500])
         add_market_position(page_listings)
-        add_listing_score(page_listings)
+        add_listing_score(page_listings, preferences)
         page_listings.sort(key=lambda item: (-item.score, -item.first_seen_at.timestamp()))
         page_listings = page_listings[:200]
     else:
         page_listings = list(listings.order_by(sortings[ordering], "-id")[:200])
         add_market_position(page_listings)
-        add_listing_score(page_listings)
+        add_listing_score(page_listings, preferences)
     return render(request, "listings/feed.html", {
         "listings": page_listings,
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(),
@@ -358,7 +397,7 @@ def shortlist(request):
         filters["days"] = "7"
     recent = list(listings.order_by("-first_seen_at", "-id")[:500])
     add_market_position(recent)
-    add_listing_score(recent)
+    add_listing_score(recent, scoring_preference_for(request.user))
     best = [item for item in recent if item.market_state == "below"]
     best.sort(key=lambda item: (item.market_delta_pct, -item.first_seen_at.timestamp()))
     return render(request, "listings/feed.html", {
@@ -370,6 +409,7 @@ def shortlist(request):
 @login_required
 def hidden_listing_feed(request):
     listings, filters = filtered_listings(request, visible=False)
+    preferences = scoring_preference_for(request.user)
     ordering = request.GET.get("sort", "new")
     sortings = {
         "new": "-first_seen_at", "price_up": "price", "price_down": "-price",
@@ -380,13 +420,13 @@ def hidden_listing_feed(request):
     if ordering == "score":
         page_listings = list(listings.order_by("-first_seen_at", "-id")[:500])
         add_market_position(page_listings)
-        add_listing_score(page_listings)
+        add_listing_score(page_listings, preferences)
         page_listings.sort(key=lambda item: (-item.score, -item.first_seen_at.timestamp()))
         page_listings = page_listings[:200]
     else:
         page_listings = list(listings.order_by(sortings[ordering], "-id")[:200])
         add_market_position(page_listings)
-        add_listing_score(page_listings)
+        add_listing_score(page_listings, preferences)
     return render(request, "listings/feed.html", {
         "listings": page_listings,
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(visible=False),
@@ -398,7 +438,7 @@ def hidden_listing_feed(request):
 def listing_detail(request, listing_id: int):
     listing = get_object_or_404(Listing, pk=listing_id)
     add_market_position([listing])
-    add_listing_score([listing])
+    add_listing_score([listing], scoring_preference_for(request.user))
     price_history = list(listing.price_history.exclude(price__isnull=True).order_by("observed_at", "id"))
     chart_points = ""
     if price_history:
@@ -585,6 +625,27 @@ def location_directory(request):
         "microdistricts": Microdistrict.objects.select_related("district").all(),
         "street_assignments": StreetAssignment.objects.select_related("district", "microdistrict").all(),
         "parities": StreetAssignment.Parity.choices,
+    })
+
+
+@login_required
+def scoring_settings(request):
+    preference, _ = ScoringPreference.objects.get_or_create(user=request.user)
+    if request.method == "POST":
+        preference.min_area = _decimal(request.POST.get("min_area"))
+        preference.floor_min = _integer(request.POST.get("floor_min"))
+        preference.floor_max = _integer(request.POST.get("floor_max"))
+        if preference.floor_min and preference.floor_max and preference.floor_min > preference.floor_max:
+            preference.floor_min, preference.floor_max = preference.floor_max, preference.floor_min
+        preference.preferred_districts = request.POST.getlist("preferred_districts")
+        preference.prefer_photo = request.POST.get("prefer_photo") == "1"
+        for field in ("market_weight", "freshness_weight", "data_weight", "floor_weight",
+                      "price_history_weight", "preference_weight"):
+            setattr(preference, field, min(100, max(0, _integer(request.POST.get(field)) or 0)))
+        preference.save()
+        return redirect("scoring_settings")
+    return render(request, "listings/scoring_settings.html", {
+        "preference": preference, "districts": District.objects.all(),
     })
 
 
