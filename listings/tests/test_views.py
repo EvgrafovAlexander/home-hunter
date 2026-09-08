@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from listings.models import Listing, ListingSnapshot, PriceHistory, Scan, SearchQuery, SourcePollingControl
-from listings.views import add_market_position, next_poll_runs
+from listings.views import add_listing_score, add_market_position, next_poll_runs
 
 
 class ListingViewsTests(TestCase):
@@ -94,6 +94,41 @@ class ListingViewsTests(TestCase):
         response = self.client.get(reverse("listing_feed"))
         self.assertContains(response, "На 17% ниже рынка")
         self.assertContains(response, "похожим квартирам, 5 аналогов")
+
+    def test_listing_score_rewards_market_discount_and_freshness(self):
+        promising = Listing.objects.create(
+            source="avito", external_id="promising", url="https://example.test/promising", title="Перспективная",
+            price=5_000_000, price_per_sqm=100_000, area="50.00", address="ул. Тестовая, 1",
+            district="Кировский", microdistrict="Южный", image_url="https://example.test/photo.jpg", floor=4,
+            floors_total=9, first_seen_at=timezone.now(),
+        )
+        stale = Listing.objects.create(
+            source="avito", external_id="stale", url="https://example.test/stale", title="Дорогая",
+            price=9_000_000, price_per_sqm=180_000, floor=1, floors_total=9,
+            first_seen_at=timezone.now() - timedelta(days=40),
+        )
+        promising.market_delta_pct, stale.market_delta_pct = -12, 12
+        add_listing_score([promising, stale])
+        self.assertGreater(promising.score, stale.score)
+        self.assertIn("существенно ниже рынка", promising.score_reasons)
+
+    def test_feed_can_sort_by_listing_score(self):
+        for index in range(5):
+            Listing.objects.create(
+                source="avito", external_id=f"score-comparison-{index}", url="https://example.test/comparison",
+                title="Аналог", price=7_500_000, price_per_sqm=150_000, rooms=2, area="52.00",
+                district="Кировский",
+            )
+        candidate = Listing.objects.create(
+            source="avito", external_id="score-best", url="https://example.test/best", title="Лучший по оценке",
+            price=5_000_000, price_per_sqm=100_000, rooms=2, area="52.00", district="Кировский",
+            address="ул. Тестовая, 1", image_url="https://example.test/photo.jpg",
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_feed"), {"sort": "score"})
+        self.assertEqual(response.context["sort"], "score")
+        self.assertEqual(response.context["listings"][0], candidate)
+        self.assertContains(response, "Сначала интересные")
 
     def test_shortlist_shows_recent_below_market_listings(self):
         candidate = Listing.objects.create(

@@ -195,6 +195,64 @@ def add_market_position(listings):
     return listings
 
 
+def add_listing_score(listings):
+    """Attach an explainable 0–100 search score to each listing."""
+    listings = list(listings)
+    history = {}
+    for entry in (PriceHistory.objects.filter(listing_id__in=[item.pk for item in listings], price__isnull=False)
+                  .order_by("listing_id", "observed_at", "id")):
+        history.setdefault(entry.listing_id, [entry.price, entry.price])[1] = entry.price
+    now = timezone.now()
+    for item in listings:
+        score, reasons = 50, []
+        if item.market_delta_pct is not None:
+            if item.market_delta_pct <= -10:
+                score += 25; reasons.append("существенно ниже рынка")
+            elif item.market_delta_pct <= -4:
+                score += 18; reasons.append("ниже рынка")
+            elif item.market_delta_pct < 0:
+                score += 8; reasons.append("чуть ниже рынка")
+            elif item.market_delta_pct >= 10:
+                score -= 20; reasons.append("существенно выше рынка")
+            elif item.market_delta_pct >= 4:
+                score -= 12; reasons.append("выше рынка")
+        age_days = max(0, (now - item.first_seen_at).total_seconds() / 86400) if item.first_seen_at else 999
+        if age_days <= 1:
+            score += 12; reasons.append("добавлено сегодня")
+        elif age_days <= 3:
+            score += 8; reasons.append("свежее")
+        elif age_days <= 7:
+            score += 4; reasons.append("добавлено за неделю")
+        elif age_days > 30:
+            score -= 5
+        if item.address:
+            score += 4
+        if item.district:
+            score += 2
+        if item.microdistrict:
+            score += 2
+        if item.image_url:
+            score += 4; reasons.append("есть фото")
+        else:
+            reasons.append("нет фото")
+        if item.floor and item.floors_total:
+            if item.floor == 1 or item.floor == item.floors_total:
+                score -= 5; reasons.append("крайний этаж")
+            else:
+                score += 3
+        first_last = history.get(item.pk)
+        if first_last and first_last[1] < first_last[0]:
+            score += 8; reasons.append("цена снижалась")
+        elif first_last and first_last[1] > first_last[0]:
+            score -= 3; reasons.append("цена повышалась")
+        item.score = max(0, min(100, score))
+        item.score_reasons = reasons[:3]
+        item.score_label = "Высокий интерес" if item.score >= 75 else (
+            "Стоит посмотреть" if item.score >= 60 else "Нейтрально"
+        )
+    return listings
+
+
 def similar_listings(listing: Listing, limit: int = 6):
     """Return local alternatives with the same room count and a close area."""
     if not listing.district or listing.rooms is None or listing.area is None:
@@ -271,13 +329,22 @@ def listing_feed(request):
     ordering = request.GET.get("sort", "new")
     sortings = {
         "new": "-first_seen_at", "price_up": "price", "price_down": "-price",
-        "sqm_up": "price_per_sqm", "area_down": "-area",
+        "sqm_up": "price_per_sqm", "area_down": "-area", "score": "-id",
     }
     if ordering not in sortings:
         ordering = "new"
-    page_listings = list(listings.order_by(sortings[ordering], "-id")[:200])
+    if ordering == "score":
+        page_listings = list(listings.order_by("-first_seen_at", "-id")[:500])
+        add_market_position(page_listings)
+        add_listing_score(page_listings)
+        page_listings.sort(key=lambda item: (-item.score, -item.first_seen_at.timestamp()))
+        page_listings = page_listings[:200]
+    else:
+        page_listings = list(listings.order_by(sortings[ordering], "-id")[:200])
+        add_market_position(page_listings)
+        add_listing_score(page_listings)
     return render(request, "listings/feed.html", {
-        "listings": add_market_position(page_listings),
+        "listings": page_listings,
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(),
         "sort": ordering,
     })
@@ -291,6 +358,7 @@ def shortlist(request):
         filters["days"] = "7"
     recent = list(listings.order_by("-first_seen_at", "-id")[:500])
     add_market_position(recent)
+    add_listing_score(recent)
     best = [item for item in recent if item.market_state == "below"]
     best.sort(key=lambda item: (item.market_delta_pct, -item.first_seen_at.timestamp()))
     return render(request, "listings/feed.html", {
@@ -305,13 +373,22 @@ def hidden_listing_feed(request):
     ordering = request.GET.get("sort", "new")
     sortings = {
         "new": "-first_seen_at", "price_up": "price", "price_down": "-price",
-        "sqm_up": "price_per_sqm", "area_down": "-area",
+        "sqm_up": "price_per_sqm", "area_down": "-area", "score": "-id",
     }
     if ordering not in sortings:
         ordering = "new"
-    page_listings = list(listings.order_by(sortings[ordering], "-id")[:200])
+    if ordering == "score":
+        page_listings = list(listings.order_by("-first_seen_at", "-id")[:500])
+        add_market_position(page_listings)
+        add_listing_score(page_listings)
+        page_listings.sort(key=lambda item: (-item.score, -item.first_seen_at.timestamp()))
+        page_listings = page_listings[:200]
+    else:
+        page_listings = list(listings.order_by(sortings[ordering], "-id")[:200])
+        add_market_position(page_listings)
+        add_listing_score(page_listings)
     return render(request, "listings/feed.html", {
-        "listings": add_market_position(page_listings),
+        "listings": page_listings,
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(visible=False),
         "sort": ordering, "hidden_feed": True,
     })
@@ -321,6 +398,7 @@ def hidden_listing_feed(request):
 def listing_detail(request, listing_id: int):
     listing = get_object_or_404(Listing, pk=listing_id)
     add_market_position([listing])
+    add_listing_score([listing])
     price_history = list(listing.price_history.exclude(price__isnull=True).order_by("observed_at", "id"))
     chart_points = ""
     if price_history:
