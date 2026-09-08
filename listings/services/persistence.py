@@ -61,6 +61,7 @@ def process_listing(
             microdistrict=listing.microdistrict,
             is_visible=listing.is_visible,
         )
+    address_changed = not created and listing.address != values["address"]
     changed = {key for key, value in values.items() if getattr(listing, key) != value}
     price_changed = not created and "price" in changed
     if created or price_changed:
@@ -70,6 +71,9 @@ def process_listing(
         ListingSnapshot.objects.create(listing=listing, observed_at=observed_at, data=snapshot)
     for key, value in values.items():
         setattr(listing, key, value)
+    if address_changed:
+        listing.latitude = listing.longitude = None
+        listing.geocode_status = listing.geocoded_at = None
     listing.last_seen_at = observed_at
     listing.is_active = True
     listing.save()

@@ -118,6 +118,17 @@ def scan_statistics(request):
 
 
 @login_required
+def listing_map(request):
+    listings, filters = filtered_listings(request)
+    map_listings = list(listings.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
+                        .order_by("-first_seen_at")[:500])
+    return render(request, "listings/map.html", {
+        "listings": map_listings, "result_count": len(map_listings), "filters": filters,
+        "filter_options": filter_options(),
+    })
+
+
+@login_required
 def dashboard(request):
     listings, filters = filtered_listings(request)
     period_days = _integer(request.GET.get("stats_days", 30))

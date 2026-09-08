@@ -72,3 +72,11 @@ class ListingViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["sources"][0]["scans"]), 3)
         self.assertContains(response, "Avito search", count=3)
+
+    def test_map_shows_only_visible_listings_with_coordinates(self):
+        self.match.latitude, self.match.longitude = "54.738800", "55.972100"
+        self.match.save(update_fields=["latitude", "longitude"])
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_map"))
+        self.assertContains(response, 'data-lat="54.738800"')
+        self.assertNotContains(response, "В Дёмском")
