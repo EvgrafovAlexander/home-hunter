@@ -42,6 +42,28 @@ def parse_money(value: str | None) -> int | None:
     return int(re.sub(r"\s", "", match.group())) if match else None
 
 
+def _srcset_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    candidates = [part.strip().split()[0] for part in value.split(",") if part.strip()]
+    return candidates[-1] if candidates else None
+
+
+def image_url_at(card: Tag) -> str | None:
+    """Read Avito image URLs from semantic and lazy-loaded card markup."""
+    semantic = card.select_one(sel.IMAGE)
+    images = ([semantic] if semantic else []) + [node for node in card.select(sel.IMAGES) if node != semantic]
+    for image in images:
+        for attr in ("content", "data-src", "data-original", "data-lazy-src", "src", "href"):
+            value = image.get(attr)
+            if value and not value.startswith("data:"):
+                return value
+        value = _srcset_url(image.get("data-srcset") or image.get("srcset"))
+        if value and not value.startswith("data:"):
+            return value
+    return None
+
+
 def parse_card(card: Tag) -> NormalizedListing:
     external_id = card.get("data-item-id")
     title_node = card.select_one(sel.TITLE)
@@ -58,8 +80,7 @@ def parse_card(card: Tag) -> NormalizedListing:
     price = parse_money(price_meta.get("content") if price_meta else text_at(card, sel.PRICE))
     visible_text = card.get_text(" ", strip=True)
     sqm = re.search(r"(\d[\d\s\u00a0\u202f]*)\s*₽\s*/\s*м[²2]", visible_text)
-    image = card.select_one(sel.IMAGE)
-    image_url = next((image.get(attr) for attr in ("content", "src", "href") if image.get(attr)), None) if image else None
+    image_url = image_url_at(card)
     description = text_at(card, sel.DESCRIPTION)
     if not description:
         # Relative dates must not cause a new snapshot on each observation.

@@ -49,3 +49,20 @@ def test_date_does_not_change_fallback_description():
     a = parse_page(html.format("Вчера")).listings[0]
     b = parse_page(html.format("3 дня назад")).listings[0]
     assert a.description == b.description
+
+
+def test_lazy_image_fallback_uses_real_image_not_placeholder():
+    html = '''<div data-marker="item" data-item-id="1">
+      <a data-marker="item-title" href="/1">2-к. квартира, 50 м², 3/9 эт.</a>
+      <img src="data:image/gif;base64,placeholder" data-src="//images.example/real.jpg"
+           srcset="https://images.example/small.jpg 1x, https://images.example/large.jpg 2x">
+    </div>'''
+    assert parse_page(html).listings[0].image_url == "https://images.example/real.jpg"
+
+
+def test_image_srcset_is_used_when_no_src_or_lazy_attribute_exists():
+    html = '''<div data-marker="item" data-item-id="1">
+      <a data-marker="item-title" href="/1">2-к. квартира, 50 м², 3/9 эт.</a>
+      <img srcset="https://images.example/small.jpg 1x, https://images.example/large.jpg 2x">
+    </div>'''
+    assert parse_page(html).listings[0].image_url == "https://images.example/large.jpg"
