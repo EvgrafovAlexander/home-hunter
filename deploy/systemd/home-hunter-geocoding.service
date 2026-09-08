@@ -1,0 +1,12 @@
+[Unit]
+Description=Home Hunter geocode up to 40 new addresses via Nominatim
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/home_hunter
+ExecStart=/usr/bin/flock -n -E 75 /tmp/home-hunter-geocoding.lock /usr/bin/docker compose exec -T web python manage.py geocode_listings --limit 40
+SuccessExitStatus=75
+TimeoutStartSec=5min

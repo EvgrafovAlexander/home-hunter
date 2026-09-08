@@ -25,6 +25,10 @@ class ListingViewsTests(TestCase):
             source="cian", external_id="hidden", url="https://example.test/hidden", title="В Дёмском",
             address="Дагестанская улица, 33", district="Дёмский", is_visible=False,
         )
+        self.kalininsky = Listing.objects.create(
+            source="cian", external_id="kalininsky", url="https://example.test/kalininsky", title="В Калининском",
+            address="улица Ферина, 4", district="Калининский", is_visible=False,
+        )
 
     def _create_user(self):
         from django.contrib.auth import get_user_model
@@ -45,8 +49,10 @@ class ListingViewsTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("listing_feed"))
         self.assertNotContains(response, "В Дёмском")
+        self.assertNotContains(response, "В Калининском")
         response = self.client.get(reverse("hidden_listing_feed"))
         self.assertContains(response, "В Дёмском")
+        self.assertContains(response, "В Калининском")
 
     def test_dashboard_uses_filtered_population(self):
         PriceHistory.objects.create(listing=self.match, price=6_700_000,
@@ -79,4 +85,6 @@ class ListingViewsTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("listing_map"))
         self.assertContains(response, 'data-lat="54.738800"')
+        self.assertContains(response, "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=")
+        self.assertContains(response, "Открыть объявление")
         self.assertNotContains(response, "В Дёмском")

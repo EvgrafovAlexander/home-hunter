@@ -82,6 +82,14 @@ def test_parses_cian_address_and_hides_dyomsky(search, item):
     assert not result.listing.is_visible
 
 
+def test_hides_kalininsky_district(search, item):
+    result = process_listing(search, replace(
+        item, address="Республика Башкортостан, Уфа, р-н Калининский, улица Ферина, 4",
+    ), timezone.now())
+    assert result.listing.district == "Калининский"
+    assert not result.listing.is_visible
+
+
 def test_hides_listing_without_parsed_address(search, item):
     result = process_listing(search, replace(item, address=None), timezone.now())
     assert not result.listing.is_visible

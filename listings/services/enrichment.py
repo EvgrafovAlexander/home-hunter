@@ -7,7 +7,7 @@ DISTRICT_PATTERN = re.compile(r"(?:^|[\s,·])р-н\s+([^·,]+?)\s*$", re.IGNOREC
 DISTRICT_COMPONENT_PATTERN = re.compile(r"^(?:р-н|район)\s+(.+)$|^(.+?)\s+район$", re.IGNORECASE)
 MICRODISTRICT_PATTERN = re.compile(r"^(?:мкр\.?|микрорайон)\s+(.+)$|^(.+?)\s+мкр\.?$", re.IGNORECASE)
 IGNORED_ADDRESS_COMPONENTS = {"республика башкортостан", "башкортостан", "уфа", "г. уфа", "город уфа"}
-HIDDEN_DISTRICTS = {"дёмский", "демский"}
+HIDDEN_DISTRICTS = {"дёмский", "демский", "калининский"}
 
 
 @dataclass(frozen=True)

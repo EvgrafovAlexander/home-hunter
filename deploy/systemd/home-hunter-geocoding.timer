@@ -1,0 +1,11 @@
+[Unit]
+Description=Home Hunter geocoding once an hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=0
+Unit=home-hunter-geocoding.service
+
+[Install]
+WantedBy=timers.target

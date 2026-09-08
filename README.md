@@ -199,6 +199,19 @@ Full выключен; его шаблон — 03:30 по timezone сервер�
 может быть короче). Persistent запускает пропущенное срабатывание после включения.
 Если lock занят, scan пропускается до следующего запуска.
 
+### Геокодирование карты
+
+После настройки `NOMINATIM_USER_AGENT` в production `.env` включите ограниченный
+таймер: он обрабатывает до 40 новых адресов в час и делает не более одного запроса
+в секунду к публичному Nominatim.
+
+```bash
+sudo cp deploy/systemd/home-hunter-geocoding.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now home-hunter-geocoding.timer
+systemctl list-timers home-hunter-geocoding.timer
+```
+
 ### Swap
 
 Для VPS с 2 GB RAM рекомендуется swap 2 GB против случайного OOM Chromium.
