@@ -120,6 +120,19 @@ def test_keeps_source_price_per_sqm_and_district(search, item):
     assert result.listing.district == "Советский"
 
 
+def test_keeps_manual_location_overrides_on_later_source_update(search, item):
+    first = process_listing(search, replace(item, address="ул. Ленина, 1", district="Кировский"), timezone.now())
+    listing = first.listing
+    listing.address_override = "ул. Пушкина, 2"
+    listing.district_override = "Советский"
+    listing.microdistrict_override = "Центр"
+    listing.save(update_fields=["address_override", "district_override", "microdistrict_override"])
+    result = process_listing(search, replace(item, address="ул. Ленина, 1", district="Кировский"), timezone.now())
+    assert (result.listing.address, result.listing.district, result.listing.microdistrict) == (
+        "ул. Пушкина, 2", "Советский", "Центр",
+    )
+
+
 def test_initial_unknown_price(search, item):
     process_listing(search, replace(item, price=None), timezone.now())
     process_listing(search, item, timezone.now())

@@ -33,6 +33,14 @@ def district_from_address(address: str | None) -> str | None:
     return match.group(1).strip() or None if match else None
 
 
+def location_is_visible(address: str | None, district: str | None, microdistrict: str | None) -> bool:
+    return (
+        bool(address)
+        and (district or "").casefold() not in HIDDEN_DISTRICTS
+        and (microdistrict or "").casefold() not in HIDDEN_MICRODISTRICTS
+    )
+
+
 def parse_address(address: str | None, district: str | None = None) -> ParsedAddress:
     """Normalize an Ufa address and pull its district and microdistrict into fields."""
     parsed_district = district.strip() if district and district.strip() else district_from_address(address)
@@ -54,9 +62,5 @@ def parse_address(address: str | None, district: str | None = None) -> ParsedAdd
         else:
             kept.append(component)
     normalized_address = ", ".join(kept) or None
-    is_visible = (
-        bool(normalized_address)
-        and (parsed_district or "").casefold() not in HIDDEN_DISTRICTS
-        and (microdistrict or "").casefold() not in HIDDEN_MICRODISTRICTS
-    )
+    is_visible = location_is_visible(normalized_address, parsed_district, microdistrict)
     return ParsedAddress(normalized_address, parsed_district, microdistrict, is_visible)

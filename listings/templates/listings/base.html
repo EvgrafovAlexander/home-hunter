@@ -8,7 +8,7 @@
 </head>
 <body>
   <header class="topbar"><a class="brand" href="{% url 'listing_feed' %}">home<span>hunter</span></a>
-    <nav><a href="{% url 'listing_feed' %}">Объявления</a><a href="{% url 'listing_map' %}">Карта</a><a href="{% url 'hidden_listing_feed' %}">Скрытые объявления</a><a href="{% url 'dashboard' %}">Аналитика</a><a href="{% url 'scan_statistics' %}">Опросы</a><a href="/admin/">Админка</a></nav>
+    <nav><a href="{% url 'listing_feed' %}">Объявления</a><a href="{% url 'shortlist' %}">Лучшие варианты</a><a href="{% url 'listing_map' %}">Карта</a><a href="{% url 'hidden_listing_feed' %}">Скрытые объявления</a><a href="{% url 'dashboard' %}">Аналитика</a><a href="{% url 'data_quality' %}">Качество данных</a><a href="{% url 'scan_statistics' %}">Опросы</a><a href="/admin/">Админка</a></nav>
     <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="link-button">Выйти</button></form>
   </header>
   <main>{% block content %}{% endblock %}</main>

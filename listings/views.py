@@ -6,10 +6,11 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count, Q
 from django.db.models.functions import TruncDate
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
 from .models import Listing, ManualDomclickJob, PriceHistory, Scan, SearchQuery, SourcePollingControl
+from .services.enrichment import location_is_visible, parse_address
 from .services.polling import default_polling_enabled
 
 
@@ -31,12 +32,17 @@ def _next_hourly_at(now, minute: int):
     return candidate if candidate > now else candidate + timedelta(hours=1)
 
 
-def _next_every_three_hours_at(now, minute: int):
-    """Return the next ``00/3:<minute>`` systemd calendar slot."""
-    candidate = now.replace(minute=minute, second=0, microsecond=0)
-    hours_to_add = (-candidate.hour) % 3
-    candidate += timedelta(hours=hours_to_add)
-    return candidate if candidate > now else candidate + timedelta(hours=3)
+def _next_avito_fast_at(now):
+    """Return the next 90-minute Avito fast-scan systemd calendar slot."""
+    candidates = []
+    for day_offset in range(2):
+        day = now.date() + timedelta(days=day_offset)
+        for hour in range(0, 24, 3):
+            candidates.append(now.replace(year=day.year, month=day.month, day=day.day,
+                                          hour=hour, minute=15, second=0, microsecond=0))
+            candidates.append(now.replace(year=day.year, month=day.month, day=day.day,
+                                          hour=hour + 1, minute=45, second=0, microsecond=0))
+    return next(candidate for candidate in candidates if candidate > now)
 
 
 def _next_avito_full(now):
@@ -52,7 +58,7 @@ def next_poll_runs(source: str, now):
     """Mirror systemd timers (MSK) and present their dates in Yekaterinburg time."""
     now = now.astimezone(SCHEDULE_TIME_ZONE)
     if source == SearchQuery.Source.AVITO:
-        runs = [(Scan.Mode.FAST, "Быстрый", _next_every_three_hours_at(now, 15), ""),
+        runs = [(Scan.Mode.FAST, "Быстрый", _next_avito_fast_at(now), "в течение 10 мин."),
                 (Scan.Mode.FULL, "Полный", _next_avito_full(now), "")]
     elif source == SearchQuery.Source.CIAN:
         runs = [
@@ -186,6 +192,29 @@ def add_market_position(listings):
     return listings
 
 
+def similar_listings(listing: Listing, limit: int = 6):
+    """Return local alternatives with the same room count and a close area."""
+    if not listing.district or listing.rooms is None or listing.area is None:
+        return []
+    candidates = (Listing.objects.filter(is_visible=True, is_active=True, district=listing.district,
+                                         rooms=listing.rooms)
+                  .exclude(pk=listing.pk).exclude(area__isnull=True))
+    if listing.microdistrict:
+        candidates = candidates.filter(microdistrict=listing.microdistrict)
+    else:
+        candidates = candidates.filter(Q(microdistrict__isnull=True) | Q(microdistrict=""))
+    area = float(listing.area)
+    candidates = list(candidates.filter(area__gte=area - 10, area__lte=area + 10)[:150])
+    target_sqm_price = float(listing.price_per_sqm) if listing.price_per_sqm else None
+    candidates.sort(key=lambda item: (
+        abs(float(item.area) - area),
+        abs(float(item.price_per_sqm) - target_sqm_price)
+        if target_sqm_price and item.price_per_sqm else float("inf"),
+        -item.first_seen_at.timestamp(),
+    ))
+    return candidates[:limit]
+
+
 @login_required
 def listing_feed(request):
     listings, filters = filtered_listings(request)
@@ -201,6 +230,22 @@ def listing_feed(request):
         "listings": add_market_position(page_listings),
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(),
         "sort": ordering,
+    })
+
+
+@login_required
+def shortlist(request):
+    listings, filters = filtered_listings(request)
+    if not request.GET.get("days"):
+        listings = listings.filter(first_seen_at__gte=timezone.now() - timedelta(days=7))
+        filters["days"] = "7"
+    recent = list(listings.order_by("-first_seen_at", "-id")[:500])
+    add_market_position(recent)
+    best = [item for item in recent if item.market_state == "below"]
+    best.sort(key=lambda item: (item.market_delta_pct, -item.first_seen_at.timestamp()))
+    return render(request, "listings/feed.html", {
+        "listings": best, "result_count": len(best), "filters": filters,
+        "filter_options": filter_options(), "sort": "new", "shortlist": True,
     })
 
 
@@ -242,7 +287,7 @@ def listing_detail(request, listing_id: int):
         "item": listing, "price_history": price_history, "chart_points": chart_points,
         "price_low": min((entry.price for entry in price_history), default=None),
         "price_high": max((entry.price for entry in price_history), default=None),
-        "snapshots": snapshots,
+        "snapshots": snapshots, "similar_listings": similar_listings(listing),
     })
 
 
@@ -316,14 +361,74 @@ def scan_statistics(request):
 
 
 @login_required
+def data_quality(request):
+    issue = request.GET.get("issue", "all")
+    if request.method == "POST":
+        issue = request.POST.get("issue", issue)
+    issue_filters = {
+        "address": Q(address__isnull=True) | Q(address=""),
+        "district": Q(district__isnull=True) | Q(district=""),
+        "microdistrict": Q(microdistrict__isnull=True) | Q(microdistrict=""),
+    }
+    if issue not in {"all", *issue_filters}:
+        issue = "all"
+    if request.method == "POST":
+        item = get_object_or_404(Listing, pk=request.POST.get("listing_id"))
+        address = (request.POST.get("address") or "").strip() or None
+        district = (request.POST.get("district") or "").strip() or None
+        microdistrict = (request.POST.get("microdistrict") or "").strip() or None
+        parsed = parse_address(address, district)
+        normalized_microdistrict = microdistrict or parsed.microdistrict
+        changed_location = (item.address, item.district, item.microdistrict) != (
+            parsed.address, parsed.district, normalized_microdistrict,
+        )
+        item.address = item.address_override = parsed.address
+        item.district = item.district_override = parsed.district
+        item.microdistrict = item.microdistrict_override = normalized_microdistrict
+        item.is_visible = location_is_visible(item.address, item.district, item.microdistrict)
+        update_fields = ["address", "district", "microdistrict", "address_override", "district_override",
+                         "microdistrict_override", "is_visible"]
+        if changed_location:
+            item.latitude = item.longitude = None
+            item.geocode_status = item.geocoded_at = None
+            update_fields += ["latitude", "longitude", "geocode_status", "geocoded_at"]
+        item.save(update_fields=update_fields)
+        return redirect(f"{reverse('data_quality')}?issue={issue}")
+
+    missing = Q()
+    for condition in issue_filters.values():
+        missing |= condition
+    selected = missing if issue == "all" else issue_filters[issue]
+    listings = list(Listing.objects.filter(selected).order_by("-first_seen_at", "-id")[:100])
+    for item in listings:
+        item.quality_issues = [
+            label for field, label in (("address", "Нет адреса"), ("district", "Нет района"),
+                                       ("microdistrict", "Нет микрорайона"))
+            if not getattr(item, field)
+        ]
+    counts = {name: Listing.objects.filter(condition).count() for name, condition in issue_filters.items()}
+    counts["all"] = Listing.objects.filter(missing).count()
+    return render(request, "listings/data_quality.html", {
+        "listings": listings, "issue": issue, "counts": counts,
+    })
+
+
+@login_required
 def listing_map(request):
     listings, filters = filtered_listings(request)
     map_listings = list(listings.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
                         .order_by("-first_seen_at")[:500])
+    selected_listing_id = _integer(request.GET.get("listing"))
+    selected_listing = None
+    if selected_listing_id:
+        selected_listing = (Listing.objects.filter(pk=selected_listing_id)
+                            .exclude(latitude__isnull=True).exclude(longitude__isnull=True).first())
+        if selected_listing and all(item.pk != selected_listing.pk for item in map_listings):
+            map_listings.append(selected_listing)
     add_market_position(map_listings)
     return render(request, "listings/map.html", {
         "listings": map_listings, "result_count": len(map_listings), "filters": filters,
-        "filter_options": filter_options(),
+        "filter_options": filter_options(), "selected_listing_id": selected_listing.pk if selected_listing else None,
     })
 
 

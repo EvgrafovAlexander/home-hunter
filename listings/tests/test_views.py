@@ -58,6 +58,18 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "6 700 000")
         self.assertContains(response, "Открыть на сайте")
 
+    def test_listing_detail_links_to_its_point_on_map(self):
+        self.match.latitude, self.match.longitude = "54.738800", "55.972100"
+        self.match.save(update_fields=["latitude", "longitude"])
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_detail", args=[self.match.pk]))
+        map_url = f'{reverse("listing_map")}?listing={self.match.pk}'
+        self.assertContains(response, map_url)
+
+        response = self.client.get(map_url)
+        self.assertEqual(response.context["selected_listing_id"], self.match.pk)
+        self.assertContains(response, f"const selectedListingId='{self.match.pk}'")
+
     def test_feed_shows_market_position_with_enough_comparables(self):
         for index in range(5):
             Listing.objects.create(
@@ -69,6 +81,34 @@ class ListingViewsTests(TestCase):
         response = self.client.get(reverse("listing_feed"))
         self.assertContains(response, "На 17% ниже рынка")
         self.assertContains(response, "похожим квартирам, 5 аналогов")
+
+    def test_shortlist_shows_recent_below_market_listings(self):
+        candidate = Listing.objects.create(
+            source="avito", external_id="best", url="https://example.test/best", title="Лучший вариант",
+            price=5_000_000, price_per_sqm=100_000, rooms=2, area="52.00", district="Кировский",
+        )
+        for index in range(5):
+            Listing.objects.create(
+                source="cian", external_id=f"best-comparison-{index}", url="https://example.test/comparison",
+                title="Аналог", price=7_500_000, price_per_sqm=150_000, rooms=2, area="52.00",
+                district="Кировский",
+            )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("shortlist"))
+        self.assertContains(response, "Лучшие варианты")
+        self.assertContains(response, "Лучший вариант")
+        self.assertIn(candidate, response.context["listings"])
+
+    def test_listing_detail_shows_similar_local_listings(self):
+        similar = Listing.objects.create(
+            source="avito", external_id="similar", url="https://example.test/similar", title="Похожая",
+            price=6_600_000, price_per_sqm=126_000, rooms=2, area="55.00", floor=5,
+            district="Кировский",
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_detail", args=[self.match.pk]))
+        self.assertContains(response, "Похожие квартиры")
+        self.assertIn(similar, response.context["similar_listings"])
 
     def test_market_position_does_not_mix_microdistricts_inside_one_district(self):
         zaton = Listing.objects.create(
@@ -153,10 +193,32 @@ class ListingViewsTests(TestCase):
         self.assertRedirects(response, reverse("scan_statistics"))
         self.assertFalse(SourcePollingControl.objects.filter(source="avito", mode="full", enabled=True).exists())
 
+    def test_data_quality_lists_missing_fields_and_saves_manual_location(self):
+        incomplete = Listing.objects.create(
+            source="avito", external_id="incomplete", url="https://example.test/incomplete",
+            title="Без локации", address="ул. Ленина, 10", latitude="54.7", longitude="55.9",
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("data_quality"))
+        self.assertContains(response, "Без локации")
+        self.assertContains(response, "Нет района")
+        self.assertContains(response, "Нет микрорайона")
+
+        response = self.client.post(reverse("data_quality") + "?issue=district", {
+            "listing_id": incomplete.pk, "issue": "district", "address": "ул. Ленина, 10",
+            "district": "Кировский", "microdistrict": "Центр",
+        })
+        self.assertRedirects(response, reverse("data_quality") + "?issue=district")
+        incomplete.refresh_from_db()
+        self.assertEqual((incomplete.address, incomplete.district, incomplete.microdistrict),
+                         ("ул. Ленина, 10", "Кировский", "Центр"))
+        self.assertEqual(incomplete.district_override, "Кировский")
+        self.assertIsNone(incomplete.latitude)
+
     def test_next_poll_time_is_shown_in_yekaterinburg_time(self):
         runs = next_poll_runs("avito", datetime(2026, 9, 8, 7, 0, tzinfo=datetime_timezone.utc))
         fast_run = runs[0][2]
-        self.assertEqual((fast_run.hour, fast_run.minute), (14, 15))
+        self.assertEqual((fast_run.hour, fast_run.minute), (12, 45))
         self.assertEqual(fast_run.tzinfo.key, "Asia/Yekaterinburg")
 
     def test_map_shows_only_visible_listings_with_coordinates(self):
@@ -166,5 +228,8 @@ class ListingViewsTests(TestCase):
         response = self.client.get(reverse("listing_map"))
         self.assertContains(response, 'data-lat="54.738800"')
         self.assertContains(response, "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=")
-        self.assertContains(response, "Открыть объявление")
+        self.assertContains(response, "Только выгодные")
+        self.assertContains(response, "Подробнее")
+        self.assertContains(response, "Открыть на сайте")
+        self.assertContains(response, f'data-detail-url="{reverse("listing_detail", args=[self.match.pk])}"')
         self.assertNotContains(response, "В Дёмском")

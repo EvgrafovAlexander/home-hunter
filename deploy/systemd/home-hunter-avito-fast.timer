@@ -1,10 +1,11 @@
 [Unit]
-Description=Home Hunter fast scan every three hours
+Description=Home Hunter fast scan every 90 minutes
 
 [Timer]
 OnCalendar=*-*-* 00/3:15:00
+OnCalendar=*-*-* 01/3:45:00
 Persistent=true
-RandomizedDelaySec=0
+RandomizedDelaySec=10min
 
 [Install]
 WantedBy=timers.target

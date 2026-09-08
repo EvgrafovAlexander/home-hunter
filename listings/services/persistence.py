@@ -5,7 +5,7 @@ from decimal import Decimal
 from django.db import transaction
 from collectors.base import NormalizedListing
 from listings.models import Listing, ListingSearchQuery, ListingSnapshot, PriceHistory, SearchQuery
-from listings.services.enrichment import calculate_price_per_sqm, parse_address
+from listings.services.enrichment import calculate_price_per_sqm, location_is_visible, parse_address
 
 SIGNIFICANT_FIELDS = (
     "price", "title", "description", "address", "district", "microdistrict", "is_visible", "rooms", "area", "floor", "floors_total",
@@ -46,6 +46,17 @@ def process_listing(
         source=item.source, external_id=item.external_id,
         defaults={**values, "first_seen_at": observed_at, "last_seen_at": observed_at},
     )
+    if not created:
+        if listing.address_override:
+            values["address"] = listing.address_override
+        if listing.district_override:
+            values["district"] = listing.district_override
+        if listing.microdistrict_override:
+            values["microdistrict"] = listing.microdistrict_override
+        if any((listing.address_override, listing.district_override, listing.microdistrict_override)):
+            values["is_visible"] = location_is_visible(
+                values["address"], values["district"], values["microdistrict"],
+            )
     # A missing price is not evidence that the last known price changed.
     if not created and values["price"] is None:
         values["price"] = listing.price
