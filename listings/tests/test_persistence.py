@@ -112,6 +112,13 @@ def test_hides_listing_without_parsed_address(search, item):
     assert not result.listing.is_visible
 
 
+def test_records_photo_change_in_snapshot(search, item):
+    process_listing(search, replace(item, image_url="https://example.test/old.jpg"), timezone.now())
+    process_listing(search, replace(item, image_url="https://example.test/new.jpg"), timezone.now())
+    assert ListingSnapshot.objects.count() == 2
+    assert ListingSnapshot.objects.latest("id").data["image_url"] == "https://example.test/new.jpg"
+
+
 def test_resolves_street_rule_with_house_range(search, item):
     district = District.objects.get(name="Кировский")
     microdistrict = Microdistrict.objects.get(district=district, name="Южный")

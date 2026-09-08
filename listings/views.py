@@ -12,6 +12,7 @@ from django.utils import timezone
 from .models import (District, Listing, ManualDomclickJob, Microdistrict, PriceHistory, Scan,
                      SearchQuery, SourcePollingControl, StreetAssignment)
 from .services.enrichment import location_is_visible, parse_address
+from .services.change_history import change_events
 from .services.polling import default_polling_enabled
 
 
@@ -283,12 +284,12 @@ def listing_detail(request, listing_id: int):
             f"{round(170 - (item.price - low) / spread * 140, 1)}"
             for index, item in enumerate(price_history)
         )
-    snapshots = list(listing.snapshots.order_by("-observed_at", "-id")[:12])
+    snapshots = list(listing.snapshots.order_by("-observed_at", "-id")[:50])
     return render(request, "listings/detail.html", {
         "item": listing, "price_history": price_history, "chart_points": chart_points,
         "price_low": min((entry.price for entry in price_history), default=None),
         "price_high": max((entry.price for entry in price_history), default=None),
-        "snapshots": snapshots, "similar_listings": similar_listings(listing),
+        "change_events": change_events(snapshots), "similar_listings": similar_listings(listing),
     })
 
 
@@ -411,15 +412,16 @@ def data_quality(request):
     for condition in issue_filters.values():
         missing |= condition
     selected = missing if issue == "all" else issue_filters[issue]
-    listings = list(Listing.objects.filter(selected).order_by("-first_seen_at", "-id")[:100])
+    visible_listings = Listing.objects.filter(is_visible=True)
+    listings = list(visible_listings.filter(selected).order_by("-first_seen_at", "-id")[:100])
     for item in listings:
         item.quality_issues = [
             label for missing, label in ((not item.address, "Нет адреса"), (not item.district_ref, "Нет района"),
                                          (not item.microdistrict_ref, "Нет микрорайона"))
             if missing
         ]
-    counts = {name: Listing.objects.filter(condition).count() for name, condition in issue_filters.items()}
-    counts["all"] = Listing.objects.filter(missing).count()
+    counts = {name: visible_listings.filter(condition).count() for name, condition in issue_filters.items()}
+    counts["all"] = visible_listings.filter(missing).count()
     return render(request, "listings/data_quality.html", {
         "listings": listings, "issue": issue, "counts": counts,
         "districts": District.objects.all(),

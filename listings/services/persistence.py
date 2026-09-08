@@ -9,8 +9,29 @@ from listings.services.enrichment import calculate_price_per_sqm, location_is_vi
 from listings.services.location_directory import resolve_location
 
 SIGNIFICANT_FIELDS = (
-    "price", "title", "description", "address", "district", "microdistrict", "is_visible", "rooms", "area", "floor", "floors_total",
+    "price", "price_per_sqm", "title", "description", "address", "district", "microdistrict",
+    "is_visible", "rooms", "area", "floor", "floors_total", "published_text", "image_url",
 )
+
+
+def _snapshot_value(value):
+    return str(value) if isinstance(value, Decimal) else value
+
+
+def snapshot_data_from_values(values: dict, *, is_active: bool) -> dict:
+    """Keep the data needed to explain a listing change without storing raw HTML."""
+    fields = (*SIGNIFICANT_FIELDS, "is_active")
+    return {
+        field: _snapshot_value(is_active if field == "is_active" else values.get(field))
+        for field in fields
+    }
+
+
+def snapshot_data_from_listing(listing: Listing, *, is_active: bool | None = None) -> dict:
+    return {
+        field: _snapshot_value(is_active if field == "is_active" and is_active is not None else getattr(listing, field))
+        for field in (*SIGNIFICANT_FIELDS, "is_active")
+    }
 
 
 @dataclass
@@ -93,13 +114,16 @@ def process_listing(
             values["address"], values["district"], values["microdistrict"],
         )
     address_changed = not created and listing.address != values["address"]
+    reactivated = not created and not listing.is_active
     changed = {key for key, value in values.items() if getattr(listing, key) != value}
     price_changed = not created and "price" in changed
     if created or price_changed:
         PriceHistory.objects.create(listing=listing, price=values["price"], observed_at=observed_at)
-    if created or changed.intersection(SIGNIFICANT_FIELDS):
-        snapshot = {key: str(value) if isinstance(value, Decimal) else value for key, value in values.items()}
-        ListingSnapshot.objects.create(listing=listing, observed_at=observed_at, data=snapshot)
+    if created or changed.intersection(SIGNIFICANT_FIELDS) or reactivated:
+        ListingSnapshot.objects.create(
+            listing=listing, observed_at=observed_at,
+            data=snapshot_data_from_values(values, is_active=True),
+        )
     for key, value in values.items():
         setattr(listing, key, value)
     listing.district_ref = district_ref

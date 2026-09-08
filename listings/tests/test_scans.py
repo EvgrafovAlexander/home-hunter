@@ -2,7 +2,7 @@ from dataclasses import replace
 import pytest
 from django.utils import timezone
 from collectors.base import BaseCollector, CollectionError, CollectionResult
-from listings.models import ListingSearchQuery, Scan, SearchQuery
+from listings.models import ListingSearchQuery, ListingSnapshot, Scan, SearchQuery
 from listings.services.persistence import process_listing
 from listings.services.scans import run_scan
 from .test_persistence import search, item
@@ -28,6 +28,7 @@ def test_full_deactivates_only_missing(search, item):
     assert scan.status == "success" and scan.new_items == 1
     assert not missing.is_active
     assert not ListingSearchQuery.objects.get(listing=missing).is_active
+    assert ListingSnapshot.objects.filter(listing=missing, data__is_active=False).exists()
 
 
 def test_cian_full_never_deactivates_missing_listing(item):

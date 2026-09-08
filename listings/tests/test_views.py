@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from listings.models import Listing, PriceHistory, Scan, SearchQuery, SourcePollingControl
+from listings.models import Listing, ListingSnapshot, PriceHistory, Scan, SearchQuery, SourcePollingControl
 from listings.views import add_market_position, next_poll_runs
 
 
@@ -55,8 +55,21 @@ class ListingViewsTests(TestCase):
         response = self.client.get(reverse("listing_detail", args=[self.match.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "История цены")
+        self.assertContains(response, "История изменений")
         self.assertContains(response, "6 700 000")
         self.assertContains(response, "Открыть на сайте")
+
+    def test_listing_detail_explains_snapshot_changes(self):
+        ListingSnapshot.objects.create(listing=self.match, observed_at=timezone.now() - timedelta(days=1), data={
+            "price": 6_700_000, "image_url": "https://example.test/old.jpg", "is_active": True,
+        })
+        ListingSnapshot.objects.create(listing=self.match, observed_at=timezone.now(), data={
+            "price": 6_500_000, "image_url": "https://example.test/new.jpg", "is_active": True,
+        })
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_detail", args=[self.match.pk]))
+        self.assertContains(response, "Цена")
+        self.assertContains(response, "Главное фото обновлено")
 
     def test_listing_detail_links_to_its_point_on_map(self):
         self.match.latitude, self.match.longitude = "54.738800", "55.972100"
@@ -222,6 +235,15 @@ class ListingViewsTests(TestCase):
         self.assertEqual(incomplete.location_source, "manual")
         self.assertIsNone(incomplete.latitude)
 
+    def test_data_quality_excludes_hidden_listings(self):
+        hidden = Listing.objects.create(
+            source="avito", external_id="hidden-quality", url="https://example.test/hidden-quality",
+            title="Скрытое без микрорайона", address="ул. Тестовая, 1", is_visible=False,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("data_quality"))
+        self.assertNotContains(response, hidden.title)
+
     def test_location_directory_adds_microdistrict_and_street_rule(self):
         from listings.models import District, Microdistrict, StreetAssignment
         district = District.objects.get(name="Кировский")
@@ -271,4 +293,6 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "Подробнее")
         self.assertContains(response, "Открыть на сайте")
         self.assertContains(response, f'data-detail-url="{reverse("listing_detail", args=[self.match.pk])}"')
+        self.assertContains(response, "expandedPositions")
+        self.assertContains(response, "samePoint")
         self.assertNotContains(response, "В Дёмском")

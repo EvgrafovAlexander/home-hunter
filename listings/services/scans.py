@@ -5,8 +5,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from collectors.base import BaseCollector, CollectionError
-from listings.models import CianFullScanCheckpoint, Listing, ListingSearchQuery, Scan, SearchQuery
-from .persistence import process_listing
+from listings.models import CianFullScanCheckpoint, Listing, ListingSearchQuery, ListingSnapshot, Scan, SearchQuery
+from .persistence import process_listing, snapshot_data_from_listing
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,13 @@ def finalize_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
     search.listing_relations.exclude(listing_id__in=seen_ids).update(is_active=False)
     search.listing_relations.filter(listing_id__in=seen_ids).update(is_active=True)
     active = ListingSearchQuery.objects.filter(listing_id__in=affected, is_active=True).values("listing_id")
+    deactivated = list(Listing.objects.filter(pk__in=affected, is_active=True).exclude(pk__in=active))
+    observed_at = timezone.now()
+    ListingSnapshot.objects.bulk_create([
+        ListingSnapshot(listing=listing, observed_at=observed_at,
+                        data=snapshot_data_from_listing(listing, is_active=False))
+        for listing in deactivated
+    ])
     Listing.objects.filter(pk__in=affected).update(is_active=False)
     Listing.objects.filter(pk__in=active).update(is_active=True)
 
