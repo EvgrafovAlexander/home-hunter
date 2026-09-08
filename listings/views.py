@@ -9,7 +9,8 @@ from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
-from .models import Listing, ManualDomclickJob, PriceHistory, Scan, SearchQuery, SourcePollingControl
+from .models import (District, Listing, ManualDomclickJob, Microdistrict, PriceHistory, Scan,
+                     SearchQuery, SourcePollingControl, StreetAssignment)
 from .services.enrichment import location_is_visible, parse_address
 from .services.polling import default_polling_enabled
 
@@ -367,27 +368,36 @@ def data_quality(request):
         issue = request.POST.get("issue", issue)
     issue_filters = {
         "address": Q(address__isnull=True) | Q(address=""),
-        "district": Q(district__isnull=True) | Q(district=""),
-        "microdistrict": Q(microdistrict__isnull=True) | Q(microdistrict=""),
+        "district": Q(district_ref__isnull=True),
+        "microdistrict": Q(microdistrict_ref__isnull=True),
     }
     if issue not in {"all", *issue_filters}:
         issue = "all"
     if request.method == "POST":
         item = get_object_or_404(Listing, pk=request.POST.get("listing_id"))
         address = (request.POST.get("address") or "").strip() or None
-        district = (request.POST.get("district") or "").strip() or None
-        microdistrict = (request.POST.get("microdistrict") or "").strip() or None
-        parsed = parse_address(address, district)
-        normalized_microdistrict = microdistrict or parsed.microdistrict
+        district = District.objects.filter(pk=request.POST.get("district_id")).first()
+        microdistrict = Microdistrict.objects.select_related("district").filter(
+            pk=request.POST.get("microdistrict_id"),
+        ).first()
+        if microdistrict:
+            district = microdistrict.district
+        parsed = parse_address(address, district.name if district else None)
+        normalized_microdistrict = microdistrict.name if microdistrict else parsed.microdistrict
+        normalized_district = district.name if district else parsed.district
         changed_location = (item.address, item.district, item.microdistrict) != (
-            parsed.address, parsed.district, normalized_microdistrict,
+            parsed.address, normalized_district, normalized_microdistrict,
         )
         item.address = item.address_override = parsed.address
-        item.district = item.district_override = parsed.district
+        item.district = item.district_override = normalized_district
         item.microdistrict = item.microdistrict_override = normalized_microdistrict
+        item.district_ref = district
+        item.microdistrict_ref = microdistrict
+        item.location_source = "manual"
         item.is_visible = location_is_visible(item.address, item.district, item.microdistrict)
         update_fields = ["address", "district", "microdistrict", "address_override", "district_override",
-                         "microdistrict_override", "is_visible"]
+                         "microdistrict_override", "district_ref", "microdistrict_ref", "location_source",
+                         "is_visible"]
         if changed_location:
             item.latitude = item.longitude = None
             item.geocode_status = item.geocoded_at = None
@@ -402,14 +412,49 @@ def data_quality(request):
     listings = list(Listing.objects.filter(selected).order_by("-first_seen_at", "-id")[:100])
     for item in listings:
         item.quality_issues = [
-            label for field, label in (("address", "Нет адреса"), ("district", "Нет района"),
-                                       ("microdistrict", "Нет микрорайона"))
-            if not getattr(item, field)
+            label for missing, label in ((not item.address, "Нет адреса"), (not item.district_ref, "Нет района"),
+                                         (not item.microdistrict_ref, "Нет микрорайона"))
+            if missing
         ]
     counts = {name: Listing.objects.filter(condition).count() for name, condition in issue_filters.items()}
     counts["all"] = Listing.objects.filter(missing).count()
     return render(request, "listings/data_quality.html", {
         "listings": listings, "issue": issue, "counts": counts,
+        "districts": District.objects.all(),
+        "microdistricts": Microdistrict.objects.select_related("district").all(),
+    })
+
+
+@login_required
+def location_directory(request):
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "microdistrict":
+            district = get_object_or_404(District, pk=request.POST.get("district_id"))
+            name = (request.POST.get("name") or "").strip()
+            if name:
+                Microdistrict.objects.get_or_create(district=district, name=name)
+        elif action == "street":
+            district = get_object_or_404(District, pk=request.POST.get("district_id"))
+            microdistrict = Microdistrict.objects.filter(pk=request.POST.get("microdistrict_id")).first()
+            if microdistrict and microdistrict.district_id != district.id:
+                microdistrict = None
+            street = (request.POST.get("street") or "").strip()
+            if street:
+                StreetAssignment.objects.create(
+                    street=street,
+                    house_from=_integer(request.POST.get("house_from")),
+                    house_to=_integer(request.POST.get("house_to")),
+                    parity=request.POST.get("parity") or StreetAssignment.Parity.ANY,
+                    district=district, microdistrict=microdistrict,
+                    note=(request.POST.get("note") or "").strip(),
+                )
+        return redirect("location_directory")
+    return render(request, "listings/location_directory.html", {
+        "districts": District.objects.prefetch_related("microdistricts").all(),
+        "microdistricts": Microdistrict.objects.select_related("district").all(),
+        "street_assignments": StreetAssignment.objects.select_related("district", "microdistrict").all(),
+        "parities": StreetAssignment.Parity.choices,
     })
 
 

@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import Listing, ListingSearchQuery, ListingSnapshot, PriceHistory, Scan, SearchQuery
+from .models import (District, Listing, ListingSearchQuery, ListingSnapshot, Microdistrict, PriceHistory, Scan,
+                     SearchQuery, StreetAssignment)
 
 
 class PriceHistoryInline(admin.TabularInline):
@@ -38,3 +39,6 @@ class ScanAdmin(admin.ModelAdmin):
 admin.site.register(ListingSearchQuery)
 admin.site.register(PriceHistory)
 admin.site.register(ListingSnapshot)
+admin.site.register(District)
+admin.site.register(Microdistrict)
+admin.site.register(StreetAssignment)

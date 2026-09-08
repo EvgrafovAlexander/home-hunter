@@ -6,6 +6,7 @@ from django.db import transaction
 from collectors.base import NormalizedListing
 from listings.models import Listing, ListingSearchQuery, ListingSnapshot, PriceHistory, SearchQuery
 from listings.services.enrichment import calculate_price_per_sqm, location_is_visible, parse_address
+from listings.services.location_directory import resolve_location
 
 SIGNIFICANT_FIELDS = (
     "price", "title", "description", "address", "district", "microdistrict", "is_visible", "rooms", "area", "floor", "floors_total",
@@ -72,6 +73,25 @@ def process_listing(
             microdistrict=listing.microdistrict,
             is_visible=listing.is_visible,
         )
+    # Manual corrections are authoritative.  Every other value is reconciled
+    # with the shared directory, so newly collected rows and old rows use the
+    # same canonical district/microdistrict names.
+    if listing.location_source == "manual":
+        district_ref = listing.district_ref
+        microdistrict_ref = listing.microdistrict_ref
+        location_source = "manual"
+    else:
+        resolution = resolve_location(values["address"], values["district"], values["microdistrict"])
+        district_ref = resolution.district
+        microdistrict_ref = resolution.microdistrict
+        location_source = resolution.source
+        if district_ref:
+            values["district"] = district_ref.name
+        if microdistrict_ref:
+            values["microdistrict"] = microdistrict_ref.name
+        values["is_visible"] = location_is_visible(
+            values["address"], values["district"], values["microdistrict"],
+        )
     address_changed = not created and listing.address != values["address"]
     changed = {key for key, value in values.items() if getattr(listing, key) != value}
     price_changed = not created and "price" in changed
@@ -82,6 +102,9 @@ def process_listing(
         ListingSnapshot.objects.create(listing=listing, observed_at=observed_at, data=snapshot)
     for key, value in values.items():
         setattr(listing, key, value)
+    listing.district_ref = district_ref
+    listing.microdistrict_ref = microdistrict_ref
+    listing.location_source = location_source
     if address_changed:
         listing.latitude = listing.longitude = None
         listing.geocode_status = listing.geocoded_at = None

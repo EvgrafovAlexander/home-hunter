@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from django.utils import timezone
 from collectors.base import NormalizedListing
-from listings.models import Listing, ListingSearchQuery, ListingSnapshot, PriceHistory, SearchQuery
+from listings.models import District, Listing, ListingSearchQuery, ListingSnapshot, Microdistrict, PriceHistory, SearchQuery, StreetAssignment
 from listings.services.persistence import process_listing
 
 pytestmark = pytest.mark.django_db
@@ -78,7 +78,7 @@ def test_parses_cian_address_and_hides_dyomsky(search, item):
     ), timezone.now())
     assert result.listing.address == "Дагестанская улица, 33"
     assert result.listing.district == "Дёмский"
-    assert result.listing.microdistrict == "Дема"
+    assert result.listing.microdistrict == "Дёма"
     assert not result.listing.is_visible
 
 
@@ -110,6 +110,19 @@ def test_hides_other_excluded_microdistricts(search, item, microdistrict):
 def test_hides_listing_without_parsed_address(search, item):
     result = process_listing(search, replace(item, address=None), timezone.now())
     assert not result.listing.is_visible
+
+
+def test_resolves_street_rule_with_house_range(search, item):
+    district = District.objects.get(name="Кировский")
+    microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+    StreetAssignment.objects.create(
+        street="ул. Ленина", house_from=10, house_to=20, district=district, microdistrict=microdistrict,
+    )
+    result = process_listing(search, replace(item, address="Ленина улица, 14"), timezone.now())
+    assert result.listing.district_ref == district
+    assert result.listing.microdistrict_ref == microdistrict
+    assert result.listing.microdistrict == "Южный"
+    assert result.listing.location_source == "street"
 
 
 def test_keeps_source_price_per_sqm_and_district(search, item):

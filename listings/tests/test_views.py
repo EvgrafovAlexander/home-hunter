@@ -203,17 +203,40 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "Без локации")
         self.assertContains(response, "Нет района")
         self.assertContains(response, "Нет микрорайона")
+        self.assertContains(response, 'href="https://example.test/incomplete"')
 
+        from listings.models import District, Microdistrict
+        district = District.objects.get(name="Кировский")
+        microdistrict = Microdistrict.objects.get(district=district, name="Южный")
         response = self.client.post(reverse("data_quality") + "?issue=district", {
             "listing_id": incomplete.pk, "issue": "district", "address": "ул. Ленина, 10",
-            "district": "Кировский", "microdistrict": "Центр",
+            "district_id": district.pk, "microdistrict_id": microdistrict.pk,
         })
         self.assertRedirects(response, reverse("data_quality") + "?issue=district")
         incomplete.refresh_from_db()
         self.assertEqual((incomplete.address, incomplete.district, incomplete.microdistrict),
-                         ("ул. Ленина, 10", "Кировский", "Центр"))
+                         ("ул. Ленина, 10", "Кировский", "Южный"))
         self.assertEqual(incomplete.district_override, "Кировский")
+        self.assertEqual(incomplete.district_ref, district)
+        self.assertEqual(incomplete.microdistrict_ref, microdistrict)
+        self.assertEqual(incomplete.location_source, "manual")
         self.assertIsNone(incomplete.latitude)
+
+    def test_location_directory_adds_microdistrict_and_street_rule(self):
+        from listings.models import District, Microdistrict, StreetAssignment
+        district = District.objects.get(name="Кировский")
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("location_directory"), {
+            "action": "microdistrict", "district_id": district.pk, "name": "Тестовый",
+        })
+        self.assertRedirects(response, reverse("location_directory"))
+        microdistrict = Microdistrict.objects.get(district=district, name="Тестовый")
+        response = self.client.post(reverse("location_directory"), {
+            "action": "street", "street": "Тестовая улица", "house_from": "1", "house_to": "99",
+            "parity": "any", "district_id": district.pk, "microdistrict_id": microdistrict.pk,
+        })
+        self.assertRedirects(response, reverse("location_directory"))
+        self.assertTrue(StreetAssignment.objects.filter(street="Тестовая улица", microdistrict=microdistrict).exists())
 
     def test_next_poll_time_is_shown_in_yekaterinburg_time(self):
         runs = next_poll_runs("avito", datetime(2026, 9, 8, 7, 0, tzinfo=datetime_timezone.utc))

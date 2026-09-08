@@ -19,6 +19,54 @@ class SearchQuery(models.Model):
         return self.name
 
 
+class District(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    aliases = models.JSONField(default=list, blank=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("sort_order", "name")
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Microdistrict(models.Model):
+    name = models.CharField(max_length=100)
+    district = models.ForeignKey(District, on_delete=models.PROTECT, related_name="microdistricts")
+    aliases = models.JSONField(default=list, blank=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ("district__sort_order", "sort_order", "name")
+        constraints = [models.UniqueConstraint(fields=("district", "name"), name="unique_district_microdistrict")]
+
+    def __str__(self) -> str:
+        return f"{self.district.name} · {self.name}"
+
+
+class StreetAssignment(models.Model):
+    class Parity(models.TextChoices):
+        ANY = "any", "Любая"
+        ODD = "odd", "Нечётные"
+        EVEN = "even", "Чётные"
+
+    street = models.CharField(max_length=255, db_index=True)
+    house_from = models.PositiveIntegerField(null=True, blank=True)
+    house_to = models.PositiveIntegerField(null=True, blank=True)
+    parity = models.CharField(max_length=10, choices=Parity.choices, default=Parity.ANY)
+    district = models.ForeignKey(District, on_delete=models.PROTECT, related_name="street_assignments")
+    microdistrict = models.ForeignKey(Microdistrict, on_delete=models.PROTECT, related_name="street_assignments",
+                                      null=True, blank=True)
+    note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ("street", "house_from", "house_to")
+
+    def __str__(self) -> str:
+        return self.street
+
+
 class Listing(models.Model):
     source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
     external_id = models.CharField(max_length=100)
@@ -37,6 +85,11 @@ class Listing(models.Model):
     address_override = models.TextField(null=True, blank=True)
     district_override = models.CharField(max_length=255, null=True, blank=True)
     microdistrict_override = models.CharField(max_length=255, null=True, blank=True)
+    district_ref = models.ForeignKey(District, null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name="listings")
+    microdistrict_ref = models.ForeignKey(Microdistrict, null=True, blank=True, on_delete=models.SET_NULL,
+                                          related_name="listings")
+    location_source = models.CharField(max_length=20, default="parser")
     is_visible = models.BooleanField(default=True, db_default=True, db_index=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
