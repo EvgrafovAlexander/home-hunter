@@ -161,6 +161,29 @@ class ListingViewsTests(TestCase):
         self.assertEqual(response.context["price_drop_count"], 1)
         self.assertContains(response, "Самые заметные снижения")
 
+    def test_dashboard_shows_median_microdistrict_market_stats(self):
+        now = timezone.now()
+        created = []
+        for index, sqm_price in enumerate((100_000, 110_000, 120_000, 130_000, 140_000)):
+            created.append(Listing.objects.create(
+                source="avito", external_id=f"micro-stat-{index}", url="https://example.test/micro",
+                title="Микрорайон", price=sqm_price * 50, price_per_sqm=sqm_price, area="50.00",
+                district="Кировский", microdistrict="Южный",
+                first_seen_at=now - timedelta(days=index),
+            ))
+        ListingSnapshot.objects.create(
+            listing=created[0], observed_at=now - timedelta(days=1),
+            data={"district": "Кировский", "microdistrict": "Южный", "is_active": False},
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("dashboard"), {"stats_days": 7})
+        row = next(row for row in response.context["microdistrict_stats"] if row["microdistrict"] == "Южный")
+        self.assertEqual(row["median_sqm"], 120_000)
+        self.assertEqual(row["count"], 5)
+        self.assertEqual(row["new_count"], 5)
+        self.assertEqual(row["removed_count"], 1)
+        self.assertContains(response, "Рынок по микрорайонам")
+
     def test_scan_statistics_shows_three_latest_scans_per_source(self):
         search = SearchQuery.objects.create(name="Avito search", source="avito", url="https://example.test")
         for index in range(4):

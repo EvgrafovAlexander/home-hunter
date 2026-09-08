@@ -9,7 +9,7 @@ from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
-from .models import (District, Listing, ManualDomclickJob, Microdistrict, PriceHistory, Scan,
+from .models import (District, Listing, ListingSnapshot, ManualDomclickJob, Microdistrict, PriceHistory, Scan,
                      SearchQuery, SourcePollingControl, StreetAssignment)
 from .services.enrichment import location_is_visible, parse_address
 from .services.change_history import change_events
@@ -22,6 +22,7 @@ DISPLAY_TIME_ZONE = ZoneInfo("Asia/Yekaterinburg")
 MARKET_MIN_SIMILAR = 5
 MARKET_MIN_ROOM_GROUP = 8
 MARKET_MIN_DISTRICT_GROUP = 12
+MICRODISTRICT_MARKET_MIN_SAMPLE = 5
 
 
 def _next_at(now, hour: int, minute: int):
@@ -215,6 +216,53 @@ def similar_listings(listing: Listing, limit: int = 6):
         -item.first_seen_at.timestamp(),
     ))
     return candidates[:limit]
+
+
+def microdistrict_market_stats(listings, period_since, filters):
+    """A median-based local market view; small groups are intentionally omitted."""
+    rows = (listings.exclude(district__isnull=True).exclude(district="")
+            .exclude(microdistrict__isnull=True).exclude(microdistrict="")
+            .exclude(price_per_sqm__isnull=True)
+            .values("district", "microdistrict", "price_per_sqm", "price", "area", "first_seen_at"))
+    groups = {}
+    for row in rows:
+        key = (row["district"], row["microdistrict"])
+        groups.setdefault(key, []).append(row)
+    all_sqm_prices = [row["price_per_sqm"] for rows in groups.values() for row in rows]
+    overall_median = median(all_sqm_prices) if all_sqm_prices else None
+
+    removed_counts = {}
+    removals = (ListingSnapshot.objects.filter(observed_at__gte=period_since, listing__is_visible=True)
+                .select_related("listing").only("data", "listing__source", "listing__district", "listing__microdistrict"))
+    for snapshot in removals:
+        if snapshot.data.get("is_active") is not False:
+            continue
+        if filters.get("source") and snapshot.listing.source != filters["source"]:
+            continue
+        if filters.get("district") and snapshot.listing.district != filters["district"]:
+            continue
+        key = (snapshot.data.get("district") or snapshot.listing.district,
+               snapshot.data.get("microdistrict") or snapshot.listing.microdistrict)
+        if key in groups:
+            removed_counts[key] = removed_counts.get(key, 0) + 1
+
+    stats = []
+    for (district, microdistrict), entries in groups.items():
+        if len(entries) < MICRODISTRICT_MARKET_MIN_SAMPLE:
+            continue
+        sqm_prices = [entry["price_per_sqm"] for entry in entries]
+        prices = [entry["price"] for entry in entries if entry["price"] is not None]
+        areas = [float(entry["area"]) for entry in entries if entry["area"] is not None]
+        median_sqm = int(median(sqm_prices))
+        stats.append({
+            "district": district, "microdistrict": microdistrict, "count": len(entries),
+            "median_sqm": median_sqm, "median_price": int(median(prices)) if prices else None,
+            "median_area": median(areas) if areas else None,
+            "new_count": sum(entry["first_seen_at"] >= period_since for entry in entries),
+            "removed_count": removed_counts.get((district, microdistrict), 0),
+            "relative_pct": round((median_sqm / overall_median - 1) * 100) if overall_median else 0,
+        })
+    return sorted(stats, key=lambda row: (-row["median_sqm"], -row["count"], row["microdistrict"]))
 
 
 @login_required
@@ -520,6 +568,7 @@ def dashboard(request):
                          key=lambda change: change["difference"])[:10]
     scatter = list(listings.exclude(area__isnull=True).exclude(price__isnull=True)
                    .order_by("-first_seen_at").values("area", "price")[:150])
+    microdistrict_stats = microdistrict_market_stats(listings, period_since, filters)
     return render(request, "listings/dashboard.html", {
         "filters": filters, "filter_options": filter_options(), "total": listings.count(),
         "median_price": int(median(prices)) if prices else None,
@@ -527,6 +576,8 @@ def dashboard(request):
         "period_days": period_days, "daily": daily,
         "daily_max": max((item["count"] for item in daily), default=1) or 1,
         "district_stats": district_stats, "scatter": scatter,
+        "microdistrict_stats": microdistrict_stats,
+        "microdistrict_min_sample": MICRODISTRICT_MARKET_MIN_SAMPLE,
         "price_drop_count": len(price_drops),
         "price_increase_count": sum(change["difference"] > 0 for change in changes),
         "price_drops": price_drops,
