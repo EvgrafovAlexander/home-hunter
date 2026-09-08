@@ -1,0 +1,7 @@
+{% extends 'listings/base.html' %}
+{% load humanize %}
+{% block title %}Опросы · Home Hunter{% endblock %}
+{% block content %}
+<section class="hero"><p class="eyebrow">Состояние сборщиков</p><h1>Опросы площадок</h1><p>Три последних запуска по каждой площадке.</p></section>
+<section class="scan-sources">{% for source in sources %}<article class="scan-source"><h2>{{ source.label }}</h2><div class="scan-table">{% for scan in source.scans %}<article class="scan-row"><div><b class="scan-status scan-status--{{ scan.status }}">{{ scan.get_status_display }}</b><p class="muted">{{ scan.search_query.name }} · {{ scan.get_mode_display }} · {{ scan.started_at|date:'d.m.Y H:i' }}</p>{% if scan.error %}<p class="scan-error">{{ scan.error }}</p>{% endif %}</div><div class="scan-numbers"><span>{{ scan.items_seen|intcomma }} найдено</span><span>{{ scan.new_items|intcomma }} новых</span>{% if scan.finished_at %}<time datetime="{{ scan.finished_at|date:'c' }}">Завершён: {{ scan.finished_at|date:'d.m H:i' }}</time>{% else %}<time>Выполняется</time>{% endif %}</div></article>{% empty %}<p class="muted">Опросов пока не было.</p>{% endfor %}</div></article>{% endfor %}</section>
+{% endblock %}

@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from listings.models import Listing
+from listings.models import Listing, Scan, SearchQuery
 
 
 class ListingViewsTests(TestCase):
@@ -54,3 +54,14 @@ class ListingViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["total"], 1)
         self.assertEqual(response.context["median_price"], 6_500_000)
+
+    def test_scan_statistics_shows_three_latest_scans_per_source(self):
+        search = SearchQuery.objects.create(name="Avito search", source="avito", url="https://example.test")
+        for index in range(4):
+            Scan.objects.create(search_query=search, source="avito", mode="fast", status="success",
+                                items_seen=index, new_items=index)
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("scan_statistics"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["sources"][0]["scans"]), 3)
+        self.assertContains(response, "Avito search", count=3)

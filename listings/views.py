@@ -8,7 +8,7 @@ from django.db.models.functions import TruncDate
 from django.shortcuts import render
 from django.utils import timezone
 
-from .models import Listing, SearchQuery
+from .models import Listing, Scan, SearchQuery
 
 
 def _integer(value):
@@ -103,6 +103,18 @@ def hidden_listing_feed(request):
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(visible=False),
         "sort": ordering, "hidden_feed": True,
     })
+
+
+@login_required
+def scan_statistics(request):
+    sources = []
+    for value, label in SearchQuery.Source.choices:
+        sources.append({
+            "label": label,
+            "scans": Scan.objects.filter(source=value).select_related("search_query")
+            .order_by("-started_at", "-id")[:3],
+        })
+    return render(request, "listings/scan_statistics.html", {"sources": sources})
 
 
 @login_required
