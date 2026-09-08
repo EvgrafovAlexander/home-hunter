@@ -89,7 +89,7 @@ class Listing(models.Model):
                                      related_name="listings")
     microdistrict_ref = models.ForeignKey(Microdistrict, null=True, blank=True, on_delete=models.SET_NULL,
                                           related_name="listings")
-    location_source = models.CharField(max_length=20, default="parser")
+    location_source = models.CharField(max_length=20, default="parser", db_default="parser")
     is_visible = models.BooleanField(default=True, db_default=True, db_index=True)
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)

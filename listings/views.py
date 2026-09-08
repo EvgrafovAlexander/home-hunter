@@ -380,8 +380,10 @@ def data_quality(request):
         microdistrict = Microdistrict.objects.select_related("district").filter(
             pk=request.POST.get("microdistrict_id"),
         ).first()
-        if microdistrict:
+        if microdistrict and (not district or microdistrict.district_id == district.id):
             district = microdistrict.district
+        elif microdistrict:
+            microdistrict = None
         parsed = parse_address(address, district.name if district else None)
         normalized_microdistrict = microdistrict.name if microdistrict else parsed.microdistrict
         normalized_district = district.name if district else parsed.district

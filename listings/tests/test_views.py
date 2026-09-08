@@ -238,6 +238,22 @@ class ListingViewsTests(TestCase):
         self.assertRedirects(response, reverse("location_directory"))
         self.assertTrue(StreetAssignment.objects.filter(street="Тестовая улица", microdistrict=microdistrict).exists())
 
+    def test_data_quality_rejects_microdistrict_from_another_district(self):
+        from listings.models import District, Microdistrict
+        item = Listing.objects.create(source="avito", external_id="mismatch", url="https://example.test/mismatch",
+                                      title="Проверка", address="ул. Ленина, 10")
+        district = District.objects.get(name="Кировский")
+        other_microdistrict = Microdistrict.objects.get(district__name="Ленинский", name="Центр")
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("data_quality"), {
+            "listing_id": item.pk, "issue": "all", "address": item.address,
+            "district_id": district.pk, "microdistrict_id": other_microdistrict.pk,
+        })
+        self.assertRedirects(response, reverse("data_quality") + "?issue=all")
+        item.refresh_from_db()
+        self.assertEqual(item.district_ref, district)
+        self.assertIsNone(item.microdistrict_ref)
+
     def test_next_poll_time_is_shown_in_yekaterinburg_time(self):
         runs = next_poll_runs("avito", datetime(2026, 9, 8, 7, 0, tzinfo=datetime_timezone.utc))
         fast_run = runs[0][2]
