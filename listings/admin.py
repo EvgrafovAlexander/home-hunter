@@ -16,7 +16,7 @@ class PriceHistoryInline(admin.TabularInline):
 class ListingAdmin(admin.ModelAdmin):
     list_display = ("title", "source", "price", "rooms", "is_active", "first_seen_at", "last_seen_at")
     search_fields = ("title", "address", "external_id")
-    list_filter = ("source", "rooms", "district", "is_active")
+    list_filter = ("source", "rooms", "district", "is_visible", "is_active")
     inlines = [PriceHistoryInline]
 
 

@@ -33,6 +33,8 @@ class Listing(models.Model):
     floors_total = models.IntegerField(null=True, blank=True)
     address = models.TextField(null=True, blank=True)
     district = models.CharField(max_length=255, null=True, blank=True)
+    microdistrict = models.CharField(max_length=255, null=True, blank=True)
+    is_visible = models.BooleanField(default=True, db_index=True)
     published_text = models.CharField(max_length=255, null=True, blank=True)
     image_url = models.TextField(null=True, blank=True)
     first_seen_at = models.DateTimeField(default=timezone.now, db_index=True)

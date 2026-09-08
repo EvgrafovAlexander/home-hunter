@@ -21,6 +21,10 @@ class ListingViewsTests(TestCase):
             price=9_000_000, price_per_sqm=150_000, rooms=3, area="60.00", floor=8,
             district="Советский", is_active=False,
         )
+        self.hidden = Listing.objects.create(
+            source="cian", external_id="hidden", url="https://example.test/hidden", title="В Дёмском",
+            address="Дагестанская улица, 33", district="Дёмский", is_visible=False,
+        )
 
     def _create_user(self):
         from django.contrib.auth import get_user_model
@@ -36,6 +40,13 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "Двушка")
         self.assertNotContains(response, "Трешка")
         self.assertEqual(response.context["result_count"], 1)
+
+    def test_feed_excludes_hidden_listing_and_separate_feed_shows_it(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_feed"))
+        self.assertNotContains(response, "В Дёмском")
+        response = self.client.get(reverse("hidden_listing_feed"))
+        self.assertContains(response, "В Дёмском")
 
     def test_dashboard_uses_filtered_population(self):
         self.client.force_login(self.user)

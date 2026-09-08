@@ -4,5 +4,6 @@ from . import views
 
 urlpatterns = [
     path("", views.listing_feed, name="listing_feed"),
+    path("hidden/", views.hidden_listing_feed, name="hidden_listing_feed"),
     path("dashboard/", views.dashboard, name="dashboard"),
 ]

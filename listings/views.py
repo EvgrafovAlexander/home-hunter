@@ -25,9 +25,11 @@ def _decimal(value):
         return None
 
 
-def filtered_listings(request):
+def filtered_listings(request, *, visible: bool | None = True):
     """Apply the same, deliberately small filter vocabulary to both screens."""
     listings = Listing.objects.all()
+    if visible is not None:
+        listings = listings.filter(is_visible=visible)
     names = ("source", "district", "rooms", "price_min", "price_max", "sqm_price_min",
              "sqm_price_max", "area_min", "area_max", "floor_min", "floor_max", "days", "active")
     values = {name: request.GET.get(name, "") for name in names}
@@ -58,12 +60,13 @@ def filtered_listings(request):
     return listings, values
 
 
-def filter_options():
+def filter_options(*, visible: bool = True):
+    listings = Listing.objects.filter(is_visible=visible)
     return {
         "sources": SearchQuery.Source.choices,
-        "districts": list(Listing.objects.exclude(district__isnull=True).exclude(district="")
+        "districts": list(listings.exclude(district__isnull=True).exclude(district="")
                           .order_by("district").values_list("district", flat=True).distinct()),
-        "rooms": list(Listing.objects.exclude(rooms__isnull=True).order_by("rooms")
+        "rooms": list(listings.exclude(rooms__isnull=True).order_by("rooms")
                       .values_list("rooms", flat=True).distinct()),
     }
 
@@ -82,6 +85,23 @@ def listing_feed(request):
         "listings": listings.order_by(sortings[ordering], "-id")[:200],
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(),
         "sort": ordering,
+    })
+
+
+@login_required
+def hidden_listing_feed(request):
+    listings, filters = filtered_listings(request, visible=False)
+    ordering = request.GET.get("sort", "new")
+    sortings = {
+        "new": "-first_seen_at", "price_up": "price", "price_down": "-price",
+        "sqm_up": "price_per_sqm", "area_down": "-area",
+    }
+    if ordering not in sortings:
+        ordering = "new"
+    return render(request, "listings/feed.html", {
+        "listings": listings.order_by(sortings[ordering], "-id")[:200],
+        "result_count": listings.count(), "filters": filters, "filter_options": filter_options(visible=False),
+        "sort": ordering, "hidden_feed": True,
     })
 
 

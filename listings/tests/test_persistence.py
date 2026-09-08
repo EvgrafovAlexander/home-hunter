@@ -68,6 +68,23 @@ def test_enriches_missing_price_per_sqm_and_district(search, item):
     ), timezone.now())
     assert result.listing.price_per_sqm == 110922
     assert result.listing.district == "Кировский"
+    assert result.listing.address == "ул. Ленина, 1"
+
+
+def test_parses_cian_address_and_hides_dyomsky(search, item):
+    result = process_listing(search, replace(
+        item, address=("Республика Башкортостан, Уфа, р-н Дёмский, мкр. Дема, "
+                       "Дагестанская улица, 33"),
+    ), timezone.now())
+    assert result.listing.address == "Дагестанская улица, 33"
+    assert result.listing.district == "Дёмский"
+    assert result.listing.microdistrict == "Дема"
+    assert not result.listing.is_visible
+
+
+def test_hides_listing_without_parsed_address(search, item):
+    result = process_listing(search, replace(item, address=None), timezone.now())
+    assert not result.listing.is_visible
 
 
 def test_keeps_source_price_per_sqm_and_district(search, item):

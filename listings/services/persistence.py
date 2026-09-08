@@ -5,10 +5,10 @@ from decimal import Decimal
 from django.db import transaction
 from collectors.base import NormalizedListing
 from listings.models import Listing, ListingSearchQuery, ListingSnapshot, PriceHistory, SearchQuery
-from listings.services.enrichment import calculate_price_per_sqm, district_from_address
+from listings.services.enrichment import calculate_price_per_sqm, parse_address
 
 SIGNIFICANT_FIELDS = (
-    "price", "title", "description", "address", "district", "rooms", "area", "floor", "floors_total",
+    "price", "title", "description", "address", "district", "microdistrict", "is_visible", "rooms", "area", "floor", "floors_total",
 )
 
 
@@ -35,8 +35,13 @@ def process_listing(
     # from the two canonical fields.  `price / rooms` is price per room, not per m².
     if values["price_per_sqm"] is None:
         values["price_per_sqm"] = calculate_price_per_sqm(values["price"], values["area"])
-    if not values["district"]:
-        values["district"] = district_from_address(values["address"])
+    parsed_address = parse_address(values["address"], values["district"])
+    values.update(
+        address=parsed_address.address,
+        district=parsed_address.district,
+        microdistrict=parsed_address.microdistrict,
+        is_visible=parsed_address.is_visible,
+    )
     listing, created = Listing.objects.select_for_update().get_or_create(
         source=item.source, external_id=item.external_id,
         defaults={**values, "first_seen_at": observed_at, "last_seen_at": observed_at},
@@ -49,8 +54,13 @@ def process_listing(
                 calculate_price_per_sqm(values["price"], values["area"])
                 or listing.price_per_sqm
             )
-    if not created and not values["district"]:
-        values["district"] = listing.district
+    if not created and not values["address"]:
+        values.update(
+            address=listing.address,
+            district=listing.district,
+            microdistrict=listing.microdistrict,
+            is_visible=listing.is_visible,
+        )
     changed = {key for key, value in values.items() if getattr(listing, key) != value}
     price_changed = not created and "price" in changed
     if created or price_changed:
