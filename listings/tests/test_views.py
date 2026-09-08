@@ -1,10 +1,11 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from listings.models import Listing, PriceHistory, Scan, SearchQuery
+from listings.models import Listing, PriceHistory, Scan, SearchQuery, SourcePollingControl
+from listings.views import next_poll_runs
 
 
 class ListingViewsTests(TestCase):
@@ -78,6 +79,38 @@ class ListingViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context["sources"][0]["scans"]), 3)
         self.assertContains(response, "Avito search", count=3)
+
+    def test_scan_statistics_highlights_consecutive_failures(self):
+        search = SearchQuery.objects.create(name="CIAN search", source="cian", url="https://example.test/cian")
+        for _ in range(3):
+            Scan.objects.create(search_query=search, source="cian", mode="fast", status="failed")
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("scan_statistics"))
+        cian = next(source for source in response.context["sources"] if source["label"] == "CIAN")
+        self.assertEqual(cian["health"], "error")
+        self.assertContains(response, "3 ошибки подряд")
+
+    def test_scan_statistics_can_disable_and_enable_source(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("scan_statistics"), {"source": "cian", "mode": "fast", "enabled": "0"})
+        self.assertRedirects(response, reverse("scan_statistics"))
+        self.assertFalse(SourcePollingControl.objects.get(source="cian", mode="fast").enabled)
+
+        response = self.client.post(reverse("scan_statistics"), {"source": "cian", "mode": "fast", "enabled": "1"})
+        self.assertRedirects(response, reverse("scan_statistics"))
+        self.assertTrue(SourcePollingControl.objects.get(source="cian", mode="fast").enabled)
+
+    def test_scan_statistics_does_not_allow_enabling_avito_full(self):
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("scan_statistics"), {"source": "avito", "mode": "full", "enabled": "1"})
+        self.assertRedirects(response, reverse("scan_statistics"))
+        self.assertFalse(SourcePollingControl.objects.filter(source="avito", mode="full", enabled=True).exists())
+
+    def test_next_poll_time_is_shown_in_yekaterinburg_time(self):
+        runs = next_poll_runs("avito", datetime(2026, 9, 8, 7, 0, tzinfo=datetime_timezone.utc))
+        fast_run = runs[0][2]
+        self.assertEqual((fast_run.hour, fast_run.minute), (12, 15))
+        self.assertEqual(fast_run.tzinfo.key, "Asia/Yekaterinburg")
 
     def test_map_shows_only_visible_listings_with_coordinates(self):
         self.match.latitude, self.match.longitude = "54.738800", "55.972100"

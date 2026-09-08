@@ -125,4 +125,9 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Sca
         logger.error("scan failed id=%s: %s", scan.pk, scan.error)
     logger.info("scan finished id=%s status=%s new=%s updated=%s price_changes=%s",
                 scan.pk, scan.status, scan.new_items, scan.updated_items, scan.price_changes)
+    try:
+        from listings.services.scan_health import check_source_health
+        check_source_health(scan.source)
+    except Exception:
+        logger.exception("health notification check failed for source=%s", scan.source)
     return scan

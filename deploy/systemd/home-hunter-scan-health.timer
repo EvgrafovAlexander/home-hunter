@@ -1,0 +1,10 @@
+[Unit]
+Description=Home Hunter scan health check every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=home-hunter-scan-health.service
+
+[Install]
+WantedBy=timers.target

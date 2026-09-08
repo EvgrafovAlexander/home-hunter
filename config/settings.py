@@ -52,7 +52,7 @@ AUTH_PASSWORD_VALIDATORS = [
                  "CommonPasswordValidator", "NumericPasswordValidator"]
 ]
 LANGUAGE_CODE = "ru-ru"
-TIME_ZONE = "UTC"
+TIME_ZONE = "Asia/Yekaterinburg"
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
@@ -102,3 +102,6 @@ DOMCLICK_BLOCK_COOLDOWN_SECONDS = float(os.getenv("DOMCLICK_BLOCK_COOLDOWN_SECON
 DOMCLICK_FULL_SCAN_ENABLED = os.getenv("DOMCLICK_FULL_SCAN_ENABLED", "false").lower() == "true"
 
 NOMINATIM_USER_AGENT = os.getenv("NOMINATIM_USER_AGENT", "")
+TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
+TG_CHAT_ID = os.getenv("TG_CHAT_ID", "")
+TELEGRAM_PROXY_URL = os.getenv("TELEGRAM_PROXY_URL", "")

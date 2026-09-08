@@ -113,3 +113,21 @@ class Scan(models.Model):
     price_changes = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.RUNNING)
     error = models.TextField(blank=True)
+
+
+class SourceHealthAlert(models.Model):
+    source = models.CharField(max_length=20, choices=SearchQuery.Source.choices, unique=True)
+    state = models.CharField(max_length=30)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class SourcePollingControl(models.Model):
+    """Switch for a particular source and scan mode."""
+
+    source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
+    mode = models.CharField(max_length=10, choices=Scan.Mode.choices, default=Scan.Mode.FAST)
+    enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["source", "mode"], name="unique_source_polling_mode")]

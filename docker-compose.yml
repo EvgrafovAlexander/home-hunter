@@ -27,6 +27,7 @@ services:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       DJANGO_DEBUG: "false"
+      TELEGRAM_PROXY_URL: socks5h://cian-tunnel:1080
     depends_on:
       db:
         condition: service_healthy

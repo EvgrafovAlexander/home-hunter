@@ -1,14 +1,62 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from statistics import median
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count, Q
 from django.db.models.functions import TruncDate
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.utils import timezone
 
-from .models import Listing, PriceHistory, Scan, SearchQuery
+from .models import Listing, PriceHistory, Scan, SearchQuery, SourcePollingControl
+from .services.polling import default_polling_enabled
+
+
+SCAN_STALE_AFTER = timedelta(hours=6)
+SCHEDULE_TIME_ZONE = ZoneInfo("Europe/Moscow")
+DISPLAY_TIME_ZONE = ZoneInfo("Asia/Yekaterinburg")
+
+
+def _next_at(now, hour: int, minute: int):
+    candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return candidate if candidate > now else candidate + timedelta(days=1)
+
+
+def _next_hourly_at(now, minute: int):
+    candidate = now.replace(minute=minute, second=0, microsecond=0)
+    return candidate if candidate > now else candidate + timedelta(hours=1)
+
+
+def _next_avito_full(now):
+    for offset in range(4):
+        day = now.date() + timedelta(days=offset)
+        if (day.day - 1) % 3 == 0:
+            candidate = timezone.make_aware(datetime.combine(day, time(3, 30)), now.tzinfo)
+            if candidate > now:
+                return candidate
+
+
+def next_poll_runs(source: str, now):
+    """Mirror systemd timers (MSK) and present their dates in Yekaterinburg time."""
+    now = now.astimezone(SCHEDULE_TIME_ZONE)
+    if source == SearchQuery.Source.AVITO:
+        runs = [(Scan.Mode.FAST, "Быстрый", _next_hourly_at(now, 15), ""),
+                (Scan.Mode.FULL, "Полный", _next_avito_full(now), "")]
+    elif source == SearchQuery.Source.CIAN:
+        runs = [
+            (Scan.Mode.FAST, "Быстрый", _next_hourly_at(now, 0), "в течение 5 мин."),
+            (Scan.Mode.FULL, "Полный", _next_at(now, 0, 10), "в течение 20 мин."),
+        ]
+    elif source == SearchQuery.Source.DOMCLICK:
+        runs = [(Scan.Mode.FAST, "Быстрый", _next_hourly_at(now, 15), "")]
+    else:
+        return []
+    return [(mode, label, scheduled_at.astimezone(DISPLAY_TIME_ZONE), delay) for mode, label, scheduled_at, delay in runs]
+
+
+def polling_mode_locked(source: str, mode: str) -> bool:
+    return source == SearchQuery.Source.AVITO and mode == Scan.Mode.FULL
 
 
 def _integer(value):
@@ -107,12 +155,57 @@ def hidden_listing_feed(request):
 
 @login_required
 def scan_statistics(request):
+    if request.method == "POST":
+        source = request.POST.get("source")
+        mode = request.POST.get("mode")
+        enabled = request.POST.get("enabled")
+        if (source in SearchQuery.Source.values and mode in Scan.Mode.values and enabled in {"0", "1"}
+                and not polling_mode_locked(source, mode)):
+            SourcePollingControl.objects.update_or_create(
+                source=source, mode=mode, defaults={"enabled": enabled == "1"},
+            )
+        return redirect("scan_statistics")
+
     sources = []
+    now = timezone.now()
+    controls = {(control.source, control.mode): control.enabled for control in SourcePollingControl.objects.all()}
     for value, label in SearchQuery.Source.choices:
+        recent_scans = list(Scan.objects.filter(source=value).select_related("search_query")
+                            .order_by("-started_at", "-id")[:20])
+        last_success = next((scan for scan in recent_scans if scan.status == Scan.Status.SUCCESS), None)
+        failed_in_a_row = 0
+        for scan in recent_scans:
+            if scan.status != Scan.Status.FAILED:
+                break
+            failed_in_a_row += 1
+        fast_enabled = controls.get((value, Scan.Mode.FAST), default_polling_enabled(value, Scan.Mode.FAST))
+        if not fast_enabled:
+            health, health_label, health_reason = "disabled", "Отключено", "Опросы отключены в интерфейсе."
+        elif not recent_scans:
+            health, health_label, health_reason = "unknown", "Нет данных", "Опросы ещё не запускались."
+        elif recent_scans[0].status == Scan.Status.RUNNING:
+            health, health_label, health_reason = "running", "Выполняется", "Сейчас идёт опрос площадки."
+        elif failed_in_a_row >= 3:
+            health, health_label = "error", "Ошибка"
+            health_reason = f"{failed_in_a_row} ошибки подряд."
+        elif recent_scans[0].status == Scan.Status.FAILED:
+            health, health_label, health_reason = "warning", "Внимание", "Последний опрос завершился ошибкой."
+        elif not last_success or not last_success.finished_at or last_success.finished_at < now - SCAN_STALE_AFTER:
+            health, health_label, health_reason = "warning", "Данные устарели", "Нет успешного опроса за последние 6 часов."
+        else:
+            health, health_label, health_reason = "healthy", "В норме", "Последний опрос завершился успешно."
+        next_runs = [
+            {"mode": mode, "label": run_label, "scheduled_at": scheduled_at, "delay": delay,
+             "enabled": controls.get((value, mode), default_polling_enabled(value, mode)),
+             "locked": polling_mode_locked(value, mode)}
+            for mode, run_label, scheduled_at, delay in next_poll_runs(value, now)
+        ]
         sources.append({
-            "label": label,
-            "scans": Scan.objects.filter(source=value).select_related("search_query")
-            .order_by("-started_at", "-id")[:3],
+            "value": value, "label": label, "fast_enabled": fast_enabled,
+            "next_runs": next_runs,
+            "scans": recent_scans[:3], "last_success": last_success,
+            "failed_in_a_row": failed_in_a_row, "health": health,
+            "health_label": health_label, "health_reason": health_reason,
         })
     return render(request, "listings/scan_statistics.html", {"sources": sources})
 

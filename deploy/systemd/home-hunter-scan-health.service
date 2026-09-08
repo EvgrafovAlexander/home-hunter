@@ -1,0 +1,11 @@
+[Unit]
+Description=Home Hunter scan health check and Telegram alerts
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/home_hunter
+ExecStart=/usr/bin/docker compose exec -T web python manage.py check_scan_health
+TimeoutStartSec=2min

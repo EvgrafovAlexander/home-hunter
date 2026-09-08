@@ -7,6 +7,7 @@ from django.conf import settings
 
 from collectors.registry import get_collector
 from listings.models import Scan, SearchQuery
+from listings.services.polling import polling_enabled
 from listings.services.scans import run_scan
 
 LOCK_ID = 724198501
@@ -27,6 +28,9 @@ class Command(BaseCommand):
                             help="With --headed, wait for manual captcha without reloading the page")
 
     def handle(self, *args, **options):
+        if not polling_enabled(options["source"], options["mode"]):
+            self.stdout.write(f"{options['mode'].title()} polling disabled for {options['source']}")
+            return
         if options["headless"] is None:
             options["headless"] = options["source"] not in {"cian", "domclick"}
         full_setting = f"{options["source"].upper()}_FULL_SCAN_ENABLED"

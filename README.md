@@ -212,6 +212,19 @@ sudo systemctl enable --now home-hunter-geocoding.timer
 systemctl list-timers home-hunter-geocoding.timer
 ```
 
+### Уведомления об опросах
+
+Задайте `TG_BOT_TOKEN` и `TG_CHAT_ID` в production `.env`. Сообщения Telegram
+отправляются через внутренний SOCKS-туннель `cian-tunnel`; для этого укажите
+`TELEGRAM_PROXY_URL=socks5h://cian-tunnel:1080`. Таймер проверяет устаревание
+данных раз в час, а после каждого scan состояние оценивается сразу.
+
+```bash
+sudo cp deploy/systemd/home-hunter-scan-health.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now home-hunter-scan-health.timer
+```
+
 ### Swap
 
 Для VPS с 2 GB RAM рекомендуется swap 2 GB против случайного OOM Chromium.

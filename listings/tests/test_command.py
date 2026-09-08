@@ -4,7 +4,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from collectors.base import CollectionResult
-from listings.models import Scan, SearchQuery
+from listings.models import Scan, SearchQuery, SourcePollingControl
 from .test_persistence import search, item
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -27,6 +27,7 @@ def test_command_one_collector_sequential_searches(search, item):
 
 def test_command_failed_scan_exit(search, settings):
     settings.AVITO_FULL_SCAN_ENABLED = True
+    SourcePollingControl.objects.create(source="avito", mode="full", enabled=True)
     collector = AsyncMock()
     collector.stop_requested = False
     collector.__aenter__.return_value = collector
@@ -42,6 +43,16 @@ def test_search_id_must_be_enabled(search):
     search.save()
     with pytest.raises(CommandError):
         call_command("collect_listings", source="avito", mode="fast", search_id=search.pk)
+
+
+def test_source_wide_switch_skips_collector(search):
+    SourcePollingControl.objects.create(source="avito", mode="fast", enabled=False)
+    output = StringIO()
+    with patch("listings.management.commands.collect_listings.get_collector") as factory:
+        call_command("collect_listings", source="avito", mode="fast", stdout=output)
+    factory.assert_not_called()
+    assert "Fast polling disabled for avito" in output.getvalue()
+    assert not Scan.objects.exists()
 
 
 def test_admin_auth_and_search_creation(client, admin_client):
