@@ -37,6 +37,8 @@ class CollectionResult:
     next_page: int | None = None
     expected_total: int | None = None
     total_changes: int = 0
+    skipped_cards: int = 0
+    safe_for_deactivation: bool = True
 
 
 class CollectionError(RuntimeError):

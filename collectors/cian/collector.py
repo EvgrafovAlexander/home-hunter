@@ -92,6 +92,36 @@ class CianCollector(BaseCollector):
         )
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
 
+    async def _restart_browser(self):
+        """Start a fresh browser session before retrying an inconsistent SERP page."""
+        try:
+            if self.context:
+                await self.context.close()
+        finally:
+            self.context = self.page = None
+            if self.playwright:
+                await self.playwright.stop()
+            self.playwright = None
+        await self._start()
+
+    async def _load_parsed_page(self, url, search, number):
+        parsed = parse_page(await self._load_page(url), url)
+        if not parsed.errors:
+            return parsed
+        logger.warning(
+            "CIAN search=%s page=%s has %s damaged/mismatched cards; retrying with a fresh session",
+            search.pk, number, parsed.errors,
+        )
+        await self._restart_browser()
+        retried = parse_page(await self._load_page(url), url)
+        if retried.errors:
+            logger.warning(
+                "CIAN search=%s page=%s still has %s damaged/mismatched cards; "
+                "saving valid cards and disabling disappearance reconciliation for this pass",
+                search.pk, number, retried.errors,
+            )
+        return retried
+
     async def _load_page(self, url):
         self._check_cooldown()
         delay = self.state.read()["next_request_at"] - time.time()
@@ -156,7 +186,7 @@ class CianCollector(BaseCollector):
             expected_total = 0
             limit = settings.CIAN_FAST_SCAN_PAGES if mode == "fast" else (page_budget or settings.CIAN_FULL_BATCH_PAGES)
             for number in range(start_page, start_page + limit):
-                parsed = parse_page(await self._load_page(url), url)
+                parsed = await self._load_parsed_page(url, search, number)
                 result.pages_scanned += 1
                 result.items_seen += parsed.card_count
                 if expected_total and parsed.total != expected_total:
@@ -183,7 +213,8 @@ class CianCollector(BaseCollector):
                         fresh += 1
                 logger.info("CIAN search=%s page=%s cards=%s total=%s", search.pk, number, parsed.card_count, parsed.total)
                 if parsed.errors:
-                    raise ValueError(f"CIAN damaged/mismatched cards: {parsed.errors}")
+                    result.skipped_cards += parsed.errors
+                    result.safe_for_deactivation = False
                 if progress_callback:
                     progress = progress_callback(result.pages_scanned, result.items_seen, len(seen))
                     if inspect.isawaitable(progress):

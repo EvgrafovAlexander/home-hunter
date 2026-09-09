@@ -138,7 +138,13 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Sca
                     listing__external_id__in=completed_keys,
                 ).values_list("listing_id", flat=True))
                 checkpoint.delete()
-                cian_full_completed = True
+                cian_full_completed = result.safe_for_deactivation
+                if not cian_full_completed:
+                    logger.warning(
+                        "CIAN full cycle completed with %s skipped damaged cards; "
+                        "disappearance reconciliation was skipped",
+                        result.skipped_cards,
+                    )
             else:
                 checkpoint.next_page = result.next_page
                 checkpoint.save()

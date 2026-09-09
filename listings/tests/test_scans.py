@@ -60,6 +60,20 @@ def test_cian_full_deactivates_listing_after_two_completed_passes(item):
                for event in change_events([*missing.snapshots.all()]) for change in event["changes"])
 
 
+def test_cian_damaged_full_cycle_never_reconciles_missing_listing(item):
+    search = SearchQuery.objects.create(name="CIAN", source="cian", url="https://ufa.cian.ru/cat.php?region=1")
+    missing = process_listing(search, replace(item, source="cian"), timezone.now()).listing
+    incomplete_for_reconciliation = CollectionResult(
+        complete=True, expected_total=0, skipped_cards=2, safe_for_deactivation=False,
+    )
+
+    scan = run_scan(search, FakeCollector(incomplete_for_reconciliation), mode="full")
+
+    missing.refresh_from_db()
+    assert scan.status == "success"
+    assert missing.is_active and ListingSearchQuery.objects.get(listing=missing).is_active
+
+
 @pytest.mark.parametrize("mode,complete,fail", [("fast", True, False), ("full", False, False), ("full", True, True)])
 def test_partial_failed_fast_do_not_deactivate(search, item, mode, complete, fail):
     listing = process_listing(search, item, timezone.now()).listing

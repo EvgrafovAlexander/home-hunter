@@ -102,6 +102,23 @@ def test_full_continues_when_live_total_changes():
     assert result.total_changes == 1
 
 
+def test_retries_damaged_page_in_fresh_session():
+    c = collector([html(damaged=True), html()])
+    result = asyncio.run(c.collect(SEARCH, mode='full'))
+    assert result.complete and len(result.listings) == 1
+    assert result.safe_for_deactivation and not result.skipped_cards
+    assert c._load_page.await_count == 2
+    assert c._start.await_count == 2
+
+
+def test_keeps_valid_cards_after_repeated_damage_without_failing_cycle():
+    c = collector([html((1, 2), page=2, damaged=True), html((1, 2), page=2, damaged=True)])
+    result = asyncio.run(c.collect(SEARCH, mode='full', start_page=2))
+    assert result.complete and len(result.listings) == 1
+    assert not result.safe_for_deactivation
+    assert result.skipped_cards >= 1
+
+
 def test_reports_progress_after_each_page():
     reported = []
 
