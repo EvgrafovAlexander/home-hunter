@@ -308,7 +308,7 @@ def add_listing_score(listings, preferences=None):
             if not preference_checks[-1]: reasons.append("нет обязательного фото")
         if preferences.use_ufa_target_zones:
             location_score, location_reason = target_location_score(item)
-            reasons.append(location_reason)
+            reasons.insert(0, location_reason)
         components = {
             "market_weight": market_score, "freshness_weight": freshness_score,
             "data_weight": data_score, "floor_weight": floor_score,
