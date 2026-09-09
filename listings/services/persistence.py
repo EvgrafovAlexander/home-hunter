@@ -138,7 +138,8 @@ def process_listing(
     ListingSearchQuery.objects.update_or_create(
         listing=listing, search_query=search_query,
         defaults={"last_seen_at": observed_at, "is_active": True},
-        create_defaults={"first_seen_at": observed_at, "last_seen_at": observed_at, "is_active": True},
+        create_defaults={"first_seen_at": observed_at, "last_seen_at": observed_at, "is_active": True,
+                         "missed_full_scans": 0},
     )
     if created:
         from listings.services.deal_alerts import notify_new_deal

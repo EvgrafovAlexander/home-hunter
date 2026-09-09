@@ -33,6 +33,7 @@ def test_initial_and_unchanged(search, item):
     assert second.listing.last_seen_at == later
     relation = ListingSearchQuery.objects.get()
     assert relation.first_seen_at == now and relation.last_seen_at == later
+    assert relation.missed_full_scans == 0
 
 
 def test_price_and_description(search, item):
