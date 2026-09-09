@@ -83,6 +83,7 @@ class ScoringPreference(models.Model):
     price_history_weight = models.PositiveSmallIntegerField(default=10)
     preference_weight = models.PositiveSmallIntegerField(default=20)
     location_weight = models.PositiveSmallIntegerField(default=35)
+    condition_weight = models.PositiveSmallIntegerField(default=25)
     use_ufa_target_zones = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 

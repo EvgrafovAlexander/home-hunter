@@ -231,6 +231,16 @@ def target_location_score(listing):
     return 18, "далеко от целевых локаций"
 
 
+def condition_score(listing):
+    """Conservative text signals: unknown condition is neutral, never a bonus."""
+    text = f"{listing.title} {listing.description or ''}".lower()
+    if any(value in text for value in ("требует ремонта", "под ремонт", "без ремонта", "нужен ремонт")):
+        return 20, "требуется ремонт"
+    if any(value in text for value in ("дизайнерск", "евроремонт", "качественный ремонт", "новый ремонт", "новым ремонтом")):
+        return 85, "есть признаки хорошего ремонта"
+    return 50, "состояние не подтверждено"
+
+
 def add_listing_score(listings, preferences=None):
     """Attach an explainable 0–100 search score to each listing."""
     listings = list(listings)
@@ -257,6 +267,11 @@ def add_listing_score(listings, preferences=None):
                 market_score = 50
         else:
             market_score = 50
+        # A discount based on a small sample is informative, but should not dominate the ranking.
+        market_confidence = min(1, (item.market_samples or 0) / 20)
+        market_score = 50 + (market_score - 50) * market_confidence
+        if item.market_samples:
+            reasons.append(f"цена сопоставлена с {item.market_samples} аналогами")
         age_days = max(0, (now - item.first_seen_at).total_seconds() / 86400) if item.first_seen_at else 999
         if age_days <= 1:
             freshness_score = 100; reasons.append("добавлено сегодня")
@@ -309,10 +324,13 @@ def add_listing_score(listings, preferences=None):
         if preferences.use_ufa_target_zones:
             location_score, location_reason = target_location_score(item)
             reasons.insert(0, location_reason)
+        condition_value, condition_reason = condition_score(item)
+        reasons.append(condition_reason)
         components = {
             "market_weight": market_score, "freshness_weight": freshness_score,
             "data_weight": data_score, "floor_weight": floor_score,
             "price_history_weight": history_score,
+            "condition_weight": condition_value,
         }
         if preference_checks:
             components["preference_weight"] = 100 * sum(preference_checks) / len(preference_checks)
@@ -325,6 +343,7 @@ def add_listing_score(listings, preferences=None):
             "market_weight": "Цена относительно рынка", "location_weight": "Локация",
             "freshness_weight": "Свежесть", "data_weight": "Полнота данных",
             "floor_weight": "Этаж", "price_history_weight": "История цены",
+            "condition_weight": "Состояние квартиры",
             "preference_weight": "Ваши условия",
         }
         item.score_breakdown = [
