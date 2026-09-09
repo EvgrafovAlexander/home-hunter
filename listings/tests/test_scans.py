@@ -5,6 +5,7 @@ from collectors.base import BaseCollector, CollectionError, CollectionResult
 from listings.models import ListingSearchQuery, ListingSnapshot, Scan, SearchQuery
 from listings.services.persistence import process_listing
 from listings.services.scans import run_scan
+from listings.services.change_history import change_events
 from .test_persistence import search, item
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -53,7 +54,10 @@ def test_cian_full_deactivates_listing_after_two_completed_passes(item):
     missing.refresh_from_db()
     relation.refresh_from_db()
     assert not relation.is_active and not missing.is_active
-    assert ListingSnapshot.objects.filter(listing=missing, data__is_active=False).exists()
+    snapshot = ListingSnapshot.objects.get(listing=missing, data__is_active=False)
+    assert snapshot.data["deactivation_reason"] == "Не найдено в двух завершённых full-проходах ЦИАН"
+    assert any(change["label"] == snapshot.data["deactivation_reason"]
+               for event in change_events([*missing.snapshots.all()]) for change in event["changes"])
 
 
 @pytest.mark.parametrize("mode,complete,fail", [("fast", True, False), ("full", False, False), ("full", True, True)])

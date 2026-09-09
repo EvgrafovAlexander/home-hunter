@@ -63,7 +63,10 @@ def finalize_cian_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
     observed_at = timezone.now()
     ListingSnapshot.objects.bulk_create([
         ListingSnapshot(listing=listing, observed_at=observed_at,
-                        data=snapshot_data_from_listing(listing, is_active=False))
+                        data={
+                            **snapshot_data_from_listing(listing, is_active=False),
+                            "deactivation_reason": "Не найдено в двух завершённых full-проходах ЦИАН",
+                        })
         for listing in deactivated
     ])
     Listing.objects.filter(pk__in=[listing.pk for listing in deactivated]).update(is_active=False)
@@ -82,6 +85,7 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Sca
             if checkpoint.search_url != search.url:
                 checkpoint.search_url, checkpoint.next_page = search.url, 1
                 checkpoint.expected_total, checkpoint.external_ids = None, []
+                checkpoint.cycle_started_at, checkpoint.total_changes = timezone.now(), 0
                 checkpoint.save()
             start_page = checkpoint.next_page
         collection_error = None
@@ -123,6 +127,7 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Sca
             # Total offers can change while CIAN serves a live, paginated result
             # set. Keep collecting and reconcile removals conservatively below.
             checkpoint.expected_total = result.expected_total
+            checkpoint.total_changes += result.total_changes
             checkpoint.external_ids = sorted(set(checkpoint.external_ids).union(
                 external_id for _, external_id in seen_keys
             ))

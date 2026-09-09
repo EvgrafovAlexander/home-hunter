@@ -36,6 +36,7 @@ class CollectionResult:
     stop_reason: str = ""
     next_page: int | None = None
     expected_total: int | None = None
+    total_changes: int = 0
 
 
 class CollectionError(RuntimeError):

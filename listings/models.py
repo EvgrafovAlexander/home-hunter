@@ -147,6 +147,8 @@ class CianFullScanCheckpoint(models.Model):
     next_page = models.PositiveIntegerField(default=1)
     expected_total = models.PositiveIntegerField(null=True, blank=True)
     external_ids = models.JSONField(default=list)
+    cycle_started_at = models.DateTimeField(default=timezone.now)
+    total_changes = models.PositiveSmallIntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
 
 

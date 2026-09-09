@@ -5,7 +5,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from listings.models import Listing, ListingSnapshot, PriceHistory, Scan, ScoringPreference, SearchQuery, SourcePollingControl
+from listings.models import (CianFullScanCheckpoint, Listing, ListingSearchQuery, ListingSnapshot, PriceHistory,
+                             Scan, ScoringPreference, SearchQuery, SourcePollingControl)
 from listings.views import add_listing_score, add_market_position, next_poll_runs
 
 
@@ -282,6 +283,21 @@ class ListingViewsTests(TestCase):
         fast_mode = next(mode for mode in cian["modes"] if mode["mode"] == "fast")
         self.assertEqual(fast_mode["health"], "error")
         self.assertContains(response, "3 ошибки подряд")
+
+    def test_scan_statistics_shows_cian_cycle_and_disappeared_candidates(self):
+        search = SearchQuery.objects.create(name="CIAN search", source="cian", url="https://example.test/cian")
+        ListingSearchQuery.objects.create(listing=self.match, search_query=search, missed_full_scans=1)
+        CianFullScanCheckpoint.objects.create(
+            search_query=search, search_url=search.url, next_page=4, expected_total=100,
+            external_ids=["one", "two"], total_changes=2,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("scan_statistics"))
+        self.assertContains(response, "Полный цикл ЦИАН")
+        self.assertContains(response, "Кандидаты на исчезновение: 1")
+        response = self.client.get(reverse("disappeared_listings"))
+        self.assertContains(response, "Нужна проверка")
+        self.assertContains(response, "Пропуск: 1/2")
 
     def test_scan_statistics_can_disable_and_enable_source(self):
         self.client.force_login(self.user)

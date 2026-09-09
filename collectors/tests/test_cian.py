@@ -99,6 +99,7 @@ def test_full_continues_when_live_total_changes():
     result = asyncio.run(c.collect(SEARCH, mode='full'))
     assert result.complete and result.pages_scanned == 4
     assert result.expected_total == 4 and len(result.listings) == 4
+    assert result.total_changes == 1
 
 
 def test_reports_progress_after_each_page():

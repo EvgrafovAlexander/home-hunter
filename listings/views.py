@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
+from math import ceil
 from statistics import median
 from zoneinfo import ZoneInfo
 
@@ -9,8 +10,9 @@ from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
-from .models import (District, Listing, ListingSnapshot, ManualDomclickJob, Microdistrict, PriceHistory,
-                     Scan, ScoringPreference, SearchQuery, SourcePollingControl, StreetAssignment)
+from .models import (CianFullScanCheckpoint, District, Listing, ListingSearchQuery, ListingSnapshot,
+                     ManualDomclickJob, Microdistrict, PriceHistory, Scan, ScoringPreference, SearchQuery,
+                     SourcePollingControl, StreetAssignment)
 from .services.enrichment import location_is_visible, parse_address
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
@@ -510,6 +512,13 @@ def scan_statistics(request):
     sources = []
     now = timezone.now()
     controls = {(control.source, control.mode): control.enabled for control in SourcePollingControl.objects.all()}
+    cian_checkpoints = {
+        checkpoint.search_query_id: checkpoint
+        for checkpoint in CianFullScanCheckpoint.objects.select_related("search_query")
+    }
+    cian_candidate_count = ListingSearchQuery.objects.filter(
+        search_query__source=SearchQuery.Source.CIAN, missed_full_scans__gt=0,
+    ).count()
     for value, label in SearchQuery.Source.choices:
         recent_scans = list(Scan.objects.filter(source=value).select_related("search_query")
                             .order_by("-started_at", "-id")[:20])
@@ -535,6 +544,25 @@ def scan_statistics(request):
              if any(mode["health"] == health for mode in modes)),
             "unknown",
         )
+        full_cycle = None
+        if value == SearchQuery.Source.CIAN:
+            checkpoint = next((cian_checkpoints.get(scan.search_query_id) for scan in recent_scans
+                               if scan.mode == Scan.Mode.FULL and cian_checkpoints.get(scan.search_query_id)), None)
+            if checkpoint is None:
+                checkpoint = next(iter(cian_checkpoints.values()), None)
+            if checkpoint:
+                last_full = next((scan for scan in recent_scans if scan.mode == Scan.Mode.FULL), None)
+                per_page = max(1, (last_full.items_seen // last_full.pages_scanned)
+                               if last_full and last_full.pages_scanned else 28)
+                estimated_pages = ceil(checkpoint.expected_total / per_page) if checkpoint.expected_total else None
+                full_cycle = {
+                    "search_name": checkpoint.search_query.name, "started_at": checkpoint.cycle_started_at,
+                    "next_page": checkpoint.next_page, "expected_total": checkpoint.expected_total,
+                    "collected_count": len(checkpoint.external_ids), "total_changes": checkpoint.total_changes,
+                    "estimated_pages": estimated_pages,
+                    "progress": min(100, round(100 * len(checkpoint.external_ids) / checkpoint.expected_total))
+                    if checkpoint.expected_total else 0,
+                }
         sources.append({
             "value": value, "label": label, "modes": modes, "health": source_health,
             "icon": {"avito": "A", "cian": "⌖", "domclick": "⌂"}[value],
@@ -543,10 +571,22 @@ def scan_statistics(request):
             "successful_runs": sum(
                 scan.status == Scan.Status.SUCCESS for mode in modes for scan in mode["scans"]
             ),
+            "full_cycle": full_cycle, "candidate_count": cian_candidate_count if value == "cian" else 0,
         })
     manual_domclick_job = ManualDomclickJob.objects.select_related("scan").order_by("-id").first()
     return render(request, "listings/scan_statistics.html", {
         "sources": sources, "manual_domclick_job": manual_domclick_job,
+    })
+
+
+@login_required
+def disappeared_listings(request):
+    relations = (ListingSearchQuery.objects.filter(
+        search_query__source=SearchQuery.Source.CIAN, missed_full_scans__gt=0,
+    ).select_related("listing", "search_query").order_by("-missed_full_scans", "-last_seen_at"))
+    return render(request, "listings/disappeared_listings.html", {
+        "candidates": relations.filter(is_active=True),
+        "disappeared": relations.filter(is_active=False),
     })
 
 

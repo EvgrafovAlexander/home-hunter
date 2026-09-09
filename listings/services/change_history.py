@@ -35,6 +35,8 @@ def _description_change(before, after):
 
 
 def _field_change(field, before, after):
+    if field == "deactivation_reason":
+        return {"label": str(after), "before": None, "after": None} if after else None
     if field == "price":
         return {"label": "Цена", "before": _number(before, " ₽"), "after": _number(after, " ₽")}
     if field == "price_per_sqm":
@@ -66,6 +68,7 @@ def _field_change(field, before, after):
 TRACKED_FIELDS = (
     "price", "price_per_sqm", "rooms", "area", "floor", "floors_total", "address", "district",
     "microdistrict", "title", "published_text", "image_url", "description", "is_visible", "is_active",
+    "deactivation_reason",
 )
 
 
@@ -82,6 +85,7 @@ def change_events(snapshots):
                 _field_change(field, previous.get(field), data.get(field))
                 for field in TRACKED_FIELDS if previous.get(field) != data.get(field)
             ]
+            changes = [change for change in changes if change]
             if changes:
                 events.append({"observed_at": snapshot.observed_at, "initial": False, "changes": changes})
         previous = data
