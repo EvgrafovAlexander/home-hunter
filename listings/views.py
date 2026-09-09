@@ -88,7 +88,12 @@ def _integer(value):
 
 def _decimal(value):
     try:
-        return Decimal(value) if value not in (None, "") else None
+        if value in (None, ""):
+            return None
+        # Browsers and keyboards in the Russian locale commonly submit a
+        # decimal comma.  Decimal only accepts a dot, so normalise it before
+        # saving a user-entered area filter.
+        return Decimal(str(value).strip().replace(",", "."))
     except (InvalidOperation, TypeError, ValueError):
         return None
 
@@ -481,46 +486,52 @@ def scan_statistics(request):
             )
         return redirect("scan_statistics")
 
+    def scan_health(scans, enabled):
+        last_success = next((scan for scan in scans if scan.status == Scan.Status.SUCCESS), None)
+        failed_in_a_row = 0
+        for scan in scans:
+            if scan.status != Scan.Status.FAILED:
+                break
+            failed_in_a_row += 1
+        if not enabled:
+            return "disabled", "Отключено", "Опросы отключены в интерфейсе.", last_success, failed_in_a_row
+        if not scans:
+            return "unknown", "Нет данных", "Опросы ещё не запускались.", last_success, failed_in_a_row
+        if scans[0].status == Scan.Status.RUNNING:
+            return "running", "Выполняется", "Сейчас идёт опрос площадки.", last_success, failed_in_a_row
+        if failed_in_a_row >= 3:
+            return "error", "Ошибка", f"{failed_in_a_row} ошибки подряд.", last_success, failed_in_a_row
+        if scans[0].status == Scan.Status.FAILED:
+            return "warning", "Внимание", "Последний опрос завершился ошибкой.", last_success, failed_in_a_row
+        if not last_success or not last_success.finished_at or last_success.finished_at < now - SCAN_STALE_AFTER:
+            return "warning", "Данные устарели", "Нет успешного опроса за последние 6 часов.", last_success, failed_in_a_row
+        return "healthy", "В норме", "Последний опрос завершился успешно.", last_success, failed_in_a_row
+
     sources = []
     now = timezone.now()
     controls = {(control.source, control.mode): control.enabled for control in SourcePollingControl.objects.all()}
     for value, label in SearchQuery.Source.choices:
         recent_scans = list(Scan.objects.filter(source=value).select_related("search_query")
                             .order_by("-started_at", "-id")[:20])
-        last_success = next((scan for scan in recent_scans if scan.status == Scan.Status.SUCCESS), None)
-        failed_in_a_row = 0
-        for scan in recent_scans:
-            if scan.status != Scan.Status.FAILED:
-                break
-            failed_in_a_row += 1
-        fast_enabled = controls.get((value, Scan.Mode.FAST), default_polling_enabled(value, Scan.Mode.FAST))
-        if not fast_enabled:
-            health, health_label, health_reason = "disabled", "Отключено", "Опросы отключены в интерфейсе."
-        elif not recent_scans:
-            health, health_label, health_reason = "unknown", "Нет данных", "Опросы ещё не запускались."
-        elif recent_scans[0].status == Scan.Status.RUNNING:
-            health, health_label, health_reason = "running", "Выполняется", "Сейчас идёт опрос площадки."
-        elif failed_in_a_row >= 3:
-            health, health_label = "error", "Ошибка"
-            health_reason = f"{failed_in_a_row} ошибки подряд."
-        elif recent_scans[0].status == Scan.Status.FAILED:
-            health, health_label, health_reason = "warning", "Внимание", "Последний опрос завершился ошибкой."
-        elif not last_success or not last_success.finished_at or last_success.finished_at < now - SCAN_STALE_AFTER:
-            health, health_label, health_reason = "warning", "Данные устарели", "Нет успешного опроса за последние 6 часов."
-        else:
-            health, health_label, health_reason = "healthy", "В норме", "Последний опрос завершился успешно."
         next_runs = [
             {"mode": mode, "label": run_label, "scheduled_at": scheduled_at, "delay": delay,
              "enabled": controls.get((value, mode), default_polling_enabled(value, mode)),
              "locked": polling_mode_locked(value, mode)}
             for mode, run_label, scheduled_at, delay in next_poll_runs(value, now)
         ]
+        modes = []
+        for run in next_runs:
+            mode_scans = [scan for scan in recent_scans if scan.mode == run["mode"]]
+            health, health_label, health_reason, last_success, failed_in_a_row = scan_health(
+                mode_scans, run["enabled"],
+            )
+            modes.append({
+                **run, "scans": mode_scans[:3], "health": health, "health_label": health_label,
+                "health_reason": health_reason, "last_success": last_success,
+                "failed_in_a_row": failed_in_a_row,
+            })
         sources.append({
-            "value": value, "label": label, "fast_enabled": fast_enabled,
-            "next_runs": next_runs,
-            "scans": recent_scans[:3], "last_success": last_success,
-            "failed_in_a_row": failed_in_a_row, "health": health,
-            "health_label": health_label, "health_reason": health_reason,
+            "value": value, "label": label, "modes": modes,
         })
     manual_domclick_job = ManualDomclickJob.objects.select_related("scan").order_by("-id").first()
     return render(request, "listings/scan_statistics.html", {

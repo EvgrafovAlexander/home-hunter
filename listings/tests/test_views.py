@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone as datetime_timezone
+from decimal import Decimal
 
 from django.test import TestCase
 from django.urls import reverse
@@ -145,6 +146,20 @@ class ListingViewsTests(TestCase):
         self.assertEqual(preference.market_weight, 60)
         self.assertContains(self.client.get(reverse("scoring_settings")), "Настройки оценки")
 
+    def test_scoring_settings_preserves_min_area_entered_with_decimal_comma(self):
+        self.client.force_login(self.user)
+        self.client.post(reverse("scoring_settings"), {
+            "min_area": "60,5", "market_weight": "45", "freshness_weight": "20",
+            "data_weight": "15", "floor_weight": "10", "price_history_weight": "10",
+            "preference_weight": "20",
+        })
+
+        preference = ScoringPreference.objects.get(user=self.user)
+        self.assertEqual(preference.min_area, Decimal("60.50"))
+        response = self.client.get(reverse("scoring_settings"))
+        self.assertContains(response, 'name="min_area"')
+        self.assertContains(response, 'value="60.50"')
+
     def test_listing_score_explains_unmet_personal_condition(self):
         preference = ScoringPreference.objects.create(user=self.user, min_area="60.00", preference_weight=50)
         self.match.market_delta_pct = 0
@@ -245,10 +260,16 @@ class ListingViewsTests(TestCase):
         for index in range(4):
             Scan.objects.create(search_query=search, source="avito", mode="fast", status="success",
                                 items_seen=index, new_items=index)
+        Scan.objects.create(search_query=search, source="avito", mode="full", status="success")
         self.client.force_login(self.user)
         response = self.client.get(reverse("scan_statistics"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.context["sources"][0]["scans"]), 3)
+        fast_mode = response.context["sources"][0]["modes"][0]
+        self.assertEqual(fast_mode["mode"], "fast")
+        self.assertEqual(len(fast_mode["scans"]), 3)
+        full_mode = response.context["sources"][0]["modes"][1]
+        self.assertEqual(full_mode["mode"], "full")
+        self.assertEqual(len(full_mode["scans"]), 1)
         self.assertContains(response, "Avito search", count=3)
 
     def test_scan_statistics_highlights_consecutive_failures(self):
@@ -258,7 +279,8 @@ class ListingViewsTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("scan_statistics"))
         cian = next(source for source in response.context["sources"] if source["label"] == "CIAN")
-        self.assertEqual(cian["health"], "error")
+        fast_mode = next(mode for mode in cian["modes"] if mode["mode"] == "fast")
+        self.assertEqual(fast_mode["health"], "error")
         self.assertContains(response, "3 ошибки подряд")
 
     def test_scan_statistics_can_disable_and_enable_source(self):
