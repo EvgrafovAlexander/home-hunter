@@ -321,6 +321,17 @@ def add_listing_score(listings, preferences=None):
         total_weight = sum(getattr(preferences, weight) for weight in components)
         score = sum(value * getattr(preferences, weight) for weight, value in components.items()) / total_weight if total_weight else 0
         item.score = round(max(0, min(100, score)))
+        labels = {
+            "market_weight": "Цена относительно рынка", "location_weight": "Локация",
+            "freshness_weight": "Свежесть", "data_weight": "Полнота данных",
+            "floor_weight": "Этаж", "price_history_weight": "История цены",
+            "preference_weight": "Ваши условия",
+        }
+        item.score_breakdown = [
+            {"label": labels[key], "score": round(value), "weight": getattr(preferences, key),
+             "contribution": round(value * getattr(preferences, key) / total_weight) if total_weight else 0}
+            for key, value in components.items() if getattr(preferences, key)
+        ]
         item.score_reasons = reasons[:3]
         item.score_label = "Высокий интерес" if item.score >= 75 else (
             "Стоит посмотреть" if item.score >= 60 else "Нейтрально"
