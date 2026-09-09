@@ -57,6 +57,17 @@ def integer(value):
     return int(number)
 
 
+def building_year(building):
+    for key in ("buildYear", "yearBuilt", "year", "constructionYear"):
+        try:
+            year = integer((building or {}).get(key))
+        except (ValueError, TypeError, ArithmeticError):
+            continue
+        if year is not None and 1800 <= year <= 2100:
+            return year
+    return None
+
+
 def parse_page(html: str, url: str) -> ParsedPage:
     soup = BeautifulSoup(html, "html.parser")
     results = initial_results(soup)
@@ -108,12 +119,13 @@ def parse_page(html: str, url: str) -> ParsedPage:
             address = (offer.get("geo") or {}).get("address") or []
             photos = offer.get("photos") or []
             photo = next((p for p in photos if p.get("isDefault")), photos[0] if photos else {})
+            building = offer.get("building") or {}
             parsed.listings.append(NormalizedListing(
                 source="cian", external_id=identifier, url=urlunsplit(link._replace(query="", fragment="")),
                 title=title[:1000], price=price, price_per_sqm=per_sqm,
                 rooms=integer(offer.get("roomsCount")), area=area,
                 floor=integer(offer.get("floorNumber")),
-                floors_total=integer((offer.get("building") or {}).get("floorsCount")),
+                floors_total=integer(building.get("floorsCount")), built_year=building_year(building),
                 address=", ".join(a["fullName"] for a in address if a.get("fullName")) or None,
                 district=next((a.get("name") for a in address if a.get("type") == "raion"), None),
                 description=offer.get("description"), published_text=(offer.get("added") or "")[:255] or None,

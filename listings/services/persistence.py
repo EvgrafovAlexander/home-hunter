@@ -10,7 +10,7 @@ from listings.services.location_directory import resolve_location
 
 SIGNIFICANT_FIELDS = (
     "price", "price_per_sqm", "title", "description", "address", "district", "microdistrict",
-    "is_visible", "rooms", "area", "floor", "floors_total", "published_text", "image_url",
+    "is_visible", "rooms", "area", "floor", "floors_total", "built_year", "published_text", "image_url",
 )
 
 

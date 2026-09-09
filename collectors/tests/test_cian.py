@@ -15,13 +15,13 @@ URL = 'https://ufa.cian.ru/cat.php?region=176245&room2=1&room3=1'
 SEARCH = SimpleNamespace(pk=1, name='CIAN', url=URL)
 
 
-def html(ids=(330738483,), *, page=1, next_page=None, total=None, newest=False, damaged=False):
+def html(ids=(330738483,), *, page=1, next_page=None, total=None, newest=False, damaged=False, built_year=None):
     offers = []
     cards = []
     for identifier in ids:
         offers.append({'id':identifier, 'fullUrl':f'https://ufa.cian.ru/sale/flat/{identifier}/?context=volatile',
                        'title':None, 'formattedFullInfo':'2-комн.кв. · 73 м² · 8/25 этаж',
-                       'totalArea':'73.0', 'roomsCount':2, 'floorNumber':8, 'building':{'floorsCount':25},
+                       'totalArea':'73.0', 'roomsCount':2, 'floorNumber':8, 'building':{'floorsCount':25, 'buildYear':built_year},
                        'bargainTerms':{'priceRur':10000000}, 'geo':{'address':[{'fullName':'р-н Советский','name':'Советский','type':'raion'}]},
                        'description':'Публичное описание квартиры', 'added':'сегодня, 19:18',
                        'photos':[{'fullUrl':'https://images.cdn-cian.ru/images/example.jpg'}]})
@@ -59,6 +59,10 @@ def test_embedded_data_and_canonical_url():
     assert (item.area, item.floor, item.floors_total, item.price, item.price_per_sqm) == (Decimal('73'),8,25,10000000,136986)
     assert item.title and item.district == 'Советский'
     assert item.raw_data == {}
+
+
+def test_extracts_cian_building_year():
+    assert parse_page(html(built_year=2016), URL).listings[0].built_year == 2016
 
 
 def test_damaged_card_and_false_empty():

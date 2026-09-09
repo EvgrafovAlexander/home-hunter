@@ -99,6 +99,7 @@ class Listing(models.Model):
     area = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, db_index=True)
     floor = models.IntegerField(null=True, blank=True)
     floors_total = models.IntegerField(null=True, blank=True)
+    built_year = models.PositiveSmallIntegerField(null=True, blank=True, db_index=True)
     address = models.TextField(null=True, blank=True)
     district = models.CharField(max_length=255, null=True, blank=True)
     microdistrict = models.CharField(max_length=255, null=True, blank=True)

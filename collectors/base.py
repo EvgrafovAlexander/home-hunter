@@ -19,6 +19,7 @@ class NormalizedListing:
     area: Decimal | None = None
     floor: int | None = None
     floors_total: int | None = None
+    built_year: int | None = None
     address: str | None = None
     district: str | None = None
     description: str | None = None
