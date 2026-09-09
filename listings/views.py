@@ -538,6 +538,11 @@ def scan_statistics(request):
         sources.append({
             "value": value, "label": label, "modes": modes, "health": source_health,
             "icon": {"avito": "A", "cian": "⌖", "domclick": "⌂"}[value],
+            "items_seen": sum(scan.items_seen or 0 for mode in modes for scan in mode["scans"]),
+            "new_items": sum(scan.new_items or 0 for mode in modes for scan in mode["scans"]),
+            "successful_runs": sum(
+                scan.status == Scan.Status.SUCCESS for mode in modes for scan in mode["scans"]
+            ),
         })
     manual_domclick_job = ManualDomclickJob.objects.select_related("scan").order_by("-id").first()
     return render(request, "listings/scan_statistics.html", {
