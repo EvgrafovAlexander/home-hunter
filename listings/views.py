@@ -530,8 +530,14 @@ def scan_statistics(request):
                 "health_reason": health_reason, "last_success": last_success,
                 "failed_in_a_row": failed_in_a_row,
             })
+        source_health = next(
+            (health for health in ("running", "error", "warning", "disabled", "healthy", "unknown")
+             if any(mode["health"] == health for mode in modes)),
+            "unknown",
+        )
         sources.append({
-            "value": value, "label": label, "modes": modes,
+            "value": value, "label": label, "modes": modes, "health": source_health,
+            "icon": {"avito": "A", "cian": "⌖", "domclick": "⌂"}[value],
         })
     manual_domclick_job = ManualDomclickJob.objects.select_related("scan").order_by("-id").first()
     return render(request, "listings/scan_statistics.html", {
