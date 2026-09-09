@@ -40,6 +40,22 @@ def test_cian_full_never_deactivates_missing_listing(item):
     assert missing.is_active and ListingSearchQuery.objects.get(listing=missing).is_active
 
 
+def test_cian_full_deactivates_listing_after_two_completed_passes(item):
+    search = SearchQuery.objects.create(name="CIAN", source="cian", url="https://ufa.cian.ru/cat.php?region=1")
+    missing = process_listing(search, replace(item, source="cian"), timezone.now()).listing
+    complete_empty = CollectionResult(complete=True, expected_total=0)
+
+    run_scan(search, FakeCollector(complete_empty), mode="full")
+    relation = ListingSearchQuery.objects.get(listing=missing, search_query=search)
+    assert relation.is_active and relation.missed_full_scans == 1
+
+    run_scan(search, FakeCollector(complete_empty), mode="full")
+    missing.refresh_from_db()
+    relation.refresh_from_db()
+    assert not relation.is_active and not missing.is_active
+    assert ListingSnapshot.objects.filter(listing=missing, data__is_active=False).exists()
+
+
 @pytest.mark.parametrize("mode,complete,fail", [("fast", True, False), ("full", False, False), ("full", True, True)])
 def test_partial_failed_fast_do_not_deactivate(search, item, mode, complete, fail):
     listing = process_listing(search, item, timezone.now()).listing

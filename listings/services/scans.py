@@ -37,6 +37,38 @@ def finalize_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
     Listing.objects.filter(pk__in=active).update(is_active=True)
 
 
+@transaction.atomic
+def finalize_cian_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
+    """Mark CIAN offers inactive only after two complete passes miss them.
+
+    CIAN's live pagination can shift while a multi-batch pass is in progress.
+    Requiring a second completed pass avoids treating that shift as a removal.
+    """
+    relations = ListingSearchQuery.objects.filter(search_query=search)
+    relations.filter(listing_id__in=seen_ids).update(is_active=True, missed_full_scans=0)
+    missing = list(relations.exclude(listing_id__in=seen_ids).select_related("listing"))
+    newly_inactive_ids = []
+    for relation in missing:
+        relation.missed_full_scans += 1
+        if relation.missed_full_scans >= 2:
+            relation.is_active = False
+            newly_inactive_ids.append(relation.listing_id)
+        relation.save(update_fields=("missed_full_scans", "is_active"))
+    if not newly_inactive_ids:
+        return
+    still_active = ListingSearchQuery.objects.filter(
+        listing_id__in=newly_inactive_ids, is_active=True,
+    ).values("listing_id")
+    deactivated = list(Listing.objects.filter(pk__in=newly_inactive_ids, is_active=True).exclude(pk__in=still_active))
+    observed_at = timezone.now()
+    ListingSnapshot.objects.bulk_create([
+        ListingSnapshot(listing=listing, observed_at=observed_at,
+                        data=snapshot_data_from_listing(listing, is_active=False))
+        for listing in deactivated
+    ])
+    Listing.objects.filter(pk__in=[listing.pk for listing in deactivated]).update(is_active=False)
+
+
 def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Scan:
     scan = Scan.objects.create(search_query=search, source=search.source, mode=mode)
     logger.info("scan start id=%s search=%s mode=%s", scan.pk, search.name, mode)
@@ -85,30 +117,23 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Sca
                 checkpoint.next_page, checkpoint.expected_total, checkpoint.external_ids = 1, None, []
                 checkpoint.save()
             raise collection_error
+        cian_full_completed = False
         if checkpoint and not collection_error:
             checkpoint.refresh_from_db()
-            if checkpoint.expected_total not in (None, result.expected_total):
-                # The search changed while batches were being collected: start a
-                # fresh pass later, never deactivate from a mixed result set.
-                checkpoint.next_page, checkpoint.expected_total, checkpoint.external_ids = 1, None, []
-                checkpoint.save()
-                raise RuntimeError("CIAN total changed; checkpoint reset")
+            # Total offers can change while CIAN serves a live, paginated result
+            # set. Keep collecting and reconcile removals conservatively below.
             checkpoint.expected_total = result.expected_total
             checkpoint.external_ids = sorted(set(checkpoint.external_ids).union(
                 external_id for _, external_id in seen_keys
             ))
             if result.complete:
-                if len(checkpoint.external_ids) != checkpoint.expected_total:
-                    checkpoint.next_page = 1
-                    checkpoint.expected_total, checkpoint.external_ids = None, []
-                    checkpoint.save()
-                    raise RuntimeError("CIAN full checkpoint count does not match total")
                 completed_keys = set(checkpoint.external_ids)
                 seen_ids = set(ListingSearchQuery.objects.filter(
                     search_query=search, listing__source=SearchQuery.Source.CIAN,
                     listing__external_id__in=completed_keys,
                 ).values_list("listing_id", flat=True))
                 checkpoint.delete()
+                cian_full_completed = True
             else:
                 checkpoint.next_page = result.next_page
                 checkpoint.save()
@@ -121,6 +146,8 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Sca
             if (mode == Scan.Mode.FULL and result.complete
                     and search.source != SearchQuery.Source.CIAN):
                 finalize_full_scan(search, seen_ids)
+            elif cian_full_completed:
+                finalize_cian_full_scan(search, seen_ids)
             scan.status = Scan.Status.SUCCESS
             scan.finished_at = timezone.now()
             scan.save()

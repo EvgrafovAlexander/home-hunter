@@ -160,8 +160,10 @@ class CianCollector(BaseCollector):
                 result.pages_scanned += 1
                 result.items_seen += parsed.card_count
                 if expected_total and parsed.total != expected_total:
-                    result.expected_total = parsed.total
-                    raise ValueError("CIAN total changed during batch")
+                    logger.warning(
+                        "CIAN search=%s total changed during batch: %s -> %s on page=%s",
+                        search.pk, expected_total, parsed.total, number,
+                    )
                 expected_total = parsed.total
                 result.expected_total = expected_total
                 # Detect servers silently returning another page/filter (unsafe for deactivation).

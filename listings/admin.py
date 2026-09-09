@@ -36,7 +36,13 @@ class ScanAdmin(admin.ModelAdmin):
     readonly_fields = tuple(field.name for field in Scan._meta.fields)
 
 
-admin.site.register(ListingSearchQuery)
+@admin.register(ListingSearchQuery)
+class ListingSearchQueryAdmin(admin.ModelAdmin):
+    list_display = ("listing", "search_query", "is_active", "missed_full_scans", "last_seen_at")
+    list_filter = ("is_active", "search_query__source")
+    search_fields = ("listing__title", "listing__external_id", "search_query__name")
+
+
 admin.site.register(PriceHistory)
 admin.site.register(ListingSnapshot)
 admin.site.register(District)

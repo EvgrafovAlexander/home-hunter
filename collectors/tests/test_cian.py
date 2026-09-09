@@ -89,6 +89,18 @@ def test_full_follows_links_and_completes():
     assert result.complete and result.pages_scanned==2 and len(result.listings)==2
 
 
+def test_full_continues_when_live_total_changes():
+    c = collector([
+        html((1,), total=3, next_page=2),
+        html((2,), page=2, total=4, next_page=3),
+        html((3,), page=3, total=4, next_page=4),
+        html((4,), page=4, total=4),
+    ])
+    result = asyncio.run(c.collect(SEARCH, mode='full'))
+    assert result.complete and result.pages_scanned == 4
+    assert result.expected_total == 4 and len(result.listings) == 4
+
+
 def test_reports_progress_after_each_page():
     reported = []
 

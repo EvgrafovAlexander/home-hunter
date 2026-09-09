@@ -135,6 +135,7 @@ class ListingSearchQuery(models.Model):
     first_seen_at = models.DateTimeField(default=timezone.now)
     last_seen_at = models.DateTimeField(default=timezone.now)
     is_active = models.BooleanField(default=True)
+    missed_full_scans = models.PositiveSmallIntegerField(default=0)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["listing", "search_query"], name="unique_listing_search")]
