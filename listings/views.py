@@ -206,6 +206,31 @@ def scoring_preference_for(user):
     return ScoringPreference.objects.filter(user=user).first() or ScoringPreference(user=user)
 
 
+# Centres of the requested Ufa areas. Their overlapping radii form the target corridors.
+UFA_TARGET_POINTS = (
+    (54.7248, 55.9473),  # Гостиный двор
+    (54.7528, 56.0041),  # проспект Октября / Госцирк
+    (54.7418, 55.9776),  # Аграрный университет
+    (54.7340, 55.9865),  # Айская
+    (54.7200, 55.9960),  # Бакалинская
+)
+
+
+def target_location_score(listing):
+    if listing.latitude is None or listing.longitude is None:
+        return 50, "локация не уточнена"
+    latitude, longitude = float(listing.latitude), float(listing.longitude)
+    distance = min((((latitude - point_lat) * 111) ** 2 + ((longitude - point_lon) * 65) ** 2) ** .5
+                   for point_lat, point_lon in UFA_TARGET_POINTS)
+    if distance <= .7:
+        return 100, "в целевой локации"
+    if distance <= 1.5:
+        return 78, "рядом с целевой локацией"
+    if distance <= 2.5:
+        return 52, "вне приоритетной зоны"
+    return 18, "далеко от целевых локаций"
+
+
 def add_listing_score(listings, preferences=None):
     """Attach an explainable 0–100 search score to each listing."""
     listings = list(listings)
@@ -219,9 +244,9 @@ def add_listing_score(listings, preferences=None):
         reasons = []
         if item.market_delta_pct is not None:
             if item.market_delta_pct <= -10:
-                market_score = 100; reasons.append("существенно ниже рынка")
+                market_score = 75; reasons.append("существенно ниже рынка")
             elif item.market_delta_pct <= -4:
-                market_score = 85; reasons.append("ниже рынка")
+                market_score = 68; reasons.append("ниже рынка")
             elif item.market_delta_pct < 0:
                 market_score = 68; reasons.append("чуть ниже рынка")
             elif item.market_delta_pct >= 10:
@@ -281,6 +306,9 @@ def add_listing_score(listings, preferences=None):
         if preferences.prefer_photo:
             preference_checks.append(bool(item.image_url))
             if not preference_checks[-1]: reasons.append("нет обязательного фото")
+        if preferences.use_ufa_target_zones:
+            location_score, location_reason = target_location_score(item)
+            reasons.append(location_reason)
         components = {
             "market_weight": market_score, "freshness_weight": freshness_score,
             "data_weight": data_score, "floor_weight": floor_score,
@@ -288,6 +316,8 @@ def add_listing_score(listings, preferences=None):
         }
         if preference_checks:
             components["preference_weight"] = 100 * sum(preference_checks) / len(preference_checks)
+        if preferences.use_ufa_target_zones:
+            components["location_weight"] = location_score
         total_weight = sum(getattr(preferences, weight) for weight in components)
         score = sum(value * getattr(preferences, weight) for weight, value in components.items()) / total_weight if total_weight else 0
         item.score = round(max(0, min(100, score)))
