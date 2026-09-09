@@ -1,4 +1,4 @@
-<form class="filters" method="get">
+<form class="filters" method="get"><div class="filters-heading"><strong>Параметры поиска</strong><span>Измените условия — выдача обновится сразу после применения</span></div>
   <div><label>Источник</label><select name="source"><option value="">Все</option>{% for value, label in filter_options.sources %}<option value="{{ value }}" {% if filters.source == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
   <div><label>Район</label><select name="district"><option value="">Все</option>{% for district in filter_options.districts %}<option value="{{ district }}" {% if filters.district == district %}selected{% endif %}>{{ district }}</option>{% endfor %}</select></div>
   <div><label>Комнаты</label><select name="rooms"><option value="">Все</option>{% for room in filter_options.rooms %}<option value="{{ room }}" {% if filters.rooms == room|stringformat:'s' %}selected{% endif %}>{{ room }}</option>{% endfor %}</select></div>
