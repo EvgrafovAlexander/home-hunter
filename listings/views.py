@@ -5,7 +5,7 @@ from statistics import median
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Max, Q
 from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
@@ -806,12 +806,11 @@ def dashboard(request):
     for offset in range(period_days):
         day = (period_since + timedelta(days=offset)).date()
         daily.append({"label": day.strftime("%d.%m"), "count": by_day.get(day, 0)})
-    district_stats = list(listings.exclude(district__isnull=True).exclude(district="")
-                          .exclude(price_per_sqm__isnull=True).values("district")
-                          .annotate(count=Count("id"), average=Avg("price_per_sqm"),
+    district_stats = list(listings.exclude(district__isnull=True).exclude(district="").values("district")
+                          .annotate(count=Count("id"), average=Avg("price_per_sqm"), average_price=Avg("price"),
                                     average_area=Avg("area"),
                                     new_count=Count("id", filter=Q(first_seen_at__gte=period_since)))
-                          .order_by("-count", "district")[:8])
+                          .order_by("-count", "district")[:7])
     price_history = (PriceHistory.objects.filter(listing__in=listings, observed_at__gte=period_since,
                                                   price__isnull=False)
                      .select_related("listing").order_by("listing_id", "observed_at", "id"))
@@ -825,21 +824,44 @@ def dashboard(request):
         {**change, "difference": change["last"] - change["first"]}
         for change in price_changes.values() if change["last"] != change["first"]
     ]
-    price_drops = sorted((change for change in changes if change["difference"] < 0),
-                         key=lambda change: change["difference"])[:10]
-    scatter = list(listings.exclude(area__isnull=True).exclude(price__isnull=True)
-                   .order_by("-first_seen_at").values("area", "price")[:150])
+    price_drops = sorted(({
+        **change, "percent": round(change["difference"] / change["first"] * 100) if change["first"] else 0,
+    } for change in changes if change["difference"] < 0), key=lambda change: change["difference"])[:10]
     microdistrict_stats = microdistrict_market_stats(listings, period_since, filters)
+
+    def distribution(values, *, buckets, formatter):
+        if not values:
+            return []
+        low, high = min(values), max(values)
+        step = max(1, (high - low) / buckets)
+        rows = [{"label": formatter(low + step * index, low + step * (index + 1)), "count": 0}
+                for index in range(buckets)]
+        for value in values:
+            rows[min(buckets - 1, int((value - low) / step))]["count"] += 1
+        return rows
+
+    price_distribution = distribution(prices, buckets=7,
+        formatter=lambda low, high: f"{round(low / 1_000_000, 1):g}–{round(high / 1_000_000, 1):g} млн")
+    area_distribution = distribution([float(value) for value in listings.exclude(area__isnull=True).values_list("area", flat=True)], buckets=6,
+        formatter=lambda low, high: f"{round(low):g}–{round(high):g}")
+    rooms = dict(listings.filter(rooms__in=(2, 3)).values("rooms").annotate(count=Count("id")).values_list("rooms", "count"))
+    rooms_two, rooms_three = rooms.get(2, 0), rooms.get(3, 0)
+    total_rooms = rooms_two + rooms_three
     return render(request, "listings/dashboard.html", {
         "filters": filters, "filter_options": filter_options(), "total": listings.count(),
         "median_price": int(median(prices)) if prices else None,
         "median_sqm_price": int(median(sqm_prices)) if sqm_prices else None,
         "period_days": period_days, "daily": daily,
         "daily_max": max((item["count"] for item in daily), default=1) or 1,
-        "district_stats": district_stats, "scatter": scatter,
+        "district_stats": district_stats,
         "microdistrict_stats": microdistrict_stats,
         "microdistrict_min_sample": MICRODISTRICT_MARKET_MIN_SAMPLE,
-        "price_drop_count": len(price_drops),
+        "price_drop_count": len(price_drops), "price_unchanged_count": max(0, len(price_changes) - len(changes)),
         "price_increase_count": sum(change["difference"] > 0 for change in changes),
         "price_drops": price_drops,
+        "price_distribution": price_distribution, "area_distribution": area_distribution,
+        "distribution_max": max([1, *(row["count"] for row in price_distribution + area_distribution)]),
+        "rooms_two": rooms_two, "rooms_three": rooms_three, "rooms_total": total_rooms,
+        "rooms_two_pct": round(rooms_two / total_rooms * 100) if total_rooms else 0,
+        "last_updated": listings.aggregate(value=Max("last_seen_at"))["value"],
     })
