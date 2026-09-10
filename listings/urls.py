@@ -10,6 +10,7 @@ urlpatterns = [
     path("dashboard/", views.dashboard, name="dashboard"),
     path("scans/", views.scan_statistics, name="scan_statistics"),
     path("disappeared-listings/", views.disappeared_listings, name="disappeared_listings"),
+    path("unavailable-cian/", views.unavailable_cian_listings, name="unavailable_cian_listings"),
     path("data-quality/", views.data_quality, name="data_quality"),
     path("directory/", views.location_directory, name="location_directory"),
     path("scoring-settings/", views.scoring_settings, name="scoring_settings"),

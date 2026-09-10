@@ -690,6 +690,14 @@ def disappeared_listings(request):
 
 
 @login_required
+def unavailable_cian_listings(request):
+    """Archive of cards whose individual CIAN page confirmed removal."""
+    unavailable = (CianDetailPollState.objects.filter(status=CianDetailPollState.Status.UNAVAILABLE)
+                   .select_related("listing").order_by("-first_unavailable_at", "-last_checked_at"))
+    return render(request, "listings/unavailable_cian_listings.html", {"unavailable": unavailable})
+
+
+@login_required
 def data_quality(request):
     issue = request.GET.get("issue", "all")
     if request.method == "POST":

@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from listings.models import (CianFullScanCheckpoint, Listing, ListingSearchQuery, ListingSnapshot, PriceHistory,
+from listings.models import (CianDetailPollState, CianFullScanCheckpoint, Listing, ListingSearchQuery, ListingSnapshot, PriceHistory,
                              Scan, ScoringPreference, SearchQuery, SourcePollingControl)
 from listings.views import add_listing_score, add_market_position, next_poll_runs
 
@@ -298,6 +298,17 @@ class ListingViewsTests(TestCase):
         response = self.client.get(reverse("disappeared_listings"))
         self.assertContains(response, "Нужна проверка")
         self.assertContains(response, "Пропуск: 1/2")
+
+    def test_unavailable_cian_listings_shows_confirmed_detail_removals(self):
+        CianDetailPollState.objects.create(
+            listing=self.match, status=CianDetailPollState.Status.UNAVAILABLE,
+            first_unavailable_at=timezone.now(), detail_data={"status": "deactivated"},
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("unavailable_cian_listings"))
+        self.assertContains(response, "Снятые объявления ЦИАН")
+        self.assertContains(response, "Двушка")
+        self.assertContains(response, "deactivated")
 
     def test_scan_statistics_can_disable_and_enable_source(self):
         self.client.force_login(self.user)
