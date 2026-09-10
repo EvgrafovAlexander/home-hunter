@@ -128,7 +128,7 @@ class Listing(models.Model):
     is_active = models.BooleanField(default=True, db_index=True)
     publication_status = models.CharField(
         max_length=20, choices=PublicationStatus.choices,
-        default=PublicationStatus.PUBLISHED, db_index=True,
+        default=PublicationStatus.PUBLISHED, db_default=PublicationStatus.PUBLISHED, db_index=True,
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
