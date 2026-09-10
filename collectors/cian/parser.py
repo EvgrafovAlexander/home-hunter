@@ -190,7 +190,10 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
                      photos[0].get("fullUrl") if photos else None)
         title = ((state or {}).get("offerData") or {}).get("pageHelmetData", {}).get("title")
         listing = NormalizedListing(
-            source="cian", external_id=identifier, url=url, title=(title or f"Квартира {identifier}")[:1000],
+            # A detail response can legitimately omit pageHelmetData.title.  Do
+            # not manufacture a technical title here: the saved search card is
+            # the authoritative source for this display field.
+            source="cian", external_id=identifier, url=url, title=(title or "")[:1000],
             price=price, rooms=integer(offer.get("roomsCount")), area=area,
             floor=integer(offer.get("floorNumber")), floors_total=integer(building.get("floorsCount")),
             built_year=building_year(building),

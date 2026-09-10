@@ -10,7 +10,7 @@ from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
-from .models import (CianDetailPollState, CianFullScanCheckpoint, District, Listing, ListingSearchQuery, ListingSnapshot,
+from .models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, District, Listing, ListingSearchQuery, ListingSnapshot,
                      ManualDomclickJob, Microdistrict, PriceHistory, Scan, ScoringPreference, SearchQuery,
                      SourcePollingControl, StreetAssignment)
 from .services.enrichment import location_is_visible, parse_address
@@ -584,6 +584,32 @@ def scan_statistics(request):
     cian_candidate_count = ListingSearchQuery.objects.filter(
         search_query__source=SearchQuery.Source.CIAN, missed_full_scans__gt=0,
     ).count()
+    active_cian = Listing.objects.filter(source=SearchQuery.Source.CIAN, is_active=True)
+    cian_active_ids = set(active_cian.values_list("pk", flat=True))
+    cian_progress = CianDetailPollProgress.objects.select_related("current_listing").filter(source="cian").first()
+    detail_cycle = None
+    if cian_progress:
+        completed_ids = [pk for pk in cian_progress.completed_listing_ids if pk in cian_active_ids]
+        total = cian_progress.cycle_total or len(cian_active_ids)
+        completed = min(len(completed_ids), total)
+        elapsed_hours = max((now - cian_progress.cycle_started_at).total_seconds() / 3600, 0)
+        actual_rate = round(completed / elapsed_hours, 1) if completed and elapsed_hours >= 1 / 60 else None
+        # Until a measurable rate exists, use the configured cadence: six
+        # cards every quarter hour (24 cards/hour).
+        forecast_rate = actual_rate or 24
+        eta = now + timedelta(hours=max(total - completed, 0) / forecast_rate) if forecast_rate else None
+        next_queue = list(active_cian.exclude(pk__in=completed_ids).exclude(
+            pk=cian_progress.current_listing_id,
+        ).select_related("cian_detail_state").order_by(
+            F("cian_detail_state__last_checked_at").asc(nulls_first=True), "pk",
+        )[:5])
+        detail_cycle = {
+            "total": total, "completed": completed, "remaining": max(total - completed, 0),
+            "progress": min(100, round(100 * completed / total)) if total else 100,
+            "started_at": cian_progress.cycle_started_at, "current": cian_progress.current_listing,
+            "current_started_at": cian_progress.current_started_at, "next_queue": next_queue,
+            "actual_rate": actual_rate, "eta": eta, "last_completed_at": cian_progress.last_completed_at,
+        }
     for value, label in SearchQuery.Source.choices:
         recent_scans = list(Scan.objects.filter(source=value).select_related("search_query")
                             .order_by("-started_at", "-id")[:20])
@@ -638,11 +664,12 @@ def scan_statistics(request):
             ),
             "full_cycle": full_cycle, "candidate_count": cian_candidate_count if value == "cian" else 0,
             "detail_poll": ({
-                "total": Listing.objects.filter(source=SearchQuery.Source.CIAN, is_active=True).count(),
+                "total": len(cian_active_ids),
                 "checked": CianDetailPollState.objects.filter(listing__source=SearchQuery.Source.CIAN, last_checked_at__isnull=False).count(),
                 "published": CianDetailPollState.objects.filter(listing__source=SearchQuery.Source.CIAN, status="published").count(),
                 "errors": CianDetailPollState.objects.filter(listing__source=SearchQuery.Source.CIAN).exclude(last_error="").count(),
                 "last": CianDetailPollState.objects.filter(listing__source=SearchQuery.Source.CIAN, last_checked_at__isnull=False).order_by("-last_checked_at").first(),
+                "cycle": detail_cycle,
             } if value == "cian" else None),
         })
     manual_domclick_job = ManualDomclickJob.objects.select_related("scan").order_by("-id").first()

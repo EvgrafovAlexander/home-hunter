@@ -80,6 +80,15 @@ def test_parses_published_detail_and_photo_ids():
     assert detail.photos[0]["full_url"] == "https://images.cdn-cian.ru/images/11.jpg"
 
 
+def test_detail_without_marketing_title_does_not_make_technical_title():
+    state = {"offerData": {"pageHelmetData": {"title": ""}, "offer": {
+        "id": 330738483, "status": "published", "geo": {"address": []}, "photos": [],
+    }}}
+    config = json.dumps([{"key": "defaultState", "value": state}])
+    page = "<script>window._cianConfig['frontend-offer-card']=(window._cianConfig['frontend-offer-card']||[]).concat(" + config + ");</script>"
+    assert parse_detail_page(page, "https://ufa.cian.ru/sale/flat/330738483/").listing.title == ""
+
+
 def test_damaged_card_and_false_empty():
     assert parse_page(html(damaged=True),URL).errors
     with pytest.raises(ValueError):

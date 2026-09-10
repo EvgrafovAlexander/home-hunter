@@ -172,6 +172,21 @@ class CianDetailPollState(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class CianDetailPollProgress(models.Model):
+    """Persistent state of one fair, full pass through active CIAN listings."""
+
+    source = models.CharField(max_length=20, unique=True, default=SearchQuery.Source.CIAN)
+    cycle_started_at = models.DateTimeField(default=timezone.now)
+    cycle_total = models.PositiveIntegerField(default=0)
+    completed_listing_ids = models.JSONField(default=list, blank=True)
+    current_listing = models.ForeignKey(
+        Listing, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+    current_started_at = models.DateTimeField(null=True, blank=True)
+    last_completed_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class PriceHistory(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="price_history")
     price = models.BigIntegerField(null=True, blank=True)
