@@ -504,6 +504,10 @@ def hidden_listing_feed(request):
 @login_required
 def listing_detail(request, listing_id: int):
     listing = get_object_or_404(Listing, pk=listing_id)
+    try:
+        detail_photos = listing.cian_detail_state.detail_data.get("photos", [])
+    except CianDetailPollState.DoesNotExist:
+        detail_photos = []
     add_market_position([listing])
     add_listing_score([listing], scoring_preference_for(request.user))
     price_history = list(listing.price_history.exclude(price__isnull=True).order_by("observed_at", "id"))
@@ -523,6 +527,7 @@ def listing_detail(request, listing_id: int):
         "price_low": min((entry.price for entry in price_history), default=None),
         "price_high": max((entry.price for entry in price_history), default=None),
         "change_events": change_events(snapshots), "similar_listings": similar_listings(listing),
+        "detail_photos": detail_photos,
     })
 
 
