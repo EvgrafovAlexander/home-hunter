@@ -85,4 +85,5 @@ class Command(BaseCommand):
                     await sync_to_async(CianDetailPollState.objects.update_or_create)(listing=listing, defaults={"last_error": f"{type(exc).__name__}: {exc}"[:1000]})
                     self.stderr.write(f"CIAN detail {listing.external_id}: {type(exc).__name__}")
                     if collector.stop_requested:
+                        self.stderr.write("CIAN detail polling stopped immediately after a block or network failure")
                         break

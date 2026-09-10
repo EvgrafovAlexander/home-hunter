@@ -2,8 +2,8 @@
 Description=Home Hunter CIAN detail polling every 15 minutes
 
 [Timer]
-OnCalendar=*:0/15
-RandomizedDelaySec=120
+OnCalendar=*-*-* *:10/15:00
+RandomizedDelaySec=60
 Persistent=true
 Unit=home-hunter-cian-detail.service
 

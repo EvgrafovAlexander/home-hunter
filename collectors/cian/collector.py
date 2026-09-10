@@ -122,15 +122,16 @@ class CianCollector(BaseCollector):
             )
         return retried
 
-    async def _load_page(self, url, *, expected_path="/cat.php", detail=False):
+    async def _load_page(self, url, *, expected_path="/cat.php", delay_min=None, delay_max=None):
         self._check_cooldown()
         delay = self.state.read()["next_request_at"] - time.time()
         if delay > 0:
             logger.info("CIAN waiting %.1fs before next navigation", delay)
             await asyncio.sleep(delay)
         self._check_cooldown()
-        think_time = random.uniform(settings.CIAN_PAGE_DELAY_MIN_SECONDS,
-                                    settings.CIAN_PAGE_DELAY_MAX_SECONDS)
+        delay_min = settings.CIAN_PAGE_DELAY_MIN_SECONDS if delay_min is None else delay_min
+        delay_max = settings.CIAN_PAGE_DELAY_MAX_SECONDS if delay_max is None else delay_max
+        think_time = random.uniform(delay_min, delay_max)
         self.state.update(next_request_at=time.time() + think_time)
         try:
             response = await self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
@@ -179,7 +180,16 @@ class CianCollector(BaseCollector):
             raise ValueError("Invalid CIAN detail URL")
         self._check_cooldown()
         await self._start()
-        html = await self._load_page(url, expected_path=expected, detail=True)
+        if (not math.isfinite(settings.CIAN_DETAIL_POLL_DELAY_MIN_SECONDS)
+                or not math.isfinite(settings.CIAN_DETAIL_POLL_DELAY_MAX_SECONDS)
+                or settings.CIAN_DETAIL_POLL_DELAY_MIN_SECONDS <= 0
+                or settings.CIAN_DETAIL_POLL_DELAY_MIN_SECONDS > settings.CIAN_DETAIL_POLL_DELAY_MAX_SECONDS):
+            raise ValueError("CIAN detail timing settings must be finite and positive")
+        html = await self._load_page(
+            url, expected_path=expected,
+            delay_min=settings.CIAN_DETAIL_POLL_DELAY_MIN_SECONDS,
+            delay_max=settings.CIAN_DETAIL_POLL_DELAY_MAX_SECONDS,
+        )
         return parse_detail_page(html, url)
 
     async def collect(self, search, *, mode, start_page=1, page_budget=None, progress_callback=None):
