@@ -20,9 +20,11 @@ def _snapshot_value(value):
 
 def snapshot_data_from_values(values: dict, *, is_active: bool) -> dict:
     """Keep the data needed to explain a listing change without storing raw HTML."""
-    fields = (*SIGNIFICANT_FIELDS, "is_active")
+    fields = (*SIGNIFICANT_FIELDS, "is_active", "publication_status")
     return {
-        field: _snapshot_value(is_active if field == "is_active" else values.get(field))
+        field: _snapshot_value(
+            is_active if field == "is_active" else "published" if field == "publication_status" else values.get(field)
+        )
         for field in fields
     }
 
@@ -30,7 +32,7 @@ def snapshot_data_from_values(values: dict, *, is_active: bool) -> dict:
 def snapshot_data_from_listing(listing: Listing, *, is_active: bool | None = None) -> dict:
     return {
         field: _snapshot_value(is_active if field == "is_active" and is_active is not None else getattr(listing, field))
-        for field in (*SIGNIFICANT_FIELDS, "is_active")
+        for field in (*SIGNIFICANT_FIELDS, "is_active", "publication_status")
     }
 
 
@@ -134,6 +136,7 @@ def process_listing(
         listing.geocode_status = listing.geocoded_at = None
     listing.last_seen_at = observed_at
     listing.is_active = True
+    listing.publication_status = Listing.PublicationStatus.PUBLISHED
     listing.save()
     ListingSearchQuery.objects.update_or_create(
         listing=listing, search_query=search_query,

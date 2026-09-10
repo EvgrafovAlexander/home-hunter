@@ -25,6 +25,14 @@ def save_detail(listing_id, detail):
         state.first_unavailable_at = state.first_unavailable_at or observed
         state.detail_data = {"status": detail.status, "photo_ids": detail.photo_ids, "photos": detail.photos, "edited_at": detail.edited_at}
         state.save()
+        if listing.publication_status != Listing.PublicationStatus.UNAVAILABLE or listing.is_active:
+            listing.publication_status = Listing.PublicationStatus.UNAVAILABLE
+            listing.is_active = False
+            ListingSnapshot.objects.create(
+                listing=listing, observed_at=observed,
+                data={**snapshot_data_from_listing(listing), "cian_detail": state.detail_data},
+            )
+            listing.save(update_fields=("publication_status", "is_active", "updated_at"))
         return False
     item = detail.listing
     changed = []
@@ -44,6 +52,7 @@ def save_detail(listing_id, detail):
         ListingSnapshot.objects.create(listing=listing, observed_at=observed,
                                        data={**snapshot_data_from_listing(listing), "cian_detail": {"photo_ids": detail.photo_ids, "photos": detail.photos, "edited_at": detail.edited_at}})
     listing.last_seen_at, listing.is_active = observed, True
+    listing.publication_status = Listing.PublicationStatus.PUBLISHED
     listing.save()
     state.status, state.last_available_at, state.first_unavailable_at = "published", observed, None
     state.detail_data = {"status": "published", "photo_ids": detail.photo_ids, "photos": detail.photos, "edited_at": detail.edited_at}

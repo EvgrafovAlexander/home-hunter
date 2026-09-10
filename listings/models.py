@@ -89,6 +89,10 @@ class ScoringPreference(models.Model):
 
 
 class Listing(models.Model):
+    class PublicationStatus(models.TextChoices):
+        PUBLISHED = "published", "Опубликовано"
+        UNAVAILABLE = "unavailable", "Снято / недоступно"
+
     source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
     external_id = models.CharField(max_length=100)
     url = models.TextField()
@@ -122,6 +126,10 @@ class Listing(models.Model):
     first_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
     last_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
     is_active = models.BooleanField(default=True, db_index=True)
+    publication_status = models.CharField(
+        max_length=20, choices=PublicationStatus.choices,
+        default=PublicationStatus.PUBLISHED, db_index=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     search_queries = models.ManyToManyField(SearchQuery, through="ListingSearchQuery")
