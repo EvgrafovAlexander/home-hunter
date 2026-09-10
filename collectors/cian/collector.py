@@ -13,7 +13,7 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 
 from collectors.avito.session import SessionState
 from collectors.base import BaseCollector, CollectionError, CollectionResult
-from .parser import cian_url, parse_detail_page, parse_page
+from .parser import CianDetail, cian_url, parse_detail_page, parse_page
 
 logger = logging.getLogger(__name__)
 BLOCK_TEXT = ("обнаружен подозрительный трафик", "вы не робот?", "подтвердите, что запросы отправляли вы")
@@ -161,6 +161,12 @@ class CianCollector(BaseCollector):
                 self.stop_requested = True
                 self.state.block(settings.CIAN_BLOCK_COOLDOWN_SECONDS, headers.get("retry-after"))
                 raise RuntimeError(f"CIAN blocked: HTTP {status}; cooldown saved")
+            # A detail URL returning 404 means that the offer was removed.  It
+            # is a normal terminal state, unlike a failed SERP request.  Let
+            # the detail poller persist it as unavailable and continue with
+            # the rest of its batch.
+            if status == 404 and expected_path.startswith("/sale/flat/"):
+                return None
             if status is None or status >= 400:
                 raise RuntimeError(f"CIAN HTTP error: {status}")
             if urlsplit(self.page.url).hostname != urlsplit(url).hostname or urlsplit(self.page.url).path != expected_path:
@@ -190,6 +196,8 @@ class CianCollector(BaseCollector):
             delay_min=settings.CIAN_DETAIL_POLL_DELAY_MIN_SECONDS,
             delay_max=settings.CIAN_DETAIL_POLL_DELAY_MAX_SECONDS,
         )
+        if html is None:
+            return CianDetail(status="unavailable")
         return parse_detail_page(html, url)
 
     async def collect(self, search, *, mode, start_page=1, page_budget=None, progress_callback=None):

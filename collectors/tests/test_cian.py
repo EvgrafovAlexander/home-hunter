@@ -89,6 +89,21 @@ def test_detail_without_marketing_title_does_not_make_technical_title():
     assert parse_detail_page(page, "https://ufa.cian.ru/sale/flat/330738483/").listing.title == ""
 
 
+def test_detail_404_is_unavailable_not_a_batch_stopping_error():
+    c = CianCollector()
+    c.page = AsyncMock()
+    c.page.url = "https://ufa.cian.ru/sale/flat/330738483/"
+    c.page.goto.return_value = SimpleNamespace(status=404, all_headers=AsyncMock(return_value={}))
+    c.page.content.return_value = "<html><title>Не найдено</title></html>"
+
+    html = asyncio.run(c._load_page(
+        "https://ufa.cian.ru/sale/flat/330738483/", expected_path="/sale/flat/330738483/",
+    ))
+
+    assert html is None
+    assert not c.stop_requested
+
+
 def test_damaged_card_and_false_empty():
     assert parse_page(html(damaged=True),URL).errors
     with pytest.raises(ValueError):
