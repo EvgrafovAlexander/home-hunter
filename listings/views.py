@@ -10,7 +10,7 @@ from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
-from .models import (CianFullScanCheckpoint, District, Listing, ListingSearchQuery, ListingSnapshot,
+from .models import (CianDetailPollState, CianFullScanCheckpoint, District, Listing, ListingSearchQuery, ListingSnapshot,
                      ManualDomclickJob, Microdistrict, PriceHistory, Scan, ScoringPreference, SearchQuery,
                      SourcePollingControl, StreetAssignment)
 from .services.enrichment import location_is_visible, parse_address
@@ -632,6 +632,13 @@ def scan_statistics(request):
                 scan.status == Scan.Status.SUCCESS for mode in modes for scan in mode["scans"]
             ),
             "full_cycle": full_cycle, "candidate_count": cian_candidate_count if value == "cian" else 0,
+            "detail_poll": ({
+                "total": Listing.objects.filter(source=SearchQuery.Source.CIAN, is_active=True).count(),
+                "checked": CianDetailPollState.objects.filter(listing__source=SearchQuery.Source.CIAN, last_checked_at__isnull=False).count(),
+                "published": CianDetailPollState.objects.filter(listing__source=SearchQuery.Source.CIAN, status="published").count(),
+                "errors": CianDetailPollState.objects.filter(listing__source=SearchQuery.Source.CIAN).exclude(last_error="").count(),
+                "last": CianDetailPollState.objects.filter(listing__source=SearchQuery.Source.CIAN, last_checked_at__isnull=False).order_by("-last_checked_at").first(),
+            } if value == "cian" else None),
         })
     manual_domclick_job = ManualDomclickJob.objects.select_related("scan").order_by("-id").first()
     return render(request, "listings/scan_statistics.html", {

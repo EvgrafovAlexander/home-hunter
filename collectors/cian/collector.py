@@ -13,7 +13,7 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 
 from collectors.avito.session import SessionState
 from collectors.base import BaseCollector, CollectionError, CollectionResult
-from .parser import cian_url, parse_page
+from .parser import cian_url, parse_detail_page, parse_page
 
 logger = logging.getLogger(__name__)
 BLOCK_TEXT = ("обнаружен подозрительный трафик", "вы не робот?", "подтвердите, что запросы отправляли вы")
@@ -122,7 +122,7 @@ class CianCollector(BaseCollector):
             )
         return retried
 
-    async def _load_page(self, url):
+    async def _load_page(self, url, *, expected_path="/cat.php", detail=False):
         self._check_cooldown()
         delay = self.state.read()["next_request_at"] - time.time()
         if delay > 0:
@@ -140,6 +140,7 @@ class CianCollector(BaseCollector):
                 try:
                     await self.page.wait_for_function("""() =>
                         document.querySelector('[data-name="CardComponent"]') ||
+                        document.querySelector('#frontend-offer-card') ||
                         (window._cianConfig?.['frontend-serp'] || []).some(x => x.key === 'initialState') ||
                         /подозрительный трафик|Вы не робот|Подтвердите, что запросы/i.test(document.body?.innerText || '')
                     """, timeout=15000)
@@ -161,13 +162,25 @@ class CianCollector(BaseCollector):
                 raise RuntimeError(f"CIAN blocked: HTTP {status}; cooldown saved")
             if status is None or status >= 400:
                 raise RuntimeError(f"CIAN HTTP error: {status}")
-            if urlsplit(self.page.url).hostname != urlsplit(url).hostname or urlsplit(self.page.url).path != "/cat.php":
+            if urlsplit(self.page.url).hostname != urlsplit(url).hostname or urlsplit(self.page.url).path != expected_path:
                 raise RuntimeError("Unexpected CIAN redirect")
             return html
         except Exception:
             # Proxy/network errors must not trigger requests for remaining searches.
             self.stop_requested = True
             raise
+
+    async def poll_detail(self, listing):
+        """One cautious detail navigation. WAF/network failures propagate and stop the batch."""
+        self._validate()
+        url = cian_url(listing.url)
+        expected = f"/sale/flat/{listing.external_id}/"
+        if urlsplit(url).path != expected:
+            raise ValueError("Invalid CIAN detail URL")
+        self._check_cooldown()
+        await self._start()
+        html = await self._load_page(url, expected_path=expected, detail=True)
+        return parse_detail_page(html, url)
 
     async def collect(self, search, *, mode, start_page=1, page_budget=None, progress_callback=None):
         result = CollectionResult()

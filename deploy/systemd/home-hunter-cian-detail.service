@@ -1,0 +1,9 @@
+[Unit]
+Description=Home Hunter cautious CIAN detail-page polling
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/home_hunter
+ExecStart=/usr/bin/flock -n -E 75 /tmp/home-hunter-collector.lock /usr/bin/docker compose --profile cian run --rm cian-collector xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' python manage.py poll_cian_details
+TimeoutStartSec=20min

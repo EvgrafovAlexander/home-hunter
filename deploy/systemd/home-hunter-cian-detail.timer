@@ -1,0 +1,11 @@
+[Unit]
+Description=Home Hunter CIAN detail polling every 15 minutes
+
+[Timer]
+OnCalendar=*:0/15
+RandomizedDelaySec=120
+Persistent=true
+Unit=home-hunter-cian-detail.service
+
+[Install]
+WantedBy=timers.target

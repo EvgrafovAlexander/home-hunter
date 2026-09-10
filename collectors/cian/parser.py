@@ -20,6 +20,15 @@ class ParsedPage:
     query_string: str = ""
 
 
+@dataclass
+class CianDetail:
+    status: str
+    listing: NormalizedListing | None = None
+    photo_ids: list[int] = field(default_factory=list)
+    photos: list[dict] = field(default_factory=list)
+    edited_at: str | None = None
+
+
 def cian_url(url: str) -> str:
     p = urlsplit(url)
     host = p.hostname or ""
@@ -141,3 +150,53 @@ def parse_page(html: str, url: str) -> ParsedPage:
     if not parsed.card_count and (parsed.total or cards or parsed.next_url):
         raise ValueError("Empty CIAN offers contradict page metadata")
     return parsed
+
+
+def parse_detail_page(html: str, url: str) -> CianDetail:
+    """Parse the offer-card state; never infer availability from an error page."""
+    soup = BeautifulSoup(html, "html.parser")
+    for script in soup.select("script:not([src])"):
+        text = script.get_text()
+        match = re.search(r"window\._cianConfig\[['\"]frontend-offer-card['\"]\]\s*=.*?\.concat\(\s*", text, re.S)
+        if not match:
+            continue
+        config, _ = json.JSONDecoder().raw_decode(text[match.end():])
+        state = next((e.get("value") for e in config if e.get("key") == "defaultState"), None)
+        offer = ((state or {}).get("offerData") or {}).get("offer") or {}
+        identifier = str(integer(offer.get("id")))
+        expected = re.search(r"/sale/flat/(\d+)/", urlsplit(url).path)
+        if not expected or identifier != expected.group(1):
+            raise ValueError("CIAN detail URL/id mismatch")
+        status = offer.get("status")
+        if not isinstance(status, str) or not status:
+            raise ValueError("CIAN detail status missing")
+        photos = offer.get("photos") or []
+        photo_data = [{
+            "id": identifier,
+            "full_url": photo.get("fullUrl"),
+            "thumbnail_url": photo.get("thumbnailUrl"),
+            "preview_url": photo.get("thumbnail2Url"),
+            "mini_url": photo.get("miniUrl"),
+        } for photo in photos if (identifier := integer(photo.get("id"))) is not None and photo.get("fullUrl")]
+        photo_ids = [photo["id"] for photo in photo_data]
+        if status != "published":
+            return CianDetail(status=status, photo_ids=photo_ids, photos=photo_data, edited_at=offer.get("editDate"))
+        building = offer.get("building") or {}
+        geo = offer.get("geo") or {}
+        address = geo.get("address") or []
+        price = integer(offer.get("priceTotalRur"))
+        area = Decimal(str(offer["totalArea"])) if offer.get("totalArea") is not None else None
+        image = next((photo.get("fullUrl") for photo in photos if photo.get("isDefault")),
+                     photos[0].get("fullUrl") if photos else None)
+        title = ((state or {}).get("offerData") or {}).get("pageHelmetData", {}).get("title")
+        listing = NormalizedListing(
+            source="cian", external_id=identifier, url=url, title=(title or f"Квартира {identifier}")[:1000],
+            price=price, rooms=integer(offer.get("roomsCount")), area=area,
+            floor=integer(offer.get("floorNumber")), floors_total=integer(building.get("floorsCount")),
+            built_year=building_year(building),
+            address=", ".join(a.get("fullName", "") for a in address if a.get("fullName")) or None,
+            district=next((a.get("name") for a in address if a.get("type") == "raion"), None),
+            description=offer.get("description"), published_text=offer.get("humanizedEditDate"), image_url=image,
+        )
+        return CianDetail(status=status, listing=listing, photo_ids=photo_ids, photos=photo_data, edited_at=offer.get("editDate"))
+    raise ValueError("CIAN offer-card defaultState missing")

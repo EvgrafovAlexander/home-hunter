@@ -156,6 +156,22 @@ class CianFullScanCheckpoint(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class CianDetailPollState(models.Model):
+    class Status(models.TextChoices):
+        UNKNOWN = "unknown", "Не проверено"
+        PUBLISHED = "published", "Активно"
+        UNAVAILABLE = "unavailable", "Недоступно"
+
+    listing = models.OneToOneField(Listing, on_delete=models.CASCADE, related_name="cian_detail_state")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.UNKNOWN)
+    last_checked_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_available_at = models.DateTimeField(null=True, blank=True)
+    first_unavailable_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    detail_data = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class PriceHistory(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="price_history")
     price = models.BigIntegerField(null=True, blank=True)

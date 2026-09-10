@@ -9,7 +9,7 @@ import pytest
 
 from collectors.base import CollectionError
 from collectors.cian.collector import CianCollector, blocked, search_url
-from collectors.cian.parser import parse_page
+from collectors.cian.parser import parse_detail_page, parse_page
 
 URL = 'https://ufa.cian.ru/cat.php?region=176245&room2=1&room3=1'
 SEARCH = SimpleNamespace(pk=1, name='CIAN', url=URL)
@@ -63,6 +63,21 @@ def test_embedded_data_and_canonical_url():
 
 def test_extracts_cian_building_year():
     assert parse_page(html(built_year=2016), URL).listings[0].built_year == 2016
+
+
+def test_parses_published_detail_and_photo_ids():
+    state = {"offerData": {"pageHelmetData": {"title": "Квартира"}, "offer": {
+        "id": 330738483, "status": "published", "priceTotalRur": 10000000,
+        "totalArea": "73", "roomsCount": 2, "floorNumber": 8,
+        "building": {"floorsCount": 25, "buildYear": 2016}, "geo": {"address": []},
+        "photos": [{"id": 11, "isDefault": True, "fullUrl": "https://images.cdn-cian.ru/images/11.jpg"}],
+        "editDate": "2026-09-10T08:45:00Z",
+    }}}
+    config = json.dumps([{"key": "defaultState", "value": state}])
+    page = "<script>window._cianConfig['frontend-offer-card']=(window._cianConfig['frontend-offer-card']||[]).concat(" + config + ");</script>"
+    detail = parse_detail_page(page, "https://ufa.cian.ru/sale/flat/330738483/")
+    assert detail.status == "published" and detail.listing.price == 10000000 and detail.photo_ids == [11]
+    assert detail.photos[0]["full_url"] == "https://images.cdn-cian.ru/images/11.jpg"
 
 
 def test_damaged_card_and_false_empty():
