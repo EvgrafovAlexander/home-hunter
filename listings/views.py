@@ -5,7 +5,7 @@ from statistics import median
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg, Count, Max, Q
+from django.db.models import Avg, Count, F, Max, Q
 from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
