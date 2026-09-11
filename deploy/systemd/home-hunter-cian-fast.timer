@@ -1,9 +1,11 @@
 [Unit]
-Description=Home Hunter CIAN hourly scan
+Description=Home Hunter CIAN daytime hourly fast scan
 
 [Timer]
-OnCalendar=hourly
-RandomizedDelaySec=300
+# Detail polling finishes its last hourly batch before this slot.  Keep this
+# deterministic so fast scans do not lose their shared collector lock.
+OnCalendar=*-*-* 08..22:02:00
+RandomizedDelaySec=0
 Persistent=true
 Unit=home-hunter-cian-fast.service
 
