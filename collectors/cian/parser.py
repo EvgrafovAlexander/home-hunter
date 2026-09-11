@@ -28,6 +28,7 @@ class CianDetail:
     photos: list[dict] = field(default_factory=list)
     edited_at: str | None = None
     offer_data: dict = field(default_factory=dict)
+    attributes: dict = field(default_factory=dict)
 
 
 def cian_url(url: str) -> str:
@@ -76,6 +77,50 @@ def building_year(building):
         if year is not None and 1800 <= year <= 2100:
             return year
     return None
+
+
+def detail_attributes(offer_data):
+    offer = offer_data.get("offer") or {}
+    building = offer.get("building") or {}
+    parking = building.get("parking") or {}
+
+    def dec(value, maximum=100000):
+        try:
+            value = Decimal(str(value))
+            return value if value.is_finite() and 0 < value < maximum else None
+        except (ValueError, TypeError, ArithmeticError):
+            return None
+
+    def num(value):
+        try:
+            return integer(value)
+        except (ValueError, TypeError, ArithmeticError):
+            return None
+
+    def text(value):
+        return value[:100] if isinstance(value, str) and value else None
+
+    def flag(value):
+        return value if isinstance(value, bool) else None
+
+    return {
+        "kitchen_area": dec(offer.get("kitchenArea")),
+        "living_area": dec(offer.get("livingArea")),
+        "ceiling_height": dec(building.get("ceilingHeight"), 20),
+        "bathrooms_combined": num(offer.get("combinedWcsCount")),
+        "bathrooms_separate": num(offer.get("separateWcsCount")),
+        "balconies_count": num(offer.get("balconiesCount")),
+        "loggias_count": num(offer.get("loggiasCount")),
+        "repair_type": text(offer.get("repairType")),
+        "windows_view_type": text(offer.get("windowsViewType")),
+        "has_furniture": flag(offer.get("hasFurniture")),
+        "passenger_lifts_count": num(offer.get("passengerLiftsCount")),
+        "cargo_lifts_count": num(offer.get("cargoLiftsCount")),
+        "has_ramp": flag(offer.get("hasRamp")),
+        "building_material_type": text(building.get("materialType")),
+        "parking_type": text(parking.get("type")),
+        "has_garbage_chute": flag(building.get("hasGarbageChute")),
+    }
 
 
 def parse_page(html: str, url: str) -> ParsedPage:
@@ -186,7 +231,7 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
         if status != "published":
             return CianDetail(
                 status=status, photo_ids=photo_ids, photos=photo_data,
-                edited_at=offer.get("editDate"), offer_data=offer_data,
+                edited_at=offer.get("editDate"), offer_data=offer_data, attributes=detail_attributes(offer_data),
             )
         building = offer.get("building") or {}
         geo = offer.get("geo") or {}
@@ -210,6 +255,6 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
         )
         return CianDetail(
             status=status, listing=listing, photo_ids=photo_ids, photos=photo_data,
-            edited_at=offer.get("editDate"), offer_data=offer_data,
+            edited_at=offer.get("editDate"), offer_data=offer_data, attributes=detail_attributes(offer_data),
         )
     raise ValueError("CIAN offer-card defaultState missing")

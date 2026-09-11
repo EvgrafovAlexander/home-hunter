@@ -72,6 +72,10 @@ def save_detail(listing_id, detail):
         if value is not None and getattr(listing, field) != value:
             setattr(listing, field, value)
             changed.append(field)
+    for field, value in detail.attributes.items():
+        if value is not None and getattr(listing, field) != value:
+            setattr(listing, field, value)
+            changed.append(field)
     if item.price is not None and listing.area:
         listing.price_per_sqm = round(item.price / float(listing.area))
     if "price" in changed:

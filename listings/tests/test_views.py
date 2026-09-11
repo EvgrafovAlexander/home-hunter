@@ -61,6 +61,28 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "6 700 000")
         self.assertContains(response, "Открыть на сайте")
 
+    def test_listing_detail_shows_cian_detail_attributes_only_when_available(self):
+        self.match.kitchen_area = "12.50"
+        self.match.bathrooms_combined = 1
+        self.match.repair_type = "euro"
+        self.match.building_material_type = "monolith"
+        self.match.passenger_lifts_count = 2
+        self.match.save()
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("listing_detail", args=[self.match.pk]))
+
+        self.assertContains(response, "О квартире")
+        self.assertContains(response, "Площадь кухни")
+        self.assertContains(response, "Евроремонт")
+        self.assertContains(response, "О доме")
+        self.assertContains(response, "Монолитный")
+
+        avito_listing = Listing.objects.get(source="avito", external_id="other")
+        response = self.client.get(reverse("listing_detail", args=[avito_listing.pk]))
+        self.assertNotContains(response, "О квартире")
+        self.assertNotContains(response, "О доме")
+
     def test_listing_detail_explains_snapshot_changes(self):
         ListingSnapshot.objects.create(listing=self.match, observed_at=timezone.now() - timedelta(days=1), data={
             "price": 6_700_000, "image_url": "https://example.test/old.jpg", "is_active": True,

@@ -522,12 +522,58 @@ def listing_detail(request, listing_id: int):
             for index, item in enumerate(price_history)
         )
     snapshots = list(listing.snapshots.order_by("-observed_at", "-id")[:50])
+    yes_no = lambda value: "Да" if value else "Нет"
+    repair_types = {
+        "cosmetic": "Косметический",
+        "euro": "Евроремонт",
+        "withoutRepair": "Без ремонта",
+    }
+    windows_view_types = {
+        "yard": "Во двор",
+        "street": "На улицу",
+        "yardAndStreet": "Во двор и на улицу",
+    }
+    building_material_types = {
+        "brick": "Кирпичный",
+        "monolith": "Монолитный",
+        "panel": "Панельный",
+    }
+    parking_types = {"ground": "Наземная", "underground": "Подземная"}
+    bathroom_parts = []
+    if listing.bathrooms_combined:
+        bathroom_parts.append(f"совмещённый — {listing.bathrooms_combined}")
+    if listing.bathrooms_separate:
+        bathroom_parts.append(f"раздельный — {listing.bathrooms_separate}")
+    lift_parts = []
+    if listing.passenger_lifts_count:
+        lift_parts.append(f"пассажирских — {listing.passenger_lifts_count}")
+    if listing.cargo_lifts_count:
+        lift_parts.append(f"грузовых — {listing.cargo_lifts_count}")
+    apartment_attributes = [
+        ("Площадь кухни", f"{listing.kitchen_area} м²" if listing.kitchen_area else None),
+        ("Жилая площадь", f"{listing.living_area} м²" if listing.living_area else None),
+        ("Высота потолков", f"{listing.ceiling_height} м" if listing.ceiling_height else None),
+        ("Санузел", ", ".join(bathroom_parts) or None),
+        ("Балконы", listing.balconies_count), ("Лоджии", listing.loggias_count),
+        ("Ремонт", repair_types.get(listing.repair_type, listing.repair_type)),
+        ("Вид из окон", windows_view_types.get(listing.windows_view_type, listing.windows_view_type)),
+        ("С мебелью", yes_no(listing.has_furniture) if listing.has_furniture is not None else None),
+    ]
+    building_attributes = [
+        ("Тип дома", building_material_types.get(listing.building_material_type, listing.building_material_type)),
+        ("Количество лифтов", ", ".join(lift_parts) or None),
+        ("Парковка", parking_types.get(listing.parking_type, listing.parking_type)),
+        ("Пандус", yes_no(listing.has_ramp) if listing.has_ramp is not None else None),
+        ("Мусоропровод", yes_no(listing.has_garbage_chute) if listing.has_garbage_chute is not None else None),
+    ]
     return render(request, "listings/detail.html", {
         "item": listing, "price_history": price_history, "chart_points": chart_points,
         "price_low": min((entry.price for entry in price_history), default=None),
         "price_high": max((entry.price for entry in price_history), default=None),
         "change_events": change_events(snapshots), "similar_listings": similar_listings(listing),
         "detail_photos": detail_photos,
+        "apartment_attributes": [(label, value) for label, value in apartment_attributes if value is not None],
+        "building_attributes": [(label, value) for label, value in building_attributes if value is not None],
     })
 
 

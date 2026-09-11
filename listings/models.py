@@ -126,6 +126,22 @@ class Listing(models.Model):
     first_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
     last_seen_at = models.DateTimeField(default=timezone.now, db_index=True)
     is_active = models.BooleanField(default=True, db_index=True)
+    kitchen_area = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    living_area = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    ceiling_height = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    bathrooms_combined = models.PositiveSmallIntegerField(null=True, blank=True)
+    bathrooms_separate = models.PositiveSmallIntegerField(null=True, blank=True)
+    balconies_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    loggias_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    repair_type = models.CharField(max_length=100, null=True, blank=True)
+    windows_view_type = models.CharField(max_length=100, null=True, blank=True)
+    has_furniture = models.BooleanField(null=True, blank=True)
+    passenger_lifts_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    cargo_lifts_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    has_ramp = models.BooleanField(null=True, blank=True)
+    building_material_type = models.CharField(max_length=100, null=True, blank=True)
+    parking_type = models.CharField(max_length=100, null=True, blank=True)
+    has_garbage_chute = models.BooleanField(null=True, blank=True)
     publication_status = models.CharField(
         max_length=20, choices=PublicationStatus.choices,
         default=PublicationStatus.PUBLISHED, db_default=PublicationStatus.PUBLISHED, db_index=True,
