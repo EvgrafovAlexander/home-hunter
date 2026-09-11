@@ -283,7 +283,22 @@ class ListingViewsTests(TestCase):
         self.assertEqual(response.context["median_price"], 6_500_000)
         self.assertEqual(response.context["period_days"], 7)
         self.assertEqual(response.context["price_drop_count"], 1)
+        self.assertEqual(response.context["price_increases"], [])
         self.assertContains(response, "Самые заметные снижения")
+        self.assertContains(response, "Самые заметные повышения")
+
+    def test_dashboard_shows_largest_price_increases(self):
+        PriceHistory.objects.create(listing=self.match, price=6_000_000,
+                                    observed_at=timezone.now() - timedelta(days=2))
+        PriceHistory.objects.create(listing=self.match, price=6_500_000,
+                                    observed_at=timezone.now() - timedelta(days=1))
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("dashboard"), {"stats_days": 7})
+
+        self.assertEqual(response.context["price_increase_count"], 1)
+        self.assertEqual(response.context["price_increases"][0]["difference"], 500_000)
+        self.assertContains(response, "Самые заметные повышения")
 
     def test_dashboard_shows_median_microdistrict_market_stats(self):
         now = timezone.now()

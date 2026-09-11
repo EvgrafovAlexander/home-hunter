@@ -982,6 +982,9 @@ def dashboard(request):
     price_drops = sorted(({
         **change, "percent": round(change["difference"] / change["first"] * 100) if change["first"] else 0,
     } for change in changes if change["difference"] < 0), key=lambda change: change["difference"])[:10]
+    price_increases = sorted(({
+        **change, "percent": round(change["difference"] / change["first"] * 100) if change["first"] else 0,
+    } for change in changes if change["difference"] > 0), key=lambda change: change["difference"], reverse=True)[:10]
     microdistrict_stats = microdistrict_market_stats(listings, period_since, filters)
 
     def distribution(values, *, buckets, formatter):
@@ -1013,7 +1016,7 @@ def dashboard(request):
         "microdistrict_min_sample": MICRODISTRICT_MARKET_MIN_SAMPLE,
         "price_drop_count": len(price_drops), "price_unchanged_count": max(0, len(price_changes) - len(changes)),
         "price_increase_count": sum(change["difference"] > 0 for change in changes),
-        "price_drops": price_drops,
+        "price_drops": price_drops, "price_increases": price_increases,
         "price_distribution": price_distribution, "area_distribution": area_distribution,
         "distribution_max": max([1, *(row["count"] for row in price_distribution + area_distribution)]),
         "rooms_two": rooms_two, "rooms_three": rooms_three, "rooms_total": total_rooms,
