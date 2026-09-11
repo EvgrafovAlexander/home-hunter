@@ -180,6 +180,16 @@ class CianDetailPollState(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class CianDetailPayload(models.Model):
+    """Latest complete structured payload from CIAN's detail-page state."""
+
+    listing = models.OneToOneField(Listing, on_delete=models.CASCADE, related_name="cian_detail_payload")
+    payload = models.JSONField()
+    sha256 = models.CharField(max_length=64)
+    first_received_at = models.DateTimeField(default=timezone.now)
+    last_received_at = models.DateTimeField(default=timezone.now)
+
+
 class CianDetailPollProgress(models.Model):
     """Persistent state of one fair, full pass through active CIAN listings."""
 

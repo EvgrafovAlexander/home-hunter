@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.conf import settings
@@ -8,10 +10,36 @@ from django.db.models import F
 from django.utils import timezone
 
 from collectors.cian.collector import CianCollector
-from listings.models import CianDetailPollProgress, CianDetailPollState, Listing, ListingSnapshot, PriceHistory
+from listings.models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, Listing,
+                             ListingSnapshot, PriceHistory)
 from listings.services.persistence import snapshot_data_from_listing
 
 LOCK_ID = 724198501
+
+
+def save_detail_payload(listing, offer_data, observed):
+    """Keep one complete response per listing without rewriting unchanged JSON."""
+    encoded = json.dumps(offer_data, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    checksum = hashlib.sha256(encoded).hexdigest()
+    payload, created = CianDetailPayload.objects.select_for_update().get_or_create(
+        listing=listing,
+        defaults={
+            "payload": offer_data,
+            "sha256": checksum,
+            "first_received_at": observed,
+            "last_received_at": observed,
+        },
+    )
+    if created:
+        return
+    if payload.sha256 != checksum:
+        payload.payload = offer_data
+        payload.sha256 = checksum
+        payload.last_received_at = observed
+        payload.save(update_fields=("payload", "sha256", "last_received_at"))
+    else:
+        payload.last_received_at = observed
+        payload.save(update_fields=("last_received_at",))
 
 
 @transaction.atomic
@@ -20,6 +48,7 @@ def save_detail(listing_id, detail):
     state, _ = CianDetailPollState.objects.select_for_update().get_or_create(listing=listing)
     observed = timezone.now()
     state.last_checked_at, state.last_error = observed, ""
+    save_detail_payload(listing, detail.offer_data, observed)
     if detail.status != "published":
         state.status = CianDetailPollState.Status.UNAVAILABLE
         state.first_unavailable_at = state.first_unavailable_at or observed

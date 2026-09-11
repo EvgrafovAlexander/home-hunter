@@ -78,6 +78,7 @@ def test_parses_published_detail_and_photo_ids():
     detail = parse_detail_page(page, "https://ufa.cian.ru/sale/flat/330738483/")
     assert detail.status == "published" and detail.listing.price == 10000000 and detail.photo_ids == [11]
     assert detail.photos[0]["full_url"] == "https://images.cdn-cian.ru/images/11.jpg"
+    assert detail.offer_data == state["offerData"]
 
 
 def test_detail_without_marketing_title_does_not_make_technical_title():

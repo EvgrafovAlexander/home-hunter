@@ -27,6 +27,7 @@ class CianDetail:
     photo_ids: list[int] = field(default_factory=list)
     photos: list[dict] = field(default_factory=list)
     edited_at: str | None = None
+    offer_data: dict = field(default_factory=dict)
 
 
 def cian_url(url: str) -> str:
@@ -162,7 +163,10 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
             continue
         config, _ = json.JSONDecoder().raw_decode(text[match.end():])
         state = next((e.get("value") for e in config if e.get("key") == "defaultState"), None)
-        offer = ((state or {}).get("offerData") or {}).get("offer") or {}
+        offer_data = (state or {}).get("offerData") or {}
+        if not isinstance(offer_data, dict):
+            raise ValueError("CIAN offerData is not an object")
+        offer = offer_data.get("offer") or {}
         identifier = str(integer(offer.get("id")))
         expected = re.search(r"/sale/flat/(\d+)/", urlsplit(url).path)
         if not expected or identifier != expected.group(1):
@@ -180,7 +184,10 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
         } for photo in photos if (identifier := integer(photo.get("id"))) is not None and photo.get("fullUrl")]
         photo_ids = [photo["id"] for photo in photo_data]
         if status != "published":
-            return CianDetail(status=status, photo_ids=photo_ids, photos=photo_data, edited_at=offer.get("editDate"))
+            return CianDetail(
+                status=status, photo_ids=photo_ids, photos=photo_data,
+                edited_at=offer.get("editDate"), offer_data=offer_data,
+            )
         building = offer.get("building") or {}
         geo = offer.get("geo") or {}
         address = geo.get("address") or []
@@ -188,7 +195,7 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
         area = Decimal(str(offer["totalArea"])) if offer.get("totalArea") is not None else None
         image = next((photo.get("fullUrl") for photo in photos if photo.get("isDefault")),
                      photos[0].get("fullUrl") if photos else None)
-        title = ((state or {}).get("offerData") or {}).get("pageHelmetData", {}).get("title")
+        title = offer_data.get("pageHelmetData", {}).get("title")
         listing = NormalizedListing(
             # A detail response can legitimately omit pageHelmetData.title.  Do
             # not manufacture a technical title here: the saved search card is
@@ -201,5 +208,8 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
             district=next((a.get("name") for a in address if a.get("type") == "raion"), None),
             description=offer.get("description"), published_text=offer.get("humanizedEditDate"), image_url=image,
         )
-        return CianDetail(status=status, listing=listing, photo_ids=photo_ids, photos=photo_data, edited_at=offer.get("editDate"))
+        return CianDetail(
+            status=status, listing=listing, photo_ids=photo_ids, photos=photo_data,
+            edited_at=offer.get("editDate"), offer_data=offer_data,
+        )
     raise ValueError("CIAN offer-card defaultState missing")
