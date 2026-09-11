@@ -2,8 +2,8 @@
 Description=Home Hunter CIAN daytime hourly fast scan
 
 [Timer]
-# Detail polling finishes its last hourly batch before this slot.  Keep this
-# deterministic so fast scans do not lose their shared collector lock.
+# Start early in the hour and let the service wait briefly for a preceding
+# detail batch, rather than relying on timer jitter to avoid it.
 OnCalendar=*-*-* 08..22:02:00
 RandomizedDelaySec=0
 Persistent=true

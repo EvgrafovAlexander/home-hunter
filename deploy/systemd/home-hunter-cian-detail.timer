@@ -1,10 +1,8 @@
 [Unit]
-Description=Home Hunter CIAN detail polling with an hourly fast-scan window
+Description=Home Hunter CIAN detail polling every 15 minutes
 
 [Timer]
-# Three ~12-minute detail batches fit before the next hour.  Do not start a
-# :55 batch: :02 is reserved for the daytime fast scan.
-OnCalendar=*-*-* *:10,25,40:00
+OnCalendar=*-*-* *:10/15:00
 RandomizedDelaySec=60
 Persistent=true
 Unit=home-hunter-cian-detail.service
