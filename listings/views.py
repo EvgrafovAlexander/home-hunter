@@ -106,7 +106,9 @@ def filtered_listings(request, *, visible: bool | None = True):
     if visible is not None:
         listings = listings.filter(is_visible=visible)
     names = ("source", "district", "rooms", "price_min", "price_max", "sqm_price_min",
-             "sqm_price_max", "area_min", "area_max", "floor_min", "floor_max", "days", "active")
+             "sqm_price_max", "area_min", "area_max", "kitchen_area_min", "kitchen_area_max",
+             "floor_min", "floor_max", "repair_type", "building_material_type", "has_lift",
+             "has_balcony", "days", "active")
     values = {name: request.GET.get(name, "") for name in names}
     if values["active"] != "0":
         listings = listings.filter(is_active=True)
@@ -123,10 +125,27 @@ def filtered_listings(request, *, visible: bool | None = True):
         number = _integer(values[param])
         if number is not None:
             listings = listings.filter(**{field: number})
-    for param, field in (("area_min", "area__gte"), ("area_max", "area__lte")):
+    for param, field in (("area_min", "area__gte"), ("area_max", "area__lte"),
+                         ("kitchen_area_min", "kitchen_area__gte"),
+                         ("kitchen_area_max", "kitchen_area__lte")):
         number = _decimal(values[param])
         if number is not None:
             listings = listings.filter(**{field: number})
+    for field in ("repair_type", "building_material_type"):
+        if values[field]:
+            listings = listings.filter(**{field: values[field]})
+    if values["has_lift"] == "1":
+        listings = listings.filter(Q(passenger_lifts_count__gt=0) | Q(cargo_lifts_count__gt=0))
+    elif values["has_lift"] == "0":
+        listings = listings.filter(passenger_lifts_count=0, cargo_lifts_count=0)
+    else:
+        values["has_lift"] = ""
+    if values["has_balcony"] == "1":
+        listings = listings.filter(Q(balconies_count__gt=0) | Q(loggias_count__gt=0))
+    elif values["has_balcony"] == "0":
+        listings = listings.filter(balconies_count=0, loggias_count=0)
+    else:
+        values["has_balcony"] = ""
     days = _integer(values["days"])
     if days in (1, 7, 30, 90):
         listings = listings.filter(first_seen_at__gte=timezone.now() - timedelta(days=days))
@@ -143,6 +162,10 @@ def filter_options(*, visible: bool = True):
                           .order_by("district").values_list("district", flat=True).distinct()),
         "rooms": list(listings.exclude(rooms__isnull=True).order_by("rooms")
                       .values_list("rooms", flat=True).distinct()),
+        "repair_types": (("cosmetic", "Косметический"), ("euro", "Евроремонт"),
+                         ("withoutRepair", "Без ремонта")),
+        "building_material_types": (("brick", "Кирпичный"), ("monolith", "Монолитный"),
+                                    ("panel", "Панельный")),
     }
 
 
@@ -232,7 +255,14 @@ def target_location_score(listing):
 
 
 def condition_score(listing):
-    """Conservative text signals: unknown condition is neutral, never a bonus."""
+    """Prefer explicit CIAN condition; unknown condition remains neutral."""
+    explicit_conditions = {
+        "euro": (85, "евроремонт указан в карточке"),
+        "cosmetic": (60, "косметический ремонт указан в карточке"),
+        "withoutRepair": (20, "без ремонта по данным карточки"),
+    }
+    if listing.repair_type in explicit_conditions:
+        return explicit_conditions[listing.repair_type]
     text = f"{listing.title} {listing.description or ''}".lower()
     if any(value in text for value in ("требует ремонта", "под ремонт", "без ремонта", "нужен ремонт")):
         return 20, "требуется ремонт"
@@ -252,26 +282,28 @@ def add_listing_score(listings, preferences=None):
     now = timezone.now()
     for item in listings:
         reasons = []
-        if item.market_delta_pct is not None:
-            if item.market_delta_pct <= -10:
+        market_delta_pct = getattr(item, "market_delta_pct", None)
+        market_samples = getattr(item, "market_samples", 0)
+        if market_delta_pct is not None:
+            if market_delta_pct <= -10:
                 market_score = 75; reasons.append("существенно ниже рынка")
-            elif item.market_delta_pct <= -4:
+            elif market_delta_pct <= -4:
                 market_score = 68; reasons.append("ниже рынка")
-            elif item.market_delta_pct < 0:
+            elif market_delta_pct < 0:
                 market_score = 68; reasons.append("чуть ниже рынка")
-            elif item.market_delta_pct >= 10:
+            elif market_delta_pct >= 10:
                 market_score = 0; reasons.append("существенно выше рынка")
-            elif item.market_delta_pct >= 4:
+            elif market_delta_pct >= 4:
                 market_score = 22; reasons.append("выше рынка")
             else:
                 market_score = 50
         else:
             market_score = 50
         # A discount based on a small sample is informative, but should not dominate the ranking.
-        market_confidence = min(1, (item.market_samples or 0) / 20)
+        market_confidence = min(1, (market_samples or 0) / 20)
         market_score = 50 + (market_score - 50) * market_confidence
-        if item.market_samples:
-            reasons.append(f"цена сопоставлена с {item.market_samples} аналогами")
+        if market_samples:
+            reasons.append(f"цена сопоставлена с {market_samples} аналогами")
         age_days = max(0, (now - item.first_seen_at).total_seconds() / 86400) if item.first_seen_at else 999
         if age_days <= 1:
             freshness_score = 100; reasons.append("добавлено сегодня")
@@ -309,6 +341,9 @@ def add_listing_score(listings, preferences=None):
         if preferences.min_area is not None:
             preference_checks.append(item.area is not None and item.area >= preferences.min_area)
             if not preference_checks[-1]: reasons.append("площадь меньше вашей цели")
+        if preferences.min_kitchen_area is not None and item.kitchen_area is not None:
+            preference_checks.append(item.kitchen_area >= preferences.min_kitchen_area)
+            if not preference_checks[-1]: reasons.append("кухня меньше вашей цели")
         if preferences.floor_min is not None:
             preference_checks.append(item.floor is not None and item.floor >= preferences.floor_min)
             if not preference_checks[-1]: reasons.append("этаж ниже вашей цели")
@@ -321,6 +356,18 @@ def add_listing_score(listings, preferences=None):
         if preferences.prefer_photo:
             preference_checks.append(bool(item.image_url))
             if not preference_checks[-1]: reasons.append("нет обязательного фото")
+        if preferences.preferred_repair_types and item.repair_type is not None:
+            preference_checks.append(item.repair_type in preferences.preferred_repair_types)
+            if not preference_checks[-1]: reasons.append("тип ремонта не соответствует предпочтению")
+        if preferences.require_lift and (item.passenger_lifts_count is not None or item.cargo_lifts_count is not None):
+            preference_checks.append(bool((item.passenger_lifts_count or 0) + (item.cargo_lifts_count or 0)))
+            if not preference_checks[-1]: reasons.append("нет лифта")
+        if preferences.require_balcony and (item.balconies_count is not None or item.loggias_count is not None):
+            preference_checks.append(bool((item.balconies_count or 0) + (item.loggias_count or 0)))
+            if not preference_checks[-1]: reasons.append("нет балкона или лоджии")
+        if preferences.prefer_furniture and item.has_furniture is not None:
+            preference_checks.append(item.has_furniture)
+            if not preference_checks[-1]: reasons.append("мебель не указана")
         if preferences.use_ufa_target_zones:
             location_score, location_reason = target_location_score(item)
             reasons.insert(0, location_reason)
@@ -351,7 +398,15 @@ def add_listing_score(listings, preferences=None):
              "contribution": round(value * getattr(preferences, key) / total_weight) if total_weight else 0}
             for key, value in components.items() if getattr(preferences, key)
         ]
-        item.score_reasons = reasons[:3]
+        personal_reasons = [
+            reason for reason in reasons if reason in {
+                "площадь меньше вашей цели", "кухня меньше вашей цели", "этаж ниже вашей цели",
+                "этаж выше вашей цели", "район не в ваших предпочтениях", "нет обязательного фото",
+                "тип ремонта не соответствует предпочтению", "нет лифта",
+                "нет балкона или лоджии", "мебель не указана",
+            }
+        ]
+        item.score_reasons = (personal_reasons + [reason for reason in reasons if reason not in personal_reasons])[:3]
         item.score_label = "Высокий интерес" if item.score >= 75 else (
             "Стоит посмотреть" if item.score >= 60 else "Нейтрально"
         )
@@ -848,12 +903,17 @@ def scoring_settings(request):
     preference, _ = ScoringPreference.objects.get_or_create(user=request.user)
     if request.method == "POST":
         preference.min_area = _decimal(request.POST.get("min_area"))
+        preference.min_kitchen_area = _decimal(request.POST.get("min_kitchen_area"))
         preference.floor_min = _integer(request.POST.get("floor_min"))
         preference.floor_max = _integer(request.POST.get("floor_max"))
         if preference.floor_min and preference.floor_max and preference.floor_min > preference.floor_max:
             preference.floor_min, preference.floor_max = preference.floor_max, preference.floor_min
         preference.preferred_districts = request.POST.getlist("preferred_districts")
+        preference.preferred_repair_types = request.POST.getlist("preferred_repair_types")
         preference.prefer_photo = request.POST.get("prefer_photo") == "1"
+        preference.require_lift = request.POST.get("require_lift") == "1"
+        preference.require_balcony = request.POST.get("require_balcony") == "1"
+        preference.prefer_furniture = request.POST.get("prefer_furniture") == "1"
         for field in ("market_weight", "freshness_weight", "data_weight", "floor_weight",
                       "price_history_weight", "preference_weight"):
             setattr(preference, field, min(100, max(0, _integer(request.POST.get(field)) or 0)))
@@ -861,6 +921,8 @@ def scoring_settings(request):
         return redirect("scoring_settings")
     return render(request, "listings/scoring_settings.html", {
         "preference": preference, "districts": District.objects.all(),
+        "repair_types": (("cosmetic", "Косметический"), ("euro", "Евроремонт"),
+                         ("withoutRepair", "Без ремонта")),
     })
 
 

@@ -157,8 +157,10 @@ class ListingViewsTests(TestCase):
     def test_scoring_settings_save_personal_conditions_and_weights(self):
         self.client.force_login(self.user)
         response = self.client.post(reverse("scoring_settings"), {
-            "min_area": "60", "floor_min": "3", "floor_max": "12", "preferred_districts": ["Кировский"],
-            "prefer_photo": "1", "market_weight": "60", "freshness_weight": "10", "data_weight": "5",
+            "min_area": "60", "min_kitchen_area": "12", "floor_min": "3", "floor_max": "12",
+            "preferred_districts": ["Кировский"], "preferred_repair_types": ["euro"],
+            "prefer_photo": "1", "require_lift": "1", "require_balcony": "1", "prefer_furniture": "1",
+            "market_weight": "60", "freshness_weight": "10", "data_weight": "5",
             "floor_weight": "5", "price_history_weight": "10", "preference_weight": "40",
         })
         self.assertRedirects(response, reverse("scoring_settings"))
@@ -166,6 +168,9 @@ class ListingViewsTests(TestCase):
         self.assertEqual(preference.min_area, 60)
         self.assertEqual(preference.preferred_districts, ["Кировский"])
         self.assertTrue(preference.prefer_photo)
+        self.assertEqual(preference.min_kitchen_area, 12)
+        self.assertEqual(preference.preferred_repair_types, ["euro"])
+        self.assertTrue(preference.require_lift)
         self.assertEqual(preference.market_weight, 60)
         self.assertContains(self.client.get(reverse("scoring_settings")), "Настройки оценки")
 
@@ -188,6 +193,31 @@ class ListingViewsTests(TestCase):
         self.match.market_delta_pct = 0
         add_listing_score([self.match], preference)
         self.assertIn("площадь меньше вашей цели", self.match.score_reasons)
+
+    def test_detail_preferences_are_neutral_when_source_does_not_supply_them(self):
+        preference = ScoringPreference.objects.create(
+            user=self.user, min_kitchen_area="12.00", preferred_repair_types=["euro"],
+            require_lift=True, require_balcony=True, prefer_furniture=True, preference_weight=50,
+        )
+        add_market_position([self.match])
+        add_listing_score([self.match], preference)
+        self.assertNotIn("кухня меньше вашей цели", self.match.score_reasons)
+        self.assertNotIn("нет лифта", self.match.score_reasons)
+
+    def test_detail_filters_apply_only_when_explicitly_requested(self):
+        self.match.kitchen_area = "12.50"
+        self.match.repair_type = "euro"
+        self.match.passenger_lifts_count = 2
+        self.match.balconies_count = 1
+        self.match.building_material_type = "monolith"
+        self.match.save()
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_feed"), {
+            "kitchen_area_min": "12", "repair_type": "euro", "has_lift": "1",
+            "has_balcony": "1", "building_material_type": "monolith",
+        })
+        self.assertEqual(list(response.context["listings"]), [self.match])
+        self.assertEqual(response.context["result_count"], 1)
 
     def test_shortlist_shows_recent_below_market_listings(self):
         candidate = Listing.objects.create(
