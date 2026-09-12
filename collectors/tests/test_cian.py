@@ -71,7 +71,7 @@ def test_parses_published_detail_and_photo_ids():
         "totalArea": "73", "roomsCount": 2, "floorNumber": 8,
         "kitchenArea": "12.5", "livingArea": "42.1", "combinedWcsCount": 1,
         "balconiesCount": 1, "repairType": "euro", "hasFurniture": True,
-        "building": {"floorsCount": 25, "buildYear": 2016, "materialType": "monolith", "ceilingHeight": "2.7"}, "geo": {"address": []},
+        "building": {"floorsCount": 25, "buildYear": 2016, "materialType": "monolith", "ceilingHeight": "2.7"}, "geo": {"address": [], "coordinates": {"lat": 54.7355, "lng": 55.9586}},
         "photos": [{"id": 11, "isDefault": True, "fullUrl": "https://images.cdn-cian.ru/images/11.jpg"}],
         "editDate": "2026-09-10T08:45:00Z",
     }}}
@@ -81,6 +81,7 @@ def test_parses_published_detail_and_photo_ids():
     assert detail.status == "published" and detail.listing.price == 10000000 and detail.photo_ids == [11]
     assert detail.photos[0]["full_url"] == "https://images.cdn-cian.ru/images/11.jpg"
     assert detail.offer_data == state["offerData"]
+    assert detail.latitude == Decimal("54.7355") and detail.longitude == Decimal("55.9586")
     assert detail.attributes["kitchen_area"] == Decimal("12.5")
     assert detail.attributes["bathrooms_combined"] == 1
     assert detail.attributes["building_material_type"] == "monolith"

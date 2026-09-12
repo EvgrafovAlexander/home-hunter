@@ -127,10 +127,15 @@ def detail_attributes(offer_data):
 
 def detail_coordinates(offer_data):
     geo = (offer_data.get("offer") or {}).get("geo") or {}
+    if not isinstance(geo, dict):
+        return None, None
+    coordinates = geo.get("coordinates", geo)
+    if not isinstance(coordinates, dict):
+        return None, None
     try:
-        lat = Decimal(str(geo.get("lat", geo.get("latitude"))))
-        lon = Decimal(str(geo.get("lon", geo.get("longitude"))))
-        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        lat = Decimal(str(coordinates.get("lat", coordinates.get("latitude"))))
+        lon = Decimal(str(coordinates.get("lng", coordinates.get("lon", coordinates.get("longitude")))))
+        if not (lat.is_finite() and lon.is_finite() and -90 <= lat <= 90 and -180 <= lon <= 180):
             return None, None
         return lat, lon
     except (ValueError, TypeError, ArithmeticError):
@@ -242,12 +247,13 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
             "mini_url": photo.get("miniUrl"),
         } for photo in photos if (identifier := integer(photo.get("id"))) is not None and photo.get("fullUrl")]
         photo_ids = [photo["id"] for photo in photo_data]
+        latitude, longitude = detail_coordinates(offer_data)
         if status != "published":
             return CianDetail(
-            status=status, photo_ids=photo_ids, photos=photo_data,
-            edited_at=offer.get("editDate"), offer_data=offer_data, attributes=detail_attributes(offer_data),
-            latitude=detail_coordinates(offer_data)[0], longitude=detail_coordinates(offer_data)[1],
-        )
+                status=status, photo_ids=photo_ids, photos=photo_data,
+                edited_at=offer.get("editDate"), offer_data=offer_data, attributes=detail_attributes(offer_data),
+                latitude=latitude, longitude=longitude,
+            )
         building = offer.get("building") or {}
         geo = offer.get("geo") or {}
         address = geo.get("address") or []
@@ -271,6 +277,6 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
         return CianDetail(
             status=status, listing=listing, photo_ids=photo_ids, photos=photo_data,
             edited_at=offer.get("editDate"), offer_data=offer_data, attributes=detail_attributes(offer_data),
-            latitude=detail_coordinates(offer_data)[0], longitude=detail_coordinates(offer_data)[1],
+            latitude=latitude, longitude=longitude,
         )
     raise ValueError("CIAN offer-card defaultState missing")
