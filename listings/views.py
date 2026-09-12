@@ -635,7 +635,12 @@ def consideration_list(request):
 @login_required
 def my_reviews(request):
     reviews = ListingReview.objects.filter(author=request.user).select_related("listing").prefetch_related("tags")
-    return render(request, "listings/my_reviews.html", {"reviews": reviews})
+    evaluated_count = reviews.count()
+    pending_count = _review_queue(request.user).count()
+    return render(request, "listings/my_reviews.html", {
+        "reviews": reviews, "evaluated_count": evaluated_count,
+        "pending_count": pending_count, "total_count": evaluated_count + pending_count,
+    })
 
 
 @login_required
