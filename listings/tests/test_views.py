@@ -5,8 +5,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from listings.models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Listing, ListingSearchQuery, ListingSnapshot, PriceHistory,
-                             Scan, ScoringPreference, SearchQuery, SourcePollingControl)
+from listings.models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, Listing, ListingReview,
+                             ListingSearchQuery, ListingSnapshot, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl)
 from listings.views import add_listing_score, add_market_position, next_poll_runs
 
 
@@ -381,6 +381,23 @@ class ListingViewsTests(TestCase):
         self.assertEqual(cycle["completed"], 2)
         self.assertEqual(cycle["remaining"], 0)
         self.assertContains(response, "2 / 2")
+
+    def test_review_flow_saves_personal_review_and_adds_consideration(self):
+        tag = ReviewTag.objects.create(code="test-tag", name="Тестовый тег", category="plus")
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("review_queue"), {
+            "rating": "9", "decision": "consider", "tags": [tag.pk], "comment": "Подходит",
+            "interest_reason": "Хорошая цена", "deal_breaker": "",
+        })
+        self.assertRedirects(response, reverse("review_queue"))
+        review = ListingReview.objects.get(author=self.user)
+        self.assertEqual(review.rating, 9)
+        self.assertEqual(list(review.tags.all()), [tag])
+        self.assertTrue(Consideration.objects.filter(review=review, stage="new").exists())
+        self.assertEqual(review.revisions.count(), 1)
+        response = self.client.get(reverse("consideration_list"))
+        self.assertContains(response, "Новое")
+        self.assertContains(response, review.listing.title)
 
     def test_unavailable_cian_listings_shows_confirmed_detail_removals(self):
         CianDetailPollState.objects.create(

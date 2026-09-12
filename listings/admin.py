@@ -1,6 +1,7 @@
 from django.contrib import admin
-from .models import (District, Listing, ListingSearchQuery, ListingSnapshot, Microdistrict, PriceHistory, Scan,
-                     SearchQuery, StreetAssignment)
+from .models import (Consideration, District, GlobalListingHide, Listing, ListingReview, ListingReviewRevision,
+                     ListingSearchQuery, ListingSnapshot, Microdistrict, PriceHistory, ReviewTag, Scan, SearchQuery,
+                     StreetAssignment, UserListingHide)
 
 
 class PriceHistoryInline(admin.TabularInline):
@@ -48,3 +49,21 @@ admin.site.register(ListingSnapshot)
 admin.site.register(District)
 admin.site.register(Microdistrict)
 admin.site.register(StreetAssignment)
+admin.site.register(ReviewTag)
+admin.site.register(UserListingHide)
+admin.site.register(GlobalListingHide)
+admin.site.register(Consideration)
+
+
+@admin.register(ListingReview)
+class ListingReviewAdmin(admin.ModelAdmin):
+    list_display = ("listing", "author", "rating", "decision", "updated_at")
+    list_filter = ("decision", "rating")
+    search_fields = ("listing__title", "listing__external_id", "author__username", "comment")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ListingReviewRevision)
+class ListingReviewRevisionAdmin(admin.ModelAdmin):
+    list_display = ("review", "rating", "decision", "created_at")
+    readonly_fields = tuple(field.name for field in ListingReviewRevision._meta.fields)

@@ -5,14 +5,17 @@ from statistics import median
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Avg, Count, F, Max, Q
 from django.db.models.functions import TruncDate
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
-from .models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, District, Listing, ListingSearchQuery, ListingSnapshot,
-                     ManualDomclickJob, Microdistrict, PriceHistory, Scan, ScoringPreference, SearchQuery,
-                     SourcePollingControl, StreetAssignment)
+from .models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, District, GlobalListingHide,
+                     Listing, ListingReview, ListingReviewRevision, ListingSearchQuery, ListingSnapshot, ManualDomclickJob,
+                     Microdistrict, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
+                     StreetAssignment, UserListingHide)
 from .services.enrichment import location_is_visible, parse_address
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
@@ -102,7 +105,9 @@ def _decimal(value):
 
 def filtered_listings(request, *, visible: bool | None = True):
     """Apply the same, deliberately small filter vocabulary to both screens."""
-    listings = Listing.objects.all()
+    listings = Listing.objects.exclude(global_hides__is_active=True)
+    if request.user.is_authenticated:
+        listings = listings.exclude(user_hides__user=request.user)
     if visible is not None:
         listings = listings.filter(is_visible=visible)
     names = ("source", "district", "rooms", "price_min", "price_max", "sqm_price_min",
@@ -528,6 +533,124 @@ def shortlist(request):
     })
 
 
+def _review_queue(user):
+    return Listing.objects.filter(is_active=True, is_visible=True).exclude(
+        global_hides__is_active=True,
+    ).exclude(
+        user_hides__user=user,
+    ).exclude(
+        reviews__author=user,
+    ).order_by("-first_seen_at", "-id")
+
+
+def _tag_groups():
+    tags = ReviewTag.objects.filter(is_active=True)
+    return [(value, label, list(tags.filter(category=value))) for value, label in ReviewTag.Category.choices]
+
+
+def _save_review(request, listing):
+    try:
+        rating = int(request.POST.get("rating", ""))
+    except ValueError:
+        rating = 0
+    decision = request.POST.get("decision")
+    if not 1 <= rating <= 10 or decision not in ListingReview.Decision.values:
+        return "Поставьте оценку от 1 до 10 и выберите решение."
+    tags = list(ReviewTag.objects.filter(is_active=True, pk__in=request.POST.getlist("tags")))
+    with transaction.atomic():
+        review, _ = ListingReview.objects.update_or_create(
+            listing=listing, author=request.user,
+            defaults={"rating": rating, "decision": decision, "comment": request.POST.get("comment", "").strip(),
+                      "interest_reason": request.POST.get("interest_reason", "").strip(),
+                      "deal_breaker": request.POST.get("deal_breaker", "").strip()},
+        )
+        review.tags.set(tags)
+        ListingReviewRevision.objects.create(
+            review=review, rating=review.rating, decision=review.decision, comment=review.comment,
+            interest_reason=review.interest_reason, deal_breaker=review.deal_breaker,
+            tag_codes=list(review.tags.values_list("code", flat=True)),
+        )
+        if decision == ListingReview.Decision.CONSIDER:
+            Consideration.objects.get_or_create(review=review)
+        else:
+            Consideration.objects.filter(review=review).delete()
+    return None
+
+
+@login_required
+def review_queue(request):
+    listing = _review_queue(request.user).first()
+    if request.method == "POST":
+        if not listing:
+            return redirect("review_queue")
+        action = request.POST.get("action")
+        if action == "hide":
+            UserListingHide.objects.get_or_create(listing=listing, user=request.user)
+            return redirect("review_queue")
+        if action == "global_hide" and request.user.is_staff:
+            reason = request.POST.get("global_reason", "").strip() or "Скрыто модератором"
+            GlobalListingHide.objects.update_or_create(listing=listing, is_active=True,
+                                                       defaults={"hidden_by": request.user, "reason": reason})
+            return redirect("review_queue")
+        error = _save_review(request, listing)
+        if not error:
+            return redirect("review_queue")
+    else:
+        error = None
+    if listing:
+        add_market_position([listing])
+        add_listing_score([listing], scoring_preference_for(request.user))
+    return render(request, "listings/review_queue.html", {
+        "item": listing, "tag_groups": _tag_groups(), "error": error,
+        "queue_count": _review_queue(request.user).count(),
+    })
+
+
+@login_required
+def consideration_list(request):
+    if request.method == "POST":
+        consideration = get_object_or_404(Consideration, pk=request.POST.get("consideration_id"), review__author=request.user)
+        stage = request.POST.get("stage")
+        if stage in Consideration.Stage.values:
+            consideration.stage = stage
+            consideration.save(update_fields=("stage", "updated_at"))
+        return redirect("consideration_list")
+    considerations = Consideration.objects.filter(review__author=request.user).select_related("review__listing").order_by("stage", "-updated_at")
+    grouped = [(value, label, [item for item in considerations if item.stage == value]) for value, label in Consideration.Stage.choices]
+    return render(request, "listings/consideration_list.html", {"grouped": grouped, "stages": Consideration.Stage.choices})
+
+
+@login_required
+def my_reviews(request):
+    reviews = ListingReview.objects.filter(author=request.user).select_related("listing").prefetch_related("tags")
+    return render(request, "listings/my_reviews.html", {"reviews": reviews})
+
+
+@login_required
+def review_export(request, format):
+    reviews = ListingReview.objects.filter(author=request.user).select_related("listing").prefetch_related("tags")
+    rows = [{"listing_id": review.listing_id, "url": review.listing.url, "title": review.listing.title,
+             "source": review.listing.source, "price": review.listing.price, "rooms": review.listing.rooms,
+             "area": str(review.listing.area or ""), "rating": review.rating, "decision": review.decision,
+             "tags": [tag.code for tag in review.tags.all()], "comment": review.comment,
+             "interest_reason": review.interest_reason, "deal_breaker": review.deal_breaker,
+             "created_at": review.created_at.isoformat(), "updated_at": review.updated_at.isoformat()} for review in reviews]
+    if format == "json":
+        return JsonResponse(rows, safe=False, json_dumps_params={"ensure_ascii": False, "indent": 2})
+    if format != "csv":
+        return HttpResponse(status=404)
+    import csv
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="home-hunter-reviews.csv"'
+    response.write("\ufeff")
+    writer = csv.DictWriter(response, fieldnames=rows[0].keys() if rows else ("listing_id", "rating", "decision"))
+    writer.writeheader()
+    for row in rows:
+        row["tags"] = ", ".join(row["tags"])
+        writer.writerow(row)
+    return response
+
+
 @login_required
 def hidden_listing_feed(request):
     listings, filters = filtered_listings(request, visible=False)
@@ -559,6 +682,9 @@ def hidden_listing_feed(request):
 @login_required
 def listing_detail(request, listing_id: int):
     listing = get_object_or_404(Listing, pk=listing_id)
+    own_review = ListingReview.objects.filter(listing=listing, author=request.user).first()
+    peer_reviews = (ListingReview.objects.filter(listing=listing).exclude(author=request.user)
+                    .select_related("author").prefetch_related("tags")) if own_review else []
     try:
         detail_photos = listing.cian_detail_state.detail_data.get("photos", [])
     except CianDetailPollState.DoesNotExist:
@@ -629,6 +755,7 @@ def listing_detail(request, listing_id: int):
         "detail_photos": detail_photos,
         "apartment_attributes": [(label, value) for label, value in apartment_attributes if value is not None],
         "building_attributes": [(label, value) for label, value in building_attributes if value is not None],
+        "own_review": own_review, "peer_reviews": peer_reviews,
     })
 
 
