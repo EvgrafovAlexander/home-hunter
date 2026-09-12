@@ -24,9 +24,9 @@
   .gallery-prev { left: 10px; }
   .gallery-next { right: 10px; }
   .gallery-count { position: absolute; right: 10px; bottom: 10px; padding: 4px 7px; border-radius: 6px; background: #17221ed9; color: #fff; font-size: 10px; font-weight: 750; }
-  .property-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 11px 14px 8px; }
-  .property-link, .decision { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 9px 12px; border: 1px solid transparent; border-radius: 9px; font: 750 12px inherit; text-decoration: none; cursor: pointer; transition: transform .16s ease, background .16s ease, border-color .16s ease, box-shadow .16s ease; }
-  .property-link:hover, .decision:hover { transform: translateY(-1px); box-shadow: 0 5px 13px #18312724; }
+  .gallery-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 11px 14px 8px; border-bottom: 1px solid #edf1ee; }
+  .review-button, .property-link, .decision, .hide-action, .global-hide button { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 9px 12px; border: 1px solid transparent; border-radius: 9px; font: 750 12px inherit; text-decoration: none; cursor: pointer; transition: transform .16s ease, background .16s ease, border-color .16s ease, box-shadow .16s ease; }
+  .property-link:hover, .decision:hover, .hide-action:hover, .global-hide button:hover { transform: translateY(-1px); box-shadow: 0 5px 13px #18312724; }
   .property-detail { border-color: #cfe5da; background: #f4fbf7; color: var(--accent-dark); }
   .property-detail:hover { background: #e4f5ec; border-color: var(--accent); }
   .property-source { background: var(--accent); color: #fff; }
@@ -78,11 +78,11 @@
   .decision.reject:hover { background: #74403c; }
   .decision.consider { background: var(--accent); }
   .decision.consider:hover { background: var(--accent-dark); }
-  .hide-action { min-height: 36px; border: 1px solid #dfe7e2; border-radius: 8px; background: #fff; color: var(--muted); font: 700 11px inherit; cursor: pointer; transition: background .16s ease, border-color .16s ease, color .16s ease; }
+  .hide-action { border-color: #dfe7e2; background: #fff; color: var(--muted); }
   .hide-action:hover { border-color: #b5c7bd; background: #f6f9f7; color: #3e5147; }
   .global-hide { display: flex; gap: 5px; }
   .global-hide input { height: 32px; }
-  .global-hide button { border: 0; border-radius: 7px; background: #f0e7e5; color: #8f514b; font: 700 11px inherit; cursor: pointer; }
+  .global-hide button { background: #f0e7e5; color: #8f514b; }
   .review-empty { padding: 60px; text-align: center; background: #fff; border: 1px solid var(--line); border-radius: 16px; }
   .review-empty i { display: grid; width: 40px; height: 40px; place-items: center; margin: auto; border-radius: 50%; background: #e0f3e9; color: var(--accent); font-size: 22px; font-style: normal; }
   @media (max-width: 850px) {
@@ -95,7 +95,7 @@
   @media (max-width: 560px) {
     .review-header { display: block; }
     .review-header aside { width: max-content; margin-top: 14px; }
-    .property-links { grid-template-columns: 1fr; }
+    .gallery-actions { grid-template-columns: 1fr; }
     .rating-control i { font-size: 18px; }
     .assessment-actions, .assessment-actions > div { align-items: stretch; flex-direction: column; }
     .decision { width: 100%; }
@@ -128,9 +128,9 @@
           {% endif %}
           <b>{{ item.get_source_display }}</b>
         </div>
-        <div class="property-links">
-          <a class="property-link property-detail" href="{% url 'listing_detail' item.id %}">Подробнее в Home Hunter</a>
-          <a class="property-link property-source" href="{{ item.url }}" target="_blank" rel="noopener">Открыть на {{ item.get_source_display }} ↗</a>
+        <div class="gallery-actions" aria-label="Переходы к объявлению">
+          <a class="property-link property-detail" href="{% url 'listing_detail' item.id %}">Карточка объявления</a>
+          <a class="property-link property-source" href="{{ item.url }}" target="_blank" rel="noopener">{{ item.get_source_display }} ↗</a>
         </div>
         {% if review_photos|length > 1 %}
           <div class="property-thumbnails" aria-label="Все фотографии объявления">
