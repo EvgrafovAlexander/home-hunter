@@ -385,6 +385,9 @@ class ListingViewsTests(TestCase):
     def test_review_flow_saves_personal_review_and_adds_consideration(self):
         tag = ReviewTag.objects.create(code="test-tag", name="Тестовый тег", category="plus")
         self.client.force_login(self.user)
+        response = self.client.get(reverse("review_queue"))
+        self.assertContains(response, "Подробнее в Home Hunter")
+        self.assertContains(response, "Открыть на")
         response = self.client.post(reverse("review_queue"), {
             "rating": "9", "decision": "consider", "tags": [tag.pk], "comment": "Подходит",
             "interest_reason": "Хорошая цена", "deal_breaker": "",
