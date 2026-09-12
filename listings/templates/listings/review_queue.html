@@ -60,7 +60,7 @@
   .rating-control label { display: inline-block; }
   .rating-control input, .tag-pills input { position: absolute; opacity: 0; }
   .rating-control i { color: #d7dfda; font-size: 22px; font-style: normal; cursor: pointer; transition: color .16s ease, transform .16s ease; }
-  .rating-control label:hover i, .rating-control input:checked + i { color: #e5aa27; transform: scale(1.1); }
+  .rating-control label:hover i, .rating-control label:has(~ label:hover) i, .rating-control input:checked + i, .rating-control label:has(~ label input:checked) i { color: #e5aa27; transform: scale(1.1); }
   .assessment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .tag-section { grid-template-columns: 25px 1fr; }
   .tag-section .tag-pills { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
