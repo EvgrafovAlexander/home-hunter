@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from listings.models import (CianDetailPollState, CianFullScanCheckpoint, Listing, ListingSearchQuery, ListingSnapshot, PriceHistory,
+from listings.models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Listing, ListingSearchQuery, ListingSnapshot, PriceHistory,
                              Scan, ScoringPreference, SearchQuery, SourcePollingControl)
 from listings.views import add_listing_score, add_market_position, next_poll_runs
 
@@ -365,6 +365,22 @@ class ListingViewsTests(TestCase):
         response = self.client.get(reverse("disappeared_listings"))
         self.assertContains(response, "Нужна проверка")
         self.assertContains(response, "Пропуск: 1/2")
+
+    def test_scan_statistics_uses_current_active_total_for_cian_detail_cycle(self):
+        self.kalininsky.is_active = False
+        self.kalininsky.save(update_fields=("is_active",))
+        CianDetailPollProgress.objects.create(
+            source="cian", cycle_total=3, completed_listing_ids=[self.match.pk, self.hidden.pk, 999999],
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("scan_statistics"))
+
+        cycle = next(source["detail_poll"]["cycle"] for source in response.context["sources"] if source["value"] == "cian")
+        self.assertEqual(cycle["total"], 2)
+        self.assertEqual(cycle["completed"], 2)
+        self.assertEqual(cycle["remaining"], 0)
+        self.assertContains(response, "2 / 2")
 
     def test_unavailable_cian_listings_shows_confirmed_detail_removals(self):
         CianDetailPollState.objects.create(

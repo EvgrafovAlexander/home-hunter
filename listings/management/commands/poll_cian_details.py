@@ -101,10 +101,13 @@ def prepare_cycle():
     completed = [pk for pk in progress.completed_listing_ids if pk in active_set]
     # Start the next pass only after the dashboard had a chance to show the
     # completed one.  New or reactivated cards join the following fair pass.
-    if progress.cycle_total == 0 or len(completed) >= progress.cycle_total:
+    # Listings can become inactive while a pass is in progress.  The saved
+    # total is informational only: use the current active set to decide
+    # whether every remaining candidate has been handled.
+    if progress.cycle_total == 0 or len(completed) >= len(active_ids):
         progress.cycle_started_at = timezone.now()
-        progress.cycle_total = len(active_ids)
         completed = []
+    progress.cycle_total = len(active_ids)
     progress.completed_listing_ids = completed
     progress.current_listing = None
     progress.current_started_at = None

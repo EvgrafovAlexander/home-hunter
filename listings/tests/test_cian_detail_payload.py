@@ -4,8 +4,8 @@ import pytest
 
 from collectors.base import NormalizedListing
 from collectors.cian.parser import CianDetail
-from listings.management.commands.poll_cian_details import save_detail
-from listings.models import CianDetailPayload, Listing
+from listings.management.commands.poll_cian_details import prepare_cycle, save_detail
+from listings.models import CianDetailPayload, CianDetailPollProgress, Listing
 
 
 pytestmark = pytest.mark.django_db
@@ -53,3 +53,19 @@ def test_keeps_latest_complete_offer_data_and_only_replaces_changed_payload():
     payload.refresh_from_db()
     assert payload.payload["offer"]["bathroom"] == "separate"
     assert payload.sha256 != first_hash
+
+
+def test_prepare_cycle_restarts_when_all_currently_active_listings_are_completed():
+    first = Listing.objects.create(source="cian", external_id="first", url="https://ufa.cian.ru/sale/flat/1/")
+    second = Listing.objects.create(source="cian", external_id="second", url="https://ufa.cian.ru/sale/flat/2/")
+    progress = CianDetailPollProgress.objects.create(
+        source="cian", cycle_total=3, completed_listing_ids=[first.pk, second.pk, 999999],
+    )
+
+    progress_id, completed = prepare_cycle()
+
+    progress.refresh_from_db()
+    assert progress_id == progress.pk
+    assert completed == []
+    assert progress.completed_listing_ids == []
+    assert progress.cycle_total == 2

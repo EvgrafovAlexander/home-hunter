@@ -691,7 +691,10 @@ def scan_statistics(request):
     detail_cycle = None
     if cian_progress:
         completed_ids = [pk for pk in cian_progress.completed_listing_ids if pk in cian_active_ids]
-        total = cian_progress.cycle_total or len(cian_active_ids)
+        # The active set may shrink during a detail pass.  Display its current
+        # size, rather than a historical cycle total which can no longer be
+        # reached after listings become inactive.
+        total = len(cian_active_ids)
         completed = min(len(completed_ids), total)
         elapsed_hours = max((now - cian_progress.cycle_started_at).total_seconds() / 3600, 0)
         actual_rate = round(completed / elapsed_hours, 1) if completed and elapsed_hours >= 1 / 60 else None
