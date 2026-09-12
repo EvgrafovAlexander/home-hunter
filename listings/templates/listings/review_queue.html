@@ -150,7 +150,7 @@
         <footer><span>Чужие оценки откроются только после вашей.</span><a href="{% url 'my_reviews' %}">Мои оценки →</a></footer>
       </article>
 
-      <form method="post" class="assessment-form">
+      <form method="post" class="assessment-form"><input type="hidden" name="listing_id" value="{{ selected_listing_id }}">
         {% csrf_token %}
         <div class="assessment-intro"><span>Новая карточка</span><h2>Ваше впечатление</h2><p>Выберите оценку, отмечайте наблюдения и сохраните решение.</p></div>
         <div class="listing-links" aria-label="Переходы к объявлению">

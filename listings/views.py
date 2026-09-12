@@ -579,7 +579,11 @@ def _save_review(request, listing):
 
 @login_required
 def review_queue(request):
-    listing = _review_queue(request.user).first()
+    queue = _review_queue(request.user)
+    requested_id = _integer(request.GET.get("listing") or request.POST.get("listing_id"))
+    listing = queue.filter(pk=requested_id).first() if requested_id else None
+    if listing is None:
+        listing = queue.first()
     if request.method == "POST":
         if not listing:
             return redirect("review_queue")
@@ -612,6 +616,7 @@ def review_queue(request):
         "item": listing, "tag_groups": _tag_groups(), "error": error,
         "queue_count": _review_queue(request.user).count(),
         "review_photos": review_photos,
+        "selected_listing_id": listing.pk if listing else None,
     })
 
 
