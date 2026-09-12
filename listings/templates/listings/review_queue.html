@@ -17,7 +17,8 @@
 
   .property-sheet { overflow: hidden; background: #fff; border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 10px 28px #1831270c; }
   .property-cover { position: relative; height: 195px; display: grid; place-items: center; background: #eef1ee; color: var(--muted); }
-  .property-cover > img { width: 100%; height: 100%; object-fit: cover; }
+  /* Keep the entire listing photo visible, including the lower part of tall images. */
+  .property-cover > img { width: 100%; height: 100%; object-fit: contain; }
   .property-cover > b { position: absolute; left: 12px; top: 12px; padding: 4px 7px; border-radius: 6px; background: #fffffff0; color: var(--accent-dark); font-size: 10px; }
   .gallery-arrow { position: absolute; top: 50%; z-index: 1; width: 34px; height: 34px; border: 0; border-radius: 50%; transform: translateY(-50%); background: #ffffffdf; color: #27342e; font: 28px/1 Arial, sans-serif; cursor: pointer; transition: transform .16s ease, background .16s ease, box-shadow .16s ease; }
   .gallery-arrow:hover { transform: translateY(-50%) scale(1.08); background: #fff; box-shadow: 0 4px 12px #18312738; }
