@@ -626,7 +626,10 @@ def consideration_list(request):
         return redirect("consideration_list")
     considerations = Consideration.objects.filter(review__author=request.user).select_related("review__listing").order_by("stage", "-updated_at")
     grouped = [(value, label, [item for item in considerations if item.stage == value]) for value, label in Consideration.Stage.choices]
-    return render(request, "listings/consideration_list.html", {"grouped": grouped, "stages": Consideration.Stage.choices})
+    return render(request, "listings/consideration_list.html", {
+        "grouped": grouped, "stages": Consideration.Stage.choices,
+        "total_considerations": considerations.count(),
+    })
 
 
 @login_required
