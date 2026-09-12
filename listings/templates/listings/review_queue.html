@@ -23,12 +23,12 @@
   .gallery-arrow:hover { transform: translateY(-50%) scale(1.08); background: #fff; box-shadow: 0 4px 12px #18312738; }
   .gallery-prev { left: 10px; }
   .gallery-next { right: 10px; }
-  .gallery-count { position: absolute; right: 10px; bottom: 10px; padding: 4px 7px; border-radius: 6px; background: #17221ed9; color: #fff; font-size: 10px; font-weight: 750; }
-  .gallery-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 11px 14px 8px; border-bottom: 1px solid #edf1ee; }
+  .gallery-count { position: absolute; right: 10px; bottom: 60px; padding: 4px 7px; border-radius: 6px; background: #17221ed9; color: #fff; font-size: 10px; font-weight: 750; }
+  .gallery-actions { position: absolute; z-index: 2; right: 12px; bottom: 12px; left: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .review-button, .property-link, .decision, .hide-action, .global-hide button { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 9px 12px; border: 1px solid transparent; border-radius: 9px; font: 750 12px inherit; text-decoration: none; cursor: pointer; transition: transform .16s ease, background .16s ease, border-color .16s ease, box-shadow .16s ease; }
   .property-link:hover, .decision:hover, .hide-action:hover, .global-hide button:hover { transform: translateY(-1px); box-shadow: 0 5px 13px #18312724; }
-  .property-detail { border-color: #cfe5da; background: #f4fbf7; color: var(--accent-dark); }
-  .property-detail:hover { background: #e4f5ec; border-color: var(--accent); }
+  .property-detail { border-color: #fff; background: #fffffff2; color: var(--accent-dark); }
+  .property-detail:hover { background: #fff; border-color: #fff; }
   .property-source { background: var(--accent); color: #fff; }
   .property-source:hover { background: var(--accent-dark); }
   .property-thumbnails { display: flex; gap: 7px; overflow-x: auto; padding: 6px 14px 14px; scrollbar-width: thin; }
@@ -126,11 +126,11 @@
           {% else %}
             <span>Нет фотографии</span>
           {% endif %}
+          <div class="gallery-actions" aria-label="Переходы к объявлению">
+            <a class="property-link property-detail" href="{% url 'listing_detail' item.id %}">Карточка объявления</a>
+            <a class="property-link property-source" href="{{ item.url }}" target="_blank" rel="noopener">{{ item.get_source_display }} ↗</a>
+          </div>
           <b>{{ item.get_source_display }}</b>
-        </div>
-        <div class="gallery-actions" aria-label="Переходы к объявлению">
-          <a class="property-link property-detail" href="{% url 'listing_detail' item.id %}">Карточка объявления</a>
-          <a class="property-link property-source" href="{{ item.url }}" target="_blank" rel="noopener">{{ item.get_source_display }} ↗</a>
         </div>
         {% if review_photos|length > 1 %}
           <div class="property-thumbnails" aria-label="Все фотографии объявления">
