@@ -600,9 +600,18 @@ def review_queue(request):
     if listing:
         add_market_position([listing])
         add_listing_score([listing], scoring_preference_for(request.user))
+        try:
+            review_photos = listing.cian_detail_state.detail_data.get("photos", [])
+        except CianDetailPollState.DoesNotExist:
+            review_photos = []
+        if not review_photos and listing.image_url:
+            review_photos = [{"full_url": listing.image_url}]
+    else:
+        review_photos = []
     return render(request, "listings/review_queue.html", {
         "item": listing, "tag_groups": _tag_groups(), "error": error,
         "queue_count": _review_queue(request.user).count(),
+        "review_photos": review_photos,
     })
 
 
