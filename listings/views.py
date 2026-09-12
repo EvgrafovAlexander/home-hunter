@@ -640,6 +640,7 @@ def my_reviews(request):
     return render(request, "listings/my_reviews.html", {
         "reviews": reviews, "evaluated_count": evaluated_count,
         "pending_count": pending_count, "total_count": evaluated_count + pending_count,
+        "pending_listings": _review_queue(request.user),
     })
 
 
