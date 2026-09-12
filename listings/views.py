@@ -581,7 +581,14 @@ def _save_review(request, listing):
 def review_queue(request):
     queue = _review_queue(request.user)
     requested_id = _integer(request.GET.get("listing") or request.POST.get("listing_id"))
-    listing = queue.filter(pk=requested_id).first() if requested_id else None
+    listing = None
+    if requested_id:
+        # A direct link from an offer must open that exact offer even when it
+        # already has a review; the sequential queue intentionally excludes
+        # reviewed listings.
+        listing = (Listing.objects.filter(pk=requested_id, is_active=True, is_visible=True)
+                   .exclude(global_hides__is_active=True)
+                   .exclude(user_hides__user=request.user).first())
     if listing is None:
         listing = queue.first()
     if request.method == "POST":
