@@ -132,7 +132,7 @@
           <div class="property-thumbnails" aria-label="Все фотографии объявления">
             {% for photo in review_photos %}
               <button class="review-thumbnail{% if forloop.first %} selected{% endif %}" type="button" data-index="{{ forloop.counter0 }}" aria-label="Фото {{ forloop.counter }}">
-                <img src="{{ photo.thumbnail_url|default:photo.preview_url|default:photo.full_url }}" alt="Фото {{ forloop.counter }}">
+                <img src="{{ photo.full_url }}" alt="Фото {{ forloop.counter }}">
               </button>
             {% endfor %}
           </div>
