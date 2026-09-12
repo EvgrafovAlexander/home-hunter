@@ -23,8 +23,8 @@
   .gallery-arrow:hover { transform: translateY(-50%) scale(1.08); background: #fff; box-shadow: 0 4px 12px #18312738; }
   .gallery-prev { left: 10px; }
   .gallery-next { right: 10px; }
-  .gallery-count { position: absolute; right: 10px; bottom: 60px; padding: 4px 7px; border-radius: 6px; background: #17221ed9; color: #fff; font-size: 10px; font-weight: 750; }
-  .gallery-actions { position: absolute; z-index: 2; right: 12px; bottom: 12px; left: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .gallery-count { position: absolute; right: 10px; bottom: 10px; padding: 4px 7px; border-radius: 6px; background: #17221ed9; color: #fff; font-size: 10px; font-weight: 750; }
+  .listing-links { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: -3px 4px 2px; }
   .review-button, .property-link, .decision, .hide-action, .global-hide button { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 9px 12px; border: 1px solid transparent; border-radius: 9px; font: 750 12px inherit; text-decoration: none; cursor: pointer; transition: transform .16s ease, background .16s ease, border-color .16s ease, box-shadow .16s ease; }
   .property-link:hover, .decision:hover, .hide-action:hover, .global-hide button:hover { transform: translateY(-1px); box-shadow: 0 5px 13px #18312724; }
   .property-detail { border-color: #fff; background: #fffffff2; color: var(--accent-dark); }
@@ -95,7 +95,7 @@
   @media (max-width: 560px) {
     .review-header { display: block; }
     .review-header aside { width: max-content; margin-top: 14px; }
-    .gallery-actions { grid-template-columns: 1fr; }
+    .listing-links { grid-template-columns: 1fr; }
     .rating-control i { font-size: 18px; }
     .assessment-actions, .assessment-actions > div { align-items: stretch; flex-direction: column; }
     .decision { width: 100%; }
@@ -126,10 +126,6 @@
           {% else %}
             <span>Нет фотографии</span>
           {% endif %}
-          <div class="gallery-actions" aria-label="Переходы к объявлению">
-            <a class="property-link property-detail" href="{% url 'listing_detail' item.id %}">Карточка объявления</a>
-            <a class="property-link property-source" href="{{ item.url }}" target="_blank" rel="noopener">{{ item.get_source_display }} ↗</a>
-          </div>
           <b>{{ item.get_source_display }}</b>
         </div>
         {% if review_photos|length > 1 %}
@@ -157,6 +153,10 @@
       <form method="post" class="assessment-form">
         {% csrf_token %}
         <div class="assessment-intro"><span>Новая карточка</span><h2>Ваше впечатление</h2><p>Выберите оценку, отмечайте наблюдения и сохраните решение.</p></div>
+        <div class="listing-links" aria-label="Переходы к объявлению">
+          <a class="property-link property-detail" href="{% url 'listing_detail' item.id %}">Карточка объявления</a>
+          <a class="property-link property-source" href="{{ item.url }}" target="_blank" rel="noopener">{{ item.get_source_display }} ↗</a>
+        </div>
         {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
         <section class="assessment-section">
           <div class="section-marker">1</div><div class="section-title"><h3>Общее впечатление</h3><p>Насколько этот вариант интересен сейчас?</p></div>
