@@ -38,6 +38,7 @@
       {% if item.description %}<section class="offer-section"><h2>Описание</h2><p class="description">{{ item.description }}</p></section>{% endif %}
       <div class="offer-actions"><a class="offer-button" href="{{ item.url }}" target="_blank" rel="noopener">Открыть на сайте ↗</a>{% if item.latitude is not None and item.longitude is not None %}<a class="offer-button offer-button--quiet" href="{% url 'listing_map' %}?listing={{ item.id }}">Показать на карте</a>{% endif %}</div>
       <p class="offer-meta">Впервые найдено: {{ item.first_seen_at|date:'d.m.Y H:i' }} · Последнее обновление: {{ item.last_seen_at|date:'d.m.Y H:i' }}</p>
+      {% if detail_state %}<p class="offer-meta">Проверка CIAN: {{ detail_state.get_status_display }}{% if detail_state.last_checked_at %} · {{ detail_state.last_checked_at|date:'d.m.Y H:i' }}{% endif %}</p>{% endif %}
     </article>
 
     <aside class="offer-panel side-panel">

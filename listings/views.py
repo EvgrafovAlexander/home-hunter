@@ -705,8 +705,10 @@ def listing_detail(request, listing_id: int):
                     .select_related("author").prefetch_related("tags")) if own_review else []
     try:
         detail_photos = listing.cian_detail_state.detail_data.get("photos", [])
+        detail_state = listing.cian_detail_state
     except CianDetailPollState.DoesNotExist:
         detail_photos = []
+        detail_state = None
     add_market_position([listing])
     add_listing_score([listing], scoring_preference_for(request.user))
     price_history = list(listing.price_history.exclude(price__isnull=True).order_by("observed_at", "id"))
@@ -771,6 +773,7 @@ def listing_detail(request, listing_id: int):
         "price_high": max((entry.price for entry in price_history), default=None),
         "change_events": change_events(snapshots), "similar_listings": similar_listings(listing),
         "detail_photos": detail_photos,
+        "detail_state": detail_state,
         "apartment_attributes": [(label, value) for label, value in apartment_attributes if value is not None],
         "building_attributes": [(label, value) for label, value in building_attributes if value is not None],
         "own_review": own_review, "peer_reviews": peer_reviews,

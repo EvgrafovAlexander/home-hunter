@@ -13,6 +13,7 @@ from collectors.cian.collector import CianCollector
 from listings.models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, Listing,
                              ListingSnapshot, PriceHistory)
 from listings.services.persistence import snapshot_data_from_listing
+from listings.services.enrichment import calculate_price_per_sqm, location_is_visible, parse_address
 
 LOCK_ID = 724198501
 
@@ -48,7 +49,6 @@ def save_detail(listing_id, detail):
     state, _ = CianDetailPollState.objects.select_for_update().get_or_create(listing=listing)
     observed = timezone.now()
     state.last_checked_at, state.last_error = observed, ""
-    save_detail_payload(listing, detail.offer_data, observed)
     if detail.status != "published":
         state.status = CianDetailPollState.Status.UNAVAILABLE
         state.first_unavailable_at = state.first_unavailable_at or observed
@@ -63,12 +63,17 @@ def save_detail(listing_id, detail):
             )
             listing.save(update_fields=("publication_status", "is_active", "updated_at"))
         return False
+    save_detail_payload(listing, detail.offer_data, observed)
     item = detail.listing
     changed = []
     # Search cards provide a stable marketing title.  Detail pages do not
     # always expose one, so their technical fallback must never overwrite it.
     for field in ("price", "description", "rooms", "area", "floor", "floors_total", "built_year", "address", "district", "published_text", "image_url"):
         value = getattr(item, field)
+        if field == "address" and listing.address_override:
+            continue
+        if field == "district" and listing.district_override:
+            continue
         if value is not None and getattr(listing, field) != value:
             setattr(listing, field, value)
             changed.append(field)
@@ -77,7 +82,17 @@ def save_detail(listing_id, detail):
             setattr(listing, field, value)
             changed.append(field)
     if item.price is not None and listing.area:
-        listing.price_per_sqm = round(item.price / float(listing.area))
+        listing.price_per_sqm = calculate_price_per_sqm(listing.price, listing.area)
+    if detail.latitude is not None and detail.longitude is not None:
+        listing.latitude = detail.latitude
+        listing.longitude = detail.longitude
+        listing.geocode_status = "detail"
+        listing.geocoded_at = observed
+    parsed = parse_address(listing.address, listing.district)
+    listing.address = listing.address_override or parsed.address
+    listing.district = listing.district_override or parsed.district
+    listing.microdistrict = listing.microdistrict_override or parsed.microdistrict
+    listing.is_visible = location_is_visible(listing.address, listing.district, listing.microdistrict)
     if "price" in changed:
         PriceHistory.objects.create(listing=listing, price=listing.price, observed_at=observed)
     detail_changed = state.detail_data.get("photo_ids") != detail.photo_ids or state.detail_data.get("edited_at") != detail.edited_at

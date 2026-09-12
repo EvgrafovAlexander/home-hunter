@@ -29,6 +29,8 @@ class CianDetail:
     edited_at: str | None = None
     offer_data: dict = field(default_factory=dict)
     attributes: dict = field(default_factory=dict)
+    latitude: Decimal | None = None
+    longitude: Decimal | None = None
 
 
 def cian_url(url: str) -> str:
@@ -121,6 +123,18 @@ def detail_attributes(offer_data):
         "parking_type": text(parking.get("type")),
         "has_garbage_chute": flag(building.get("hasGarbageChute")),
     }
+
+
+def detail_coordinates(offer_data):
+    geo = (offer_data.get("offer") or {}).get("geo") or {}
+    try:
+        lat = Decimal(str(geo.get("lat", geo.get("latitude"))))
+        lon = Decimal(str(geo.get("lon", geo.get("longitude"))))
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            return None, None
+        return lat, lon
+    except (ValueError, TypeError, ArithmeticError):
+        return None, None
 
 
 def parse_page(html: str, url: str) -> ParsedPage:
@@ -230,9 +244,10 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
         photo_ids = [photo["id"] for photo in photo_data]
         if status != "published":
             return CianDetail(
-                status=status, photo_ids=photo_ids, photos=photo_data,
-                edited_at=offer.get("editDate"), offer_data=offer_data, attributes=detail_attributes(offer_data),
-            )
+            status=status, photo_ids=photo_ids, photos=photo_data,
+            edited_at=offer.get("editDate"), offer_data=offer_data, attributes=detail_attributes(offer_data),
+            latitude=detail_coordinates(offer_data)[0], longitude=detail_coordinates(offer_data)[1],
+        )
         building = offer.get("building") or {}
         geo = offer.get("geo") or {}
         address = geo.get("address") or []
@@ -256,5 +271,6 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
         return CianDetail(
             status=status, listing=listing, photo_ids=photo_ids, photos=photo_data,
             edited_at=offer.get("editDate"), offer_data=offer_data, attributes=detail_attributes(offer_data),
+            latitude=detail_coordinates(offer_data)[0], longitude=detail_coordinates(offer_data)[1],
         )
     raise ValueError("CIAN offer-card defaultState missing")
