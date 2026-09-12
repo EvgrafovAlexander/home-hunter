@@ -583,17 +583,17 @@ def review_queue(request):
     if request.method == "POST":
         if not listing:
             return redirect("review_queue")
-        action = request.POST.get("action")
-        if action == "hide":
-            UserListingHide.objects.get_or_create(listing=listing, user=request.user)
-            return redirect("review_queue")
-        if action == "global_hide" and request.user.is_staff:
-            reason = request.POST.get("global_reason", "").strip() or "Скрыто модератором"
-            GlobalListingHide.objects.update_or_create(listing=listing, is_active=True,
-                                                       defaults={"hidden_by": request.user, "reason": reason})
-            return redirect("review_queue")
         error = _save_review(request, listing)
         if not error:
+            if request.POST.get("hide_personally"):
+                UserListingHide.objects.get_or_create(listing=listing, user=request.user)
+            if request.user.is_staff and request.POST.get("hide_globally"):
+                reason = request.POST.get("global_reason", "").strip() or "Скрыто модератором"
+                GlobalListingHide.objects.update_or_create(
+                    listing=listing,
+                    is_active=True,
+                    defaults={"hidden_by": request.user, "reason": reason},
+                )
             return redirect("review_queue")
     else:
         error = None

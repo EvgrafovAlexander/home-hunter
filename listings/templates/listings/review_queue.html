@@ -78,11 +78,10 @@
   .decision.reject:hover { background: #74403c; }
   .decision.consider { background: var(--accent); }
   .decision.consider:hover { background: var(--accent-dark); }
-  .hide-action { border-color: #dfe7e2; background: #fff; color: var(--muted); }
-  .hide-action:hover { border-color: #b5c7bd; background: #f6f9f7; color: #3e5147; }
-  .global-hide { display: flex; gap: 5px; }
-  .global-hide input { height: 32px; }
-  .global-hide button { background: #f0e7e5; color: #8f514b; }
+  .hide-options { display: grid; gap: 7px; }
+  .hide-option { display: flex; align-items: center; gap: 7px; color: #52615b; font-size: 11px; font-weight: 700; cursor: pointer; }
+  .hide-option input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+  .global-hide-reason { width: 100%; box-sizing: border-box; min-height: 34px; padding: 7px 9px; border: 1px solid #dfe7e2; border-radius: 7px; font: 11px inherit; }
   .review-empty { padding: 60px; text-align: center; background: #fff; border: 1px solid var(--line); border-radius: 16px; }
   .review-empty i { display: grid; width: 40px; height: 40px; place-items: center; margin: auto; border-radius: 50%; background: #e0f3e9; color: var(--accent); font-size: 22px; font-style: normal; }
   @media (max-width: 850px) {
@@ -177,8 +176,10 @@
         </section>
         <footer class="assessment-actions">
           <div><button class="decision reject" name="decision" value="reject"><small>Не подходит</small>Не рассматривать</button><button class="decision consider" name="decision" value="consider"><small>Добавить в shortlist</small>Готов рассмотреть</button></div>
-          <button class="hide-action" name="action" value="hide">Скрыть для себя</button>
-          {% if request.user.is_staff %}<label class="global-hide"><input name="global_reason" placeholder="Причина скрытия для всех"><button name="action" value="global_hide">Скрыть для всех</button></label>{% endif %}
+          <div class="hide-options">
+            <label class="hide-option"><input type="checkbox" name="hide_personally">Скрыть для себя</label>
+            {% if request.user.is_staff %}<label class="hide-option"><input type="checkbox" name="hide_globally">Скрыть для всех</label><input class="global-hide-reason" name="global_reason" placeholder="Причина скрытия для всех (необязательно)">{% endif %}
+          </div>
         </footer>
       </form>
     </div>

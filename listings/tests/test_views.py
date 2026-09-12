@@ -6,7 +6,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from listings.models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, Listing, ListingReview,
-                             ListingSearchQuery, ListingSnapshot, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl)
+                             ListingSearchQuery, ListingSnapshot, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery,
+                             SourcePollingControl, UserListingHide)
 from listings.views import add_listing_score, add_market_position, next_poll_runs
 
 
@@ -390,13 +391,14 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, self.match.get_source_display())
         response = self.client.post(reverse("review_queue"), {
             "rating": "9", "decision": "consider", "tags": [tag.pk], "comment": "Подходит",
-            "interest_reason": "Хорошая цена", "deal_breaker": "",
+            "interest_reason": "Хорошая цена", "deal_breaker": "", "hide_personally": "on",
         })
         self.assertRedirects(response, reverse("review_queue"))
         review = ListingReview.objects.get(author=self.user)
         self.assertEqual(review.rating, 9)
         self.assertEqual(list(review.tags.all()), [tag])
         self.assertTrue(Consideration.objects.filter(review=review, stage="new").exists())
+        self.assertTrue(UserListingHide.objects.filter(listing=review.listing, user=self.user).exists())
         self.assertEqual(review.revisions.count(), 1)
         response = self.client.get(reverse("consideration_list"))
         self.assertContains(response, "Новое")
