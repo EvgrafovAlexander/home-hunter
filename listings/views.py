@@ -12,7 +12,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
-from .models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, District, GlobalListingHide,
+from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, District, GlobalListingHide,
                      Listing, ListingReview, ListingReviewRevision, ListingSearchQuery, ListingSnapshot, ManualDomclickJob,
                      Microdistrict, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
                      StreetAssignment, UserListingHide)
@@ -721,6 +721,20 @@ def listing_detail(request, listing_id: int):
     except CianDetailPollState.DoesNotExist:
         detail_photos = []
         detail_state = None
+    # A deactivated CIAN offer clears the poll state's live photo list, but
+    # the last successful detail payload still contains the complete gallery.
+    # Keep those archived photos available on the listing detail page.
+    if not detail_photos:
+        try:
+            archived_photos = (listing.cian_detail_payload.payload
+                               .get("offer", {}).get("photos", []))
+        except CianDetailPayload.DoesNotExist:
+            archived_photos = []
+        detail_photos = [
+            {"full_url": photo.get("fullUrl") or photo.get("full_url")}
+            for photo in archived_photos
+            if photo.get("fullUrl") or photo.get("full_url")
+        ]
     add_market_position([listing])
     add_listing_score([listing], scoring_preference_for(request.user))
     price_history = list(listing.price_history.exclude(price__isnull=True).order_by("observed_at", "id"))
