@@ -415,6 +415,39 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "Двушка")
         self.assertContains(response, "deactivated")
 
+    def test_unavailable_cian_listings_builds_statistics(self):
+        now = timezone.now()
+        self.match.first_seen_at = now - timedelta(days=4)
+        self.match.price = 6_500_000
+        self.match.area = "52.00"
+        self.match.save(update_fields=("first_seen_at", "price", "area"))
+        CianDetailPollState.objects.create(
+            listing=self.match, status=CianDetailPollState.Status.UNAVAILABLE,
+            first_unavailable_at=now, detail_data={"status": "deactivated"},
+        )
+        second = Listing.objects.create(
+            source="cian", external_id="second-unavailable", url="https://example.test/second",
+            title="Трёшка", price=9_000_000, price_per_sqm=140_000, rooms=3, area="64.00",
+            district="Советский", first_seen_at=now - timedelta(days=2),
+        )
+        CianDetailPollState.objects.create(
+            listing=second, status=CianDetailPollState.Status.UNAVAILABLE,
+            first_unavailable_at=now, detail_data={"status": "draft"},
+        )
+        PriceHistory.objects.create(listing=self.match, price=6_800_000, observed_at=now - timedelta(days=3))
+        PriceHistory.objects.create(listing=self.match, price=6_500_000, observed_at=now)
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("unavailable_cian_listings"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["stats"]["total"], 2)
+        self.assertEqual(response.context["stats"]["price_down_count"], 1)
+        self.assertEqual(response.context["stats"]["duration_median"], 3.0)
+        self.assertContains(response, "Статусы ЦИАН")
+        self.assertContains(response, "Снято с публикации")
+        self.assertContains(response, "Советский")
+
     def test_scan_statistics_can_disable_and_enable_source(self):
         self.client.force_login(self.user)
         response = self.client.post(reverse("scan_statistics"), {"source": "cian", "mode": "fast", "enabled": "0"})

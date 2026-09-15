@@ -1,3 +1,4 @@
+from collections import Counter, defaultdict
 from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from math import ceil
@@ -970,9 +971,115 @@ def disappeared_listings(request):
 @login_required
 def unavailable_cian_listings(request):
     """Archive of cards whose individual CIAN page confirmed removal."""
-    unavailable = (CianDetailPollState.objects.filter(status=CianDetailPollState.Status.UNAVAILABLE)
-                   .select_related("listing").order_by("-first_unavailable_at", "-last_checked_at"))
-    return render(request, "listings/unavailable_cian_listings.html", {"unavailable": unavailable})
+    unavailable = list(
+        CianDetailPollState.objects.filter(status=CianDetailPollState.Status.UNAVAILABLE)
+        .select_related("listing").order_by("-first_unavailable_at", "-last_checked_at")
+    )
+    listing_ids = [state.listing_id for state in unavailable]
+
+    # The detail endpoint reports a technical state, not a reason for sale.
+    # Keep the original value in the report while showing a human-readable label.
+    status_labels = {
+        "deactivated": "Снято с публикации",
+        "deleted": "Удалено",
+        "draft": "Черновик",
+        "refused": "Отклонено ЦИАН",
+        "unavailable": "Недоступно",
+    }
+    for state in unavailable:
+        state.cian_status_value = (state.detail_data or {}).get("status") or "unavailable"
+        state.cian_status_label = status_labels.get(
+            state.cian_status_value,
+            state.cian_status_value.replace("_", " ").capitalize(),
+        )
+    status_counts = Counter(
+        state.cian_status_value for state in unavailable
+    )
+    total = len(unavailable)
+
+    def average(values, digits=0):
+        values = [value for value in values if value is not None]
+        return round(sum(values) / len(values), digits) if values else None
+
+    durations = [
+        (state.first_unavailable_at - state.listing.first_seen_at).total_seconds() / 86400
+        for state in unavailable
+        if state.first_unavailable_at and state.listing.first_seen_at
+    ]
+    price_history = defaultdict(list)
+    if listing_ids:
+        for row in (PriceHistory.objects.filter(listing_id__in=listing_ids, price__isnull=False)
+                    .order_by("listing_id", "observed_at", "id")
+                    .values("listing_id", "price")):
+            price_history[row["listing_id"]].append(row["price"])
+    tracked_prices = [prices for prices in price_history.values() if len(prices) > 1]
+    price_down_count = sum(prices[-1] < prices[0] for prices in tracked_prices)
+    price_up_count = sum(prices[-1] > prices[0] for prices in tracked_prices)
+    repair_labels = {
+        "cosmetic": "Косметический",
+        "euro": "Евроремонт",
+        "design": "Дизайнерский",
+        "no": "Без ремонта",
+        "rough": "Черновой",
+    }
+
+    def grouped_rows(attribute, labels=None):
+        groups = defaultdict(list)
+        for state in unavailable:
+            raw_value = getattr(state.listing, attribute) or "Не указан"
+            value = (labels or {}).get(raw_value, raw_value)
+            groups[value].append(state)
+        rows = []
+        for value, items in groups.items():
+            rows.append({
+                "name": value,
+                "count": len(items),
+                "share": round(100 * len(items) / total) if total else 0,
+                "avg_price": average([item.listing.price for item in items]),
+                "avg_area": average([item.listing.area for item in items], 1),
+            })
+        return sorted(rows, key=lambda row: (-row["count"], str(row["name"])))
+
+    status_rows = [
+        {
+            "value": value,
+            "label": status_labels.get(value, value.replace("_", " ").capitalize()),
+            "count": count,
+            "share": round(100 * count / total) if total else 0,
+        }
+        for value, count in status_counts.most_common()
+    ]
+    active_listings = list(
+        Listing.objects.filter(source=SearchQuery.Source.CIAN, is_active=True)
+        .only("price", "price_per_sqm", "area", "floor")
+    )
+    stats = {
+        "total": total,
+        "observed_total": Listing.objects.filter(source=SearchQuery.Source.CIAN).count(),
+        "active_total": len(active_listings),
+        "avg_price": average([state.listing.price for state in unavailable]),
+        "avg_area": average([state.listing.area for state in unavailable], 1),
+        "avg_price_per_sqm": average([state.listing.price_per_sqm for state in unavailable]),
+        "avg_floor": average([state.listing.floor for state in unavailable]),
+        "active_avg_price": average([listing.price for listing in active_listings]),
+        "active_avg_area": average([listing.area for listing in active_listings], 1),
+        "active_avg_price_per_sqm": average([listing.price_per_sqm for listing in active_listings]),
+        "active_avg_floor": average([listing.floor for listing in active_listings]),
+        "duration_avg": round(sum(durations) / len(durations), 1) if durations else None,
+        "duration_median": round(median(durations), 1) if durations else None,
+        "duration_min": round(min(durations), 1) if durations else None,
+        "duration_max": round(max(durations), 1) if durations else None,
+        "tracked_prices": len(tracked_prices),
+        "price_down_count": price_down_count,
+        "price_up_count": price_up_count,
+        "status_rows": status_rows,
+        "district_rows": grouped_rows("district"),
+        "room_rows": grouped_rows("rooms"),
+        "repair_rows": grouped_rows("repair_type", repair_labels),
+    }
+    return render(request, "listings/unavailable_cian_listings.html", {
+        "unavailable": unavailable, "stats": stats,
+    })
 
 
 @login_required
