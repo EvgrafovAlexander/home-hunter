@@ -1,3 +1,4 @@
+import json
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
@@ -42,15 +43,18 @@ def source_health(source: str) -> SourceHealth:
     return SourceHealth("healthy", "В норме", "Последний опрос завершился успешно")
 
 
-def send_telegram_message(text: str) -> bool:
+def send_telegram_message(text: str, reply_markup=None) -> bool:
     if not settings.TG_BOT_TOKEN or not settings.TG_CHAT_ID:
         return False
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} \
         if settings.TELEGRAM_PROXY_URL else None
     try:
+        data = {"chat_id": settings.TG_CHAT_ID, "text": text}
+        if reply_markup:
+            data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
         response = requests.post(
             f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/sendMessage",
-            data={"chat_id": settings.TG_CHAT_ID, "text": text}, proxies=proxies, timeout=20,
+            data=data, proxies=proxies, timeout=20,
         )
         response.raise_for_status()
         return True
@@ -59,15 +63,18 @@ def send_telegram_message(text: str) -> bool:
         return False
 
 
-def send_telegram_photo(photo_url: str, caption: str) -> bool:
+def send_telegram_photo(photo_url: str, caption: str, reply_markup=None) -> bool:
     if not settings.TG_BOT_TOKEN or not settings.TG_CHAT_ID or not photo_url:
         return False
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} \
         if settings.TELEGRAM_PROXY_URL else None
     try:
+        data = {"chat_id": settings.TG_CHAT_ID, "photo": photo_url, "caption": caption}
+        if reply_markup:
+            data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
         response = requests.post(
             f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/sendPhoto",
-            data={"chat_id": settings.TG_CHAT_ID, "photo": photo_url, "caption": caption},
+            data=data,
             proxies=proxies, timeout=20,
         )
         response.raise_for_status()

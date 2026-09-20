@@ -58,15 +58,29 @@ def notify_new_deal(listing_id: int) -> bool:
         f"{listing.price_per_sqm:,} ₽/м²" if listing.price_per_sqm else "",
     ]))
     location = " · ".join(filter(None, [listing.district, listing.microdistrict, listing.address]))
+    criteria = []
+    if listing.area is not None and listing.area >= 55:
+        criteria.append("площадь подходит")
+    if listing.floor is not None and listing.floor >= 7:
+        criteria.append("этаж подходит")
+    if listing.district in {"Кировский", "Ленинский", "Октябрьский", "Советский"}:
+        criteria.append("предпочтительный район")
+    if listing.repair_type:
+        criteria.append(f"ремонт: {listing.repair_type}")
+    criteria_text = "\n".join(f"✓ {item}" for item in criteria) or "• критерии требуют проверки"
+    keyboard = {"inline_keyboard": [[
+        {"text": "📝 Оценить квартиру", "url": f"{settings.PUBLIC_BASE_URL}/reviews/?listing={listing.pk}"},
+    ], [{"text": "Открыть объявление", "url": listing.url}, {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"}]]}
     text = "\n".join([
-        "🟢 Новое выгодное объявление",
-        f"На {discount}% ниже рынка · {reference}, {samples} аналогов",
-        f"{listing.price:,} ₽" if listing.price else "Цена не указана",
-        facts, location, source, listing.url,
+        "🟢 НОВАЯ КВАРТИРА НИЖЕ РЫНКА", "",
+        f"{listing.price:,} ₽ · {listing.price_per_sqm:,} ₽/м²" if listing.price and listing.price_per_sqm else (f"{listing.price:,} ₽" if listing.price else "Цена не указана"),
+        facts, "", f"📍 {location}" if location else "📍 Адрес не указан", "",
+        f"📉 На {discount}% ниже медианы похожих квартир", f"{reference} · {samples} аналогов", "",
+        "Подходит по критериям:", criteria_text, "", "⭐ Моя оценка: не выставлена", f"Источник: {source} · добавлено сегодня",
     ])
-    sent = send_telegram_photo(listing.image_url, text) if listing.image_url else False
+    sent = send_telegram_photo(listing.image_url, text, keyboard) if listing.image_url else False
     if not sent:
-        sent = send_telegram_message(text)
+        sent = send_telegram_message(text, keyboard)
     if not sent:
         return False
     try:

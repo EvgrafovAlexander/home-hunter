@@ -27,6 +27,9 @@ def test_notifies_once_for_a_new_listing_below_local_market(settings):
         assert notify_new_deal(deal.pk)
         assert not notify_new_deal(deal.pk)
     assert "На 17% ниже рынка" in send.call_args.args[0]
+    keyboard = send.call_args.args[1]
+    assert keyboard["inline_keyboard"][0][0]["url"].endswith(f"/reviews/?listing={deal.pk}")
+    assert "Подходит по критериям:" in send.call_args.args[0]
     assert DealAlert.objects.get().listing == deal
 
 
