@@ -59,6 +59,7 @@ class StreetAssignment(models.Model):
     district = models.ForeignKey(District, on_delete=models.PROTECT, related_name="street_assignments")
     microdistrict = models.ForeignKey(Microdistrict, on_delete=models.PROTECT, related_name="street_assignments",
                                       null=True, blank=True)
+    is_excluded = models.BooleanField(default=False, help_text="Исключить объявления этой улицы из выдачи и рыночной статистики")
     note = models.CharField(max_length=255, blank=True)
 
     class Meta:

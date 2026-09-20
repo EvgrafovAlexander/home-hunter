@@ -114,7 +114,7 @@ def process_listing(
             values["microdistrict"] = microdistrict_ref.name
         values["is_visible"] = location_is_visible(
             values["address"], values["district"], values["microdistrict"],
-        )
+        ) and not resolution.excluded
     address_changed = not created and listing.address != values["address"]
     reactivated = not created and not listing.is_active
     changed = {key for key, value in values.items() if getattr(listing, key) != value}

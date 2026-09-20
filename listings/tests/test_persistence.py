@@ -133,6 +133,17 @@ def test_resolves_street_rule_with_house_range(search, item):
     assert result.listing.location_source == "street"
 
 
+def test_excluded_street_rule_hides_listing_and_sets_microdistrict(search, item):
+    district = District.objects.get(name="Кировский")
+    microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+    StreetAssignment.objects.create(
+        street="ул. Лётчиков", district=district, microdistrict=microdistrict, is_excluded=True,
+    )
+    result = process_listing(search, replace(item, address="Лётчиков улица, 14", district="Кировский"), timezone.now())
+    assert result.listing.microdistrict == "Южный"
+    assert not result.listing.is_visible
+
+
 def test_keeps_source_price_per_sqm_and_district(search, item):
     result = process_listing(search, replace(
         item, price_per_sqm=111000, district="Советский", address="р-н Кировский",

@@ -177,7 +177,7 @@ def filter_options(*, visible: bool = True):
 
 def add_market_position(listings):
     """Compare within a microdistrict first; avoid mixing distinct local markets."""
-    comparable = (Listing.objects.filter(is_active=True, price_per_sqm__isnull=False)
+    comparable = (Listing.objects.filter(is_active=True, is_visible=True, price_per_sqm__isnull=False)
                   .exclude(district__isnull=True).exclude(district="")
                   .exclude(rooms__isnull=True).exclude(area__isnull=True)
                   .values("id", "district", "microdistrict", "rooms", "area", "price_per_sqm"))
@@ -1197,6 +1197,7 @@ def location_directory(request):
                     house_to=_integer(request.POST.get("house_to")),
                     parity=request.POST.get("parity") or StreetAssignment.Parity.ANY,
                     district=district, microdistrict=microdistrict,
+                    is_excluded=request.POST.get("is_excluded") == "1",
                     note=(request.POST.get("note") or "").strip(),
                 )
         return redirect("location_directory")

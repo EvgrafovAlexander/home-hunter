@@ -23,7 +23,7 @@ def address_street_and_house(address: str | None) -> tuple[str, int | None]:
     house = None
     street_parts = []
     for part in components:
-        number = re.match(r"^(\d+)(?:[\s/].*)?$", part)
+        number = re.match(r"^(\d+)(?:[\s/А-Яа-яA-Za-z-].*)?$", part)
         if number and house is None:
             house = int(number.group(1))
             break
@@ -42,24 +42,13 @@ class LocationResolution:
     district: District | None
     microdistrict: Microdistrict | None
     source: str
+    excluded: bool = False
 
 
-def resolve_location(address: str | None, district_name: str | None,
-                     microdistrict_name: str | None) -> LocationResolution:
-    """Use explicit parser values first, then a house-range street rule."""
-    districts = list(District.objects.all())
-    district = next((item for item in districts if _matches(district_name, item.name, item.aliases)), None)
-    microdistricts = list(Microdistrict.objects.select_related("district").all())
-    candidates = [item for item in microdistricts if _matches(microdistrict_name, item.name, item.aliases)]
-    microdistrict = next((item for item in candidates if not district or item.district_id == district.id), None)
-    if microdistrict:
-        return LocationResolution(microdistrict.district, microdistrict, "parser")
-    if district:
-        return LocationResolution(district, None, "parser")
-
+def _matching_street_rule(address: str | None):
     street, house = address_street_and_house(address)
     if not street:
-        return LocationResolution(None, None, "unknown")
+        return None
     for rule in StreetAssignment.objects.select_related("district", "microdistrict").all():
         if address_street_and_house(rule.street)[0] != street:
             continue
@@ -72,5 +61,29 @@ def resolve_location(address: str | None, district_name: str | None,
                 continue
             if rule.parity == StreetAssignment.Parity.EVEN and house % 2:
                 continue
-        return LocationResolution(rule.district, rule.microdistrict, "street")
+        return rule
+    return None
+
+
+def location_is_excluded(address: str | None) -> bool:
+    rule = _matching_street_rule(address)
+    return bool(rule and rule.is_excluded)
+
+
+def resolve_location(address: str | None, district_name: str | None,
+                     microdistrict_name: str | None) -> LocationResolution:
+    """Use explicit parser values first, then a house-range street rule."""
+    street_rule = _matching_street_rule(address)
+    if street_rule:
+        return LocationResolution(street_rule.district, street_rule.microdistrict, "street", street_rule.is_excluded)
+    districts = list(District.objects.all())
+    district = next((item for item in districts if _matches(district_name, item.name, item.aliases)), None)
+    microdistricts = list(Microdistrict.objects.select_related("district").all())
+    candidates = [item for item in microdistricts if _matches(microdistrict_name, item.name, item.aliases)]
+    microdistrict = next((item for item in candidates if not district or item.district_id == district.id), None)
+    if microdistrict:
+        return LocationResolution(microdistrict.district, microdistrict, "parser")
+    if district:
+        return LocationResolution(district, None, "parser")
+
     return LocationResolution(None, None, "unknown")

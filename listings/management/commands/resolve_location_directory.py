@@ -28,7 +28,7 @@ class Command(BaseCommand):
                 "district": resolution.district.name,
                 "microdistrict": resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict,
             }
-            values["is_visible"] = location_is_visible(listing.address, values["district"], values["microdistrict"])
+            values["is_visible"] = location_is_visible(listing.address, values["district"], values["microdistrict"]) and not resolution.excluded
             changed = [field for field, value in values.items() if getattr(listing, field) != value]
             if changed:
                 for field in changed:
