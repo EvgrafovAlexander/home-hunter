@@ -1192,15 +1192,18 @@ def location_directory(request):
                 microdistrict = None
             street = (request.POST.get("street") or "").strip()
             if street:
-                StreetAssignment.objects.create(
+                assignment, created = StreetAssignment.objects.get_or_create(
                     street=street,
                     house_from=_integer(request.POST.get("house_from")),
                     house_to=_integer(request.POST.get("house_to")),
                     parity=request.POST.get("parity") or StreetAssignment.Parity.ANY,
                     district=district, microdistrict=microdistrict,
                     is_excluded=request.POST.get("is_excluded") == "1",
-                    note=(request.POST.get("note") or "").strip(),
+                    defaults={"note": (request.POST.get("note") or "").strip()},
                 )
+                if not created and request.POST.get("note") and assignment.note != request.POST.get("note").strip():
+                    assignment.note = request.POST.get("note").strip()
+                    assignment.save(update_fields=["note"])
                 apply_location_rules()
         return redirect("location_directory")
     return render(request, "listings/location_directory.html", {

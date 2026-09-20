@@ -557,6 +557,19 @@ class ListingViewsTests(TestCase):
         self.assertFalse(existing.is_visible)
         self.assertEqual(existing.microdistrict, "Южный")
 
+    def test_location_directory_does_not_duplicate_same_rule(self):
+        from listings.models import District, Microdistrict, StreetAssignment
+        district = District.objects.get(name="Кировский")
+        microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+        self.client.force_login(self.user)
+        payload = {
+            "action": "street", "street": "Повторная улица", "parity": "any",
+            "district_id": district.pk, "microdistrict_id": microdistrict.pk, "is_excluded": "1",
+        }
+        self.client.post(reverse("location_directory"), payload)
+        self.client.post(reverse("location_directory"), payload)
+        self.assertEqual(StreetAssignment.objects.filter(street="Повторная улица").count(), 1)
+
     def test_data_quality_rejects_microdistrict_from_another_district(self):
         from listings.models import District, Microdistrict
         item = Listing.objects.create(source="avito", external_id="mismatch", url="https://example.test/mismatch",
