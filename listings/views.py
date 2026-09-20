@@ -697,6 +697,18 @@ def review_export(request, format):
 
 
 @login_required
+def market_export_xlsx(request):
+    from .services.market_export import build_market_xlsx
+
+    response = HttpResponse(
+        build_market_xlsx(request.user),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="home-hunter-market-export.xlsx"'
+    return response
+
+
+@login_required
 def hidden_listing_feed(request):
     listings, filters = filtered_listings(request, visible=False)
     preferences = scoring_preference_for(request.user)

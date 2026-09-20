@@ -9,6 +9,7 @@ urlpatterns = [
     path("reviews/", views.review_queue, name="review_queue"),
     path("considerations/", views.consideration_list, name="consideration_list"),
     path("my-reviews/", views.my_reviews, name="my_reviews"),
+    path("my-reviews/export.xlsx", views.market_export_xlsx, name="market_export_xlsx"),
     path("my-reviews/export.<str:format>", views.review_export, name="review_export"),
     path("listings/<int:listing_id>/", views.listing_detail, name="listing_detail"),
     path("dashboard/", views.dashboard, name="dashboard"),

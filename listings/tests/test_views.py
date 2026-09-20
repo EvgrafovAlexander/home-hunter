@@ -4,6 +4,8 @@ from decimal import Decimal
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from zipfile import ZipFile
+from io import BytesIO
 
 from listings.models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, Listing, ListingReview,
                              ListingSearchQuery, ListingSnapshot, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery,
@@ -41,6 +43,16 @@ class ListingViewsTests(TestCase):
     def test_feed_requires_login(self):
         response = self.client.get(reverse("listing_feed"))
         self.assertRedirects(response, f"/accounts/login/?next={reverse('listing_feed')}")
+
+    def test_market_xlsx_export_returns_workbook(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("market_export_xlsx"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        with ZipFile(BytesIO(response.content)) as workbook:
+            self.assertIn("xl/workbook.xml", workbook.namelist())
+            self.assertIn("xl/worksheets/sheet2.xml", workbook.namelist())
+            self.assertIn("Квартиры", workbook.read("xl/workbook.xml").decode())
 
     def test_feed_shows_active_listings_and_applies_filters(self):
         self.client.force_login(self.user)
