@@ -18,6 +18,7 @@ from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollSt
                      Microdistrict, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
                      StreetAssignment, UserListingHide)
 from .services.enrichment import location_is_visible, parse_address
+from .services.location_directory import apply_location_rules
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
 
@@ -1200,6 +1201,7 @@ def location_directory(request):
                     is_excluded=request.POST.get("is_excluded") == "1",
                     note=(request.POST.get("note") or "").strip(),
                 )
+                apply_location_rules()
         return redirect("location_directory")
     return render(request, "listings/location_directory.html", {
         "districts": District.objects.prefetch_related("microdistricts").all(),

@@ -538,6 +538,25 @@ class ListingViewsTests(TestCase):
         self.assertRedirects(response, reverse("location_directory"))
         self.assertTrue(StreetAssignment.objects.filter(street="Тестовая улица", microdistrict=microdistrict).exists())
 
+    def test_location_directory_rule_reapplies_to_existing_listing(self):
+        from listings.models import District, Microdistrict, StreetAssignment
+        existing = Listing.objects.create(
+            source="cian", external_id="existing-street-rule", url="https://example.test/existing-street-rule",
+            title="Существующая квартира", address="ул. Тестовая, 10", district="Кировский", is_visible=True,
+        )
+        district = District.objects.get(name="Кировский")
+        microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+        self.client.force_login(self.user)
+        response = self.client.post(reverse("location_directory"), {
+            "action": "street", "street": "Тестовая улица", "house_from": "1", "house_to": "99",
+            "parity": "any", "district_id": district.pk, "microdistrict_id": microdistrict.pk,
+            "is_excluded": "1",
+        })
+        self.assertRedirects(response, reverse("location_directory"))
+        existing.refresh_from_db()
+        self.assertFalse(existing.is_visible)
+        self.assertEqual(existing.microdistrict, "Южный")
+
     def test_data_quality_rejects_microdistrict_from_another_district(self):
         from listings.models import District, Microdistrict
         item = Listing.objects.create(source="avito", external_id="mismatch", url="https://example.test/mismatch",

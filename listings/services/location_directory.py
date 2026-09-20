@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 import re
 
-from listings.models import District, Microdistrict, StreetAssignment
+from listings.models import District, Listing, Microdistrict, StreetAssignment
+from listings.services.enrichment import location_is_visible
 
 
 def normalized_text(value: str | None) -> str:
@@ -68,6 +69,33 @@ def _matching_street_rule(address: str | None):
 def location_is_excluded(address: str | None) -> bool:
     rule = _matching_street_rule(address)
     return bool(rule and rule.is_excluded)
+
+
+def apply_location_rules():
+    """Reapply current directory rules to already collected listings."""
+    updated = 0
+    unresolved = 0
+    for listing in Listing.objects.all().order_by("pk").iterator(chunk_size=200):
+        resolution = resolve_location(listing.address, listing.district, listing.microdistrict)
+        if not resolution.district:
+            unresolved += 1
+            continue
+        values = {
+            "district_ref": resolution.district,
+            "microdistrict_ref": resolution.microdistrict,
+            "district": resolution.district.name,
+            "microdistrict": resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict,
+            "is_visible": location_is_visible(listing.address, resolution.district.name,
+                                               resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict)
+            and not resolution.excluded,
+        }
+        changed = [field for field, value in values.items() if getattr(listing, field) != value]
+        if changed:
+            for field in changed:
+                setattr(listing, field, values[field])
+            listing.save(update_fields=changed)
+            updated += 1
+    return updated, unresolved
 
 
 def resolve_location(address: str | None, district_name: str | None,
