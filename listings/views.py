@@ -510,6 +510,14 @@ def listing_feed(request):
         page_listings = list(listings.order_by(sortings[ordering], "-id")[:200])
         add_market_position(page_listings)
         add_listing_score(page_listings, preferences)
+    # Keep the personal review visible alongside the automatic score.  Reviews
+    # are private to their author, so fetch only the current user's rows.
+    reviews_by_listing = {
+        review.listing_id: review
+        for review in ListingReview.objects.filter(author=request.user, listing_id__in=[item.id for item in page_listings])
+    }
+    for item in page_listings:
+        item.my_review = reviews_by_listing.get(item.id)
     return render(request, "listings/feed.html", {
         "listings": page_listings,
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(),
@@ -528,6 +536,12 @@ def shortlist(request):
     add_listing_score(recent, scoring_preference_for(request.user))
     best = [item for item in recent if item.market_state == "below"]
     best.sort(key=lambda item: (item.market_delta_pct, -item.first_seen_at.timestamp()))
+    reviews_by_listing = {
+        review.listing_id: review
+        for review in ListingReview.objects.filter(author=request.user, listing_id__in=[item.id for item in best])
+    }
+    for item in best:
+        item.my_review = reviews_by_listing.get(item.id)
     return render(request, "listings/feed.html", {
         "listings": best, "result_count": len(best), "filters": filters,
         "filter_options": filter_options(), "sort": "new", "shortlist": True,
