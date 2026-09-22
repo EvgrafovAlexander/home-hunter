@@ -1283,6 +1283,9 @@ def listing_map(request):
 @login_required
 def dashboard(request):
     listings, filters = filtered_listings(request)
+    # Headline KPIs follow the visible feed, while local market medians also
+    # include hidden listings so every microdistrict keeps a useful baseline.
+    market_listings, _ = filtered_listings(request, visible=None)
     period_days = _integer(request.GET.get("stats_days", 30))
     if period_days not in (7, 30, 90):
         period_days = 30
@@ -1296,7 +1299,8 @@ def dashboard(request):
     for offset in range(period_days):
         day = (period_since + timedelta(days=offset)).date()
         daily.append({"label": day.strftime("%d.%m"), "count": by_day.get(day, 0)})
-    district_rows = list(listings.exclude(district__isnull=True).exclude(district="")
+    district_rows = list(listings.filter(Q(microdistrict__isnull=True) | Q(microdistrict=""))
+                         .exclude(district__isnull=True).exclude(district="")
                          .values("district", "price_per_sqm", "price", "area", "first_seen_at"))
     district_groups = {}
     for row in district_rows:
@@ -1331,7 +1335,7 @@ def dashboard(request):
     price_increases = sorted(({
         **change, "percent": round(change["difference"] / change["first"] * 100) if change["first"] else 0,
     } for change in changes if change["difference"] > 0), key=lambda change: change["difference"], reverse=True)[:10]
-    microdistrict_stats = microdistrict_market_stats(listings, period_since, filters)
+    microdistrict_stats = microdistrict_market_stats(market_listings, period_since, filters)
 
     def distribution(values, *, buckets, formatter):
         if not values:
