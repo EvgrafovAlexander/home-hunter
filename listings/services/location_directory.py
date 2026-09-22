@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 import re
 
+from django.db.models import Q
+
 from listings.models import District, Listing, Microdistrict, StreetAssignment
 from listings.services.enrichment import location_is_visible
 
@@ -88,6 +90,45 @@ def apply_location_rules():
             "is_visible": location_is_visible(listing.address, resolution.district.name,
                                                resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict)
             and not resolution.excluded,
+        }
+        changed = [field for field, value in values.items() if getattr(listing, field) != value]
+        if changed:
+            for field in changed:
+                setattr(listing, field, values[field])
+            listing.save(update_fields=changed)
+            updated += 1
+    return updated, unresolved
+
+
+def apply_location_rules_for_assignments(*assignments):
+    """Reapply rules only to listings that can match the changed streets."""
+    assignments = [item for item in assignments if item is not None]
+    if not assignments:
+        return 0, 0
+    tokens = set()
+    for assignment in assignments:
+        street, _ = address_street_and_house(assignment.street)
+        tokens.update(token for token in street.split() if len(token) > 2)
+    if not tokens:
+        return 0, 0
+    query = Q()
+    for token in tokens:
+        query |= Q(address__icontains=token)
+    updated = unresolved = 0
+    for listing in Listing.objects.filter(query).order_by("pk"):
+        resolution = resolve_location(listing.address, listing.district, listing.microdistrict)
+        if not resolution.district:
+            unresolved += 1
+            continue
+        values = {
+            "district_ref": resolution.district,
+            "microdistrict_ref": resolution.microdistrict,
+            "district": resolution.district.name,
+            "microdistrict": resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict,
+            "is_visible": location_is_visible(
+                listing.address, resolution.district.name,
+                resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict,
+            ) and not resolution.excluded,
         }
         changed = [field for field, value in values.items() if getattr(listing, field) != value]
         if changed:

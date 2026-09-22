@@ -18,7 +18,7 @@ from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollSt
                      Microdistrict, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
                      StreetAssignment, UserListingHide)
 from .services.enrichment import location_is_visible, parse_address
-from .services.location_directory import apply_location_rules
+from .services.location_directory import apply_location_rules_for_assignments
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
 
@@ -1185,26 +1185,45 @@ def location_directory(request):
             name = (request.POST.get("name") or "").strip()
             if name:
                 Microdistrict.objects.get_or_create(district=district, name=name)
-        elif action == "street":
+        elif action in {"street", "street_edit"}:
+            assignment = None
+            if action == "street_edit":
+                assignment = get_object_or_404(StreetAssignment, pk=request.POST.get("assignment_id"))
+                old_assignment = StreetAssignment(
+                    street=assignment.street, house_from=assignment.house_from, house_to=assignment.house_to,
+                    parity=assignment.parity,
+                )
             district = get_object_or_404(District, pk=request.POST.get("district_id"))
             microdistrict = Microdistrict.objects.filter(pk=request.POST.get("microdistrict_id")).first()
             if microdistrict and microdistrict.district_id != district.id:
                 microdistrict = None
             street = (request.POST.get("street") or "").strip()
             if street:
-                assignment, created = StreetAssignment.objects.get_or_create(
-                    street=street,
-                    house_from=_integer(request.POST.get("house_from")),
-                    house_to=_integer(request.POST.get("house_to")),
-                    parity=request.POST.get("parity") or StreetAssignment.Parity.ANY,
-                    district=district, microdistrict=microdistrict,
-                    is_excluded=request.POST.get("is_excluded") == "1",
-                    defaults={"note": (request.POST.get("note") or "").strip()},
-                )
-                if not created and request.POST.get("note") and assignment.note != request.POST.get("note").strip():
-                    assignment.note = request.POST.get("note").strip()
-                    assignment.save(update_fields=["note"])
-                apply_location_rules()
+                values = dict(street=street, house_from=_integer(request.POST.get("house_from")),
+                              house_to=_integer(request.POST.get("house_to")),
+                              parity=request.POST.get("parity") or StreetAssignment.Parity.ANY,
+                              district=district, microdistrict=microdistrict,
+                              is_excluded=request.POST.get("is_excluded") == "1",
+                              note=(request.POST.get("note") or "").strip())
+                if assignment is None:
+                    assignment, created = StreetAssignment.objects.get_or_create(
+                        **{key: value for key, value in values.items() if key != "note"},
+                        defaults={"note": values["note"]},
+                    )
+                    if not created:
+                        assignment.note = values["note"]
+                        assignment.save(update_fields=["note"])
+                else:
+                    for key, value in values.items():
+                        setattr(assignment, key, value)
+                    assignment.save()
+                apply_location_rules_for_assignments(*(([old_assignment] if action == "street_edit" else [])), assignment)
+        elif action == "street_delete":
+            assignment = get_object_or_404(StreetAssignment, pk=request.POST.get("assignment_id"))
+            old_assignment = StreetAssignment(street=assignment.street, house_from=assignment.house_from,
+                                              house_to=assignment.house_to, parity=assignment.parity)
+            assignment.delete()
+            apply_location_rules_for_assignments(old_assignment)
         return redirect("location_directory")
     return render(request, "listings/location_directory.html", {
         "districts": District.objects.prefetch_related("microdistricts").all(),
