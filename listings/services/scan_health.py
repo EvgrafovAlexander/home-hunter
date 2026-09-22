@@ -113,9 +113,12 @@ def cian_detail_health() -> SourceHealth:
     now = timezone.now()
     if not progress:
         health = SourceHealth("unknown", "Нет данных", "Detail-опрос ещё не запускался")
-    elif latest_error and latest_error.updated_at >= progress.updated_at:
+    elif latest_error and (
+        progress.last_completed_at is None
+        or latest_error.updated_at >= progress.last_completed_at
+    ):
         health = SourceHealth("error", "Ошибка", f"Последняя ошибка detail: {latest_error.last_error[:240]}")
-    elif now - progress.updated_at > DETAIL_STALE_AFTER:
+    elif not progress.last_completed_at or now - progress.last_completed_at > DETAIL_STALE_AFTER:
         health = SourceHealth("stale", "Опрос остановился", "Нет прогресса detail-опроса более 20 минут")
     else:
         health = SourceHealth("healthy", "В норме", "Detail-опрос обновлялся недавно")
