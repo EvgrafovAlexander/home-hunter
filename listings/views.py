@@ -523,6 +523,8 @@ def listing_feed(request):
     }
     for item in page_listings:
         item.my_review = reviews_by_listing.get(item.id)
+        item.review_state = ("consider" if item.my_review and item.my_review.decision == ListingReview.Decision.CONSIDER
+                             else "reject" if item.my_review else "pending")
     return render(request, "listings/feed.html", {
         "listings": page_listings,
         "result_count": listings.count(), "filters": filters, "filter_options": filter_options(),
