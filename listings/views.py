@@ -448,7 +448,7 @@ def microdistrict_market_stats(listings, period_since, filters):
     rows = (listings.exclude(district__isnull=True).exclude(district="")
             .exclude(microdistrict__isnull=True).exclude(microdistrict="")
             .exclude(price_per_sqm__isnull=True)
-            .values("district", "microdistrict", "price_per_sqm", "price", "area", "first_seen_at"))
+            .values("district", "microdistrict", "price_per_sqm", "price", "area", "first_seen_at", "is_visible"))
     groups = {}
     for row in rows:
         key = (row["district"], row["microdistrict"])
@@ -471,6 +471,7 @@ def microdistrict_market_stats(listings, period_since, filters):
         if key in groups:
             removed_counts[key] = removed_counts.get(key, 0) + 1
 
+    eligible_total = sum(len(entries) for entries in groups.values() if len(entries) >= MICRODISTRICT_MARKET_MIN_SAMPLE)
     stats = []
     for (district, microdistrict), entries in groups.items():
         if len(entries) < MICRODISTRICT_MARKET_MIN_SAMPLE:
@@ -481,6 +482,9 @@ def microdistrict_market_stats(listings, period_since, filters):
         median_sqm = int(median(sqm_prices))
         stats.append({
             "district": district, "microdistrict": microdistrict, "count": len(entries),
+            "visible_count": sum(entry["is_visible"] for entry in entries),
+            "hidden_count": sum(not entry["is_visible"] for entry in entries),
+            "share_pct": round(len(entries) / eligible_total * 100, 1) if eligible_total else 0,
             "median_sqm": median_sqm, "median_price": int(median(prices)) if prices else None,
             "median_area": median(areas) if areas else None,
             "new_count": sum(entry["first_seen_at"] >= period_since for entry in entries),
