@@ -7,12 +7,13 @@ import requests
 from django.conf import settings
 from django.utils import timezone
 
-from listings.models import Scan, SearchQuery, SourceHealthAlert
+from listings.models import CianDetailHealthAlert, CianDetailPollProgress, CianDetailPollState, Scan, SearchQuery, SourceHealthAlert
 from listings.services.polling import polling_enabled
 
 logger = logging.getLogger(__name__)
 STALE_AFTER = timedelta(hours=6)
 PROBLEM_STATES = {"failed", "failed_3", "stale"}
+DETAIL_STALE_AFTER = timedelta(minutes=20)
 
 
 @dataclass(frozen=True)
@@ -102,4 +103,35 @@ def check_source_health(source: str) -> SourceHealth:
         label = SearchQuery.Source(source).label
         prefix = "✅ Восстановление" if health.state == "healthy" else "⚠️ Проблема"
         send_telegram_message(f"{prefix}: {label}\n{health.detail}")
+    return health
+
+
+def cian_detail_health() -> SourceHealth:
+    """Return detail-worker health without persisting or notifying."""
+    progress = CianDetailPollProgress.objects.filter(source="cian").first()
+    latest_error = CianDetailPollState.objects.exclude(last_error="").order_by("-updated_at").first()
+    now = timezone.now()
+    if not progress:
+        health = SourceHealth("unknown", "Нет данных", "Detail-опрос ещё не запускался")
+    elif latest_error and latest_error.updated_at >= progress.updated_at:
+        health = SourceHealth("error", "Ошибка", f"Последняя ошибка detail: {latest_error.last_error[:240]}")
+    elif now - progress.updated_at > DETAIL_STALE_AFTER:
+        health = SourceHealth("stale", "Опрос остановился", "Нет прогресса detail-опроса более 20 минут")
+    else:
+        health = SourceHealth("healthy", "В норме", "Detail-опрос обновлялся недавно")
+    return health
+
+
+def check_cian_detail_health() -> SourceHealth:
+    """Detect a blocked/stopped CIAN detail worker independently of scan runs."""
+    health = cian_detail_health()
+    alert, created = CianDetailHealthAlert.objects.get_or_create(pk=1, defaults={"state": health.state})
+    previous = None if created else alert.state
+    if previous != health.state:
+        alert.state = health.state
+        alert.save(update_fields=("state", "updated_at"))
+    if health.state in {"error", "stale"} and (created or previous != health.state):
+        send_telegram_message(f"⚠️ CIAN detail: {health.label}\n{health.detail}")
+    elif health.state == "healthy" and previous in {"error", "stale"}:
+        send_telegram_message(f"✅ CIAN detail восстановлен\n{health.detail}")
     return health

@@ -21,6 +21,7 @@ from .services.enrichment import location_is_visible, parse_address
 from .services.location_directory import apply_location_rules_for_assignments
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
+from .services.scan_health import cian_detail_health
 
 
 SCAN_STALE_AFTER = timedelta(hours=6)
@@ -896,6 +897,7 @@ def scan_statistics(request):
     active_cian = Listing.objects.filter(source=SearchQuery.Source.CIAN, is_active=True)
     cian_active_ids = set(active_cian.values_list("pk", flat=True))
     cian_progress = CianDetailPollProgress.objects.select_related("current_listing").filter(source="cian").first()
+    detail_health = cian_detail_health()
     detail_cycle = None
     if cian_progress:
         completed_ids = [pk for pk in cian_progress.completed_listing_ids if pk in cian_active_ids]
@@ -982,6 +984,7 @@ def scan_statistics(request):
                 "errors": CianDetailPollState.objects.filter(listing__source=SearchQuery.Source.CIAN).exclude(last_error="").count(),
                 "last": CianDetailPollState.objects.filter(listing__source=SearchQuery.Source.CIAN, last_checked_at__isnull=False).order_by("-last_checked_at").first(),
                 "cycle": detail_cycle,
+                "health": {"state": detail_health.state, "label": detail_health.label, "detail": detail_health.detail},
             } if value == "cian" else None),
         })
     manual_domclick_job = ManualDomclickJob.objects.select_related("scan").order_by("-id").first()

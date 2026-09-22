@@ -366,6 +366,11 @@ class SourceHealthAlert(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class CianDetailHealthAlert(models.Model):
+    state = models.CharField(max_length=20, default="unknown")
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class SourcePollingControl(models.Model):
     """Switch for a particular source and scan mode."""
 

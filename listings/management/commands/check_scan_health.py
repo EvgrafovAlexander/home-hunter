@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from listings.models import SearchQuery
-from listings.services.scan_health import check_source_health
+from listings.services.scan_health import check_cian_detail_health, check_source_health
 
 
 class Command(BaseCommand):
@@ -11,3 +11,5 @@ class Command(BaseCommand):
         for source, label in SearchQuery.Source.choices:
             health = check_source_health(source)
             self.stdout.write(f"{label}: {health.state}")
+        detail = check_cian_detail_health()
+        self.stdout.write(f"CIAN detail: {detail.state}")
