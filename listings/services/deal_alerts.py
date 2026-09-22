@@ -16,7 +16,7 @@ def market_position(listing: Listing):
     if (listing.price_per_sqm is None or not listing.district
             or listing.rooms is None or listing.area is None):
         return None
-    rows = (Listing.objects.filter(is_active=True, price_per_sqm__isnull=False, district=listing.district)
+    rows = (Listing.objects.filter(is_active=True, is_visible=True, price_per_sqm__isnull=False, district=listing.district)
             .exclude(pk=listing.pk).exclude(rooms__isnull=True).exclude(area__isnull=True)
             .values("microdistrict", "rooms", "area", "price_per_sqm"))
     if listing.microdistrict:

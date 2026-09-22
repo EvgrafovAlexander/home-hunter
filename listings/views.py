@@ -1296,11 +1296,22 @@ def dashboard(request):
     for offset in range(period_days):
         day = (period_since + timedelta(days=offset)).date()
         daily.append({"label": day.strftime("%d.%m"), "count": by_day.get(day, 0)})
-    district_stats = list(listings.exclude(district__isnull=True).exclude(district="").values("district")
-                          .annotate(count=Count("id"), average=Avg("price_per_sqm"), average_price=Avg("price"),
-                                    average_area=Avg("area"),
-                                    new_count=Count("id", filter=Q(first_seen_at__gte=period_since)))
-                          .order_by("-count", "district")[:7])
+    district_rows = list(listings.exclude(district__isnull=True).exclude(district="")
+                         .values("district", "price_per_sqm", "price", "area", "first_seen_at"))
+    district_groups = {}
+    for row in district_rows:
+        district_groups.setdefault(row["district"], []).append(row)
+    district_stats = []
+    for district, rows in district_groups.items():
+        district_stats.append({
+            "district": district,
+            "count": len(rows),
+            "median_price": int(median([row["price"] for row in rows if row["price"] is not None])) if any(row["price"] is not None for row in rows) else None,
+            "median_sqm": int(median([row["price_per_sqm"] for row in rows if row["price_per_sqm"] is not None])) if any(row["price_per_sqm"] is not None for row in rows) else None,
+            "median_area": median([float(row["area"]) for row in rows if row["area"] is not None]) if any(row["area"] is not None for row in rows) else None,
+            "new_count": sum(row["first_seen_at"] >= period_since for row in rows if row["first_seen_at"] is not None),
+        })
+    district_stats = sorted(district_stats, key=lambda row: (-row["count"], row["district"]))[:7]
     price_history = (PriceHistory.objects.filter(listing__in=listings, observed_at__gte=period_since,
                                                   price__isnull=False)
                      .select_related("listing").order_by("listing_id", "observed_at", "id"))
