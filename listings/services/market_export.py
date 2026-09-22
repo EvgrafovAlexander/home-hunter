@@ -30,7 +30,9 @@ def _excel_date(value):
 
 def _cell(value, style=0):
     if value is None or value == "":
-        return ""
+        # Keep the physical cell in the XML. Omitting it shifts every
+        # following value left when a source field is missing.
+        return f'<c s="{style}"></c>'
     if isinstance(value, (datetime, date)):
         number = _excel_date(datetime.combine(value, datetime.min.time()) if isinstance(value, date) and not isinstance(value, datetime) else value)
         return f'<c s="2" t="n"><v>{number}</v></c>'
