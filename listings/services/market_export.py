@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from html import escape
 from io import BytesIO
+from statistics import median
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from django.utils import timezone
@@ -32,11 +33,11 @@ def _cell(value, style=0):
         return ""
     if isinstance(value, (datetime, date)):
         number = _excel_date(datetime.combine(value, datetime.min.time()) if isinstance(value, date) and not isinstance(value, datetime) else value)
-        return f'<c s="{style}" t="n"><v>{number}</v></c>'
+        return f'<c s="2" t="n"><v>{number}</v></c>'
     if isinstance(value, Decimal):
         value = float(value)
     if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return f'<c s="{style}" t="n"><v>{value}</v></c>'
+        return f'<c s="3" t="n"><v>{value}</v></c>'
     return f'<c s="{style}" t="inlineStr"><is><t>{escape(_text(value))}</t></is></c>'
 
 
@@ -67,12 +68,12 @@ def _workbook_xml(names):
 
 def _styles_xml():
     return '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="yyyy-mm-dd hh:mm"/><numFmt numFmtId="165" formatCode="#,##0"/></numFmts><fonts count="2"><font><sz val="10"/><name val="Arial"/><color rgb="FF222222"/></font><font><b/><sz val="10"/><name val="Arial"/><color rgb="FFFFFFFF"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="1" borderId="0" applyFont="1" applyFill="1"/></cellXfs></styleSheet>'''
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="yyyy-mm-dd hh:mm"/><numFmt numFmtId="165" formatCode="#,##0.0"/></numFmts><fonts count="2"><font><sz val="10"/><name val="Arial"/><color rgb="FF222222"/></font><font><b/><sz val="10"/><name val="Arial"/><color rgb="FFFFFFFF"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="1" borderId="0" applyFont="1" applyFill="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0"/></cellXfs></styleSheet>'''
 
 
 def build_market_xlsx(user):
     listings = list(Listing.objects.all().order_by("id"))
-    reviews = list(ListingReview.objects.select_related("listing", "author").prefetch_related("tags").order_by("id"))
+    reviews = list(ListingReview.objects.filter(author=user).select_related("listing", "author").prefetch_related("tags").order_by("id"))
     considerations = {item.review_id: item for item in Consideration.objects.filter(review__author=user)}
     own_reviews = {item.listing_id: item for item in reviews if item.author_id == user.id}
     histories = list(PriceHistory.objects.select_related("listing").order_by("listing_id", "observed_at", "id"))
@@ -101,15 +102,41 @@ def build_market_xlsx(user):
         review_rows.append([review.id, review.listing_id, source_names.get(review.listing.source, review.listing.source), review.listing.address, review.author.username, review.rating, review_decisions.get(review.decision, review.decision), stages.get(consideration.stage) if consideration else None, review.comment, review.interest_reason, review.deal_breaker, review.created_at, review.updated_at])
 
     price_rows = [["ID", "Listing ID", "Источник", "Дата", "Цена, ₽", "Цена за м², ₽", "Площадь, м²", "Изменение цены, ₽", "Изменение, %", "Источник записи"]]
+    previous_prices = {}
     for item in histories:
-        price_rows.append([item.id, item.listing_id, source_names.get(item.listing.source, item.listing.source), item.observed_at, item.price, item.listing.price_per_sqm, item.listing.area, None, None, "Наблюдение цены"])
+        previous = previous_prices.get(item.listing_id)
+        change = item.price - previous if item.price is not None and previous is not None else None
+        change_pct = round(change / previous * 100, 2) if change is not None and previous else None
+        price_rows.append([item.id, item.listing_id, source_names.get(item.listing.source, item.listing.source), item.observed_at, item.price, item.listing.price_per_sqm, item.listing.area, change, change_pct, "Наблюдение цены"])
+        if item.price is not None:
+            previous_prices[item.listing_id] = item.price
 
-    cian_rows = [["State ID", "Listing ID", "Источник", "External ID", "Статус detail", "Проверено", "HTTP status", "Причина", "Последняя ошибка"]]
+    cian_rows = [["State ID", "Listing ID", "Источник", "External ID", "Статус detail", "Проверено", "Последняя ошибка"]]
     for item in states:
-        cian_rows.append([item.id, item.listing_id, source_names.get(item.listing.source, item.listing.source), item.listing.external_id, item.status, item.last_checked_at, None, None, item.last_error])
+        cian_rows.append([item.id, item.listing_id, source_names.get(item.listing.source, item.listing.source), item.listing.external_id, item.status, item.last_checked_at, item.last_error])
 
-    summary_rows = [["Home Hunter — выгрузка рынка квартир"], [], ["Показатель", "Значение"], ["Дата выгрузки", timezone.now()], ["Квартир", len(listings)], ["Оценок", len(reviews)], ["В shortlist текущего пользователя", len(considerations)], ["Историй цен", len(histories)], ["CIAN detail записей", len(states)], ["Источники", ", ".join(sorted({source_names.get(item.source, item.source) for item in listings}))]]
-    sheets = [("Обзор", summary_rows, [34, 24]), ("Квартиры", listing_rows, [10, 14, 18, 42, 52, 14, 14, 10, 12, 12, 12, 9, 10, 12, 36, 18, 18, 16, 18, 10, 10, 14, 14, 16, 16, 16, 20, 10, 10, 20, 20, 20, 14, 22, 22, 28, 28, 28, 18, 20, 42, 48]), ("Оценки", review_rows, [12, 12, 14, 36, 16, 12, 22, 22, 30, 30, 30, 20, 20]), ("Цены", price_rows, [12, 12, 14, 20, 14, 14, 14, 16, 14, 24]), ("CIAN статусы", cian_rows, [12, 12, 14, 18, 18, 20, 12, 24, 36])]
+    market_rows = [["Район", "Микрорайон", "Объявлений", "Видимых", "Скрытых", "Медианная цена, ₽", "Медиана за м², ₽", "Медиана площади, м²"]]
+    market_groups = {}
+    for item in listings:
+        if not item.is_active or not item.district or not item.microdistrict or item.price_per_sqm is None:
+            continue
+        market_groups.setdefault((item.district, item.microdistrict), []).append(item)
+    for (district, microdistrict), entries in sorted(market_groups.items(), key=lambda pair: (-len(pair[1]), pair[0])):
+        if len(entries) < 5:
+            continue
+        prices = [item.price for item in entries if item.price is not None]
+        areas = [float(item.area) for item in entries if item.area is not None]
+        market_rows.append([district, microdistrict, len(entries), sum(item.is_visible for item in entries), sum(not item.is_visible for item in entries), int(median(prices)) if prices else None, int(median([item.price_per_sqm for item in entries])), median(areas) if areas else None])
+
+    rooms_rows = [["Комнат", "Объявлений", "Видимых", "Скрытых", "Медианная цена, ₽", "Медиана за м², ₽", "Медиана площади, м²"]]
+    for rooms in (2, 3):
+        entries = [item for item in listings if item.is_active and item.rooms == rooms and item.price_per_sqm is not None]
+        prices = [item.price for item in entries if item.price is not None]
+        areas = [float(item.area) for item in entries if item.area is not None]
+        rooms_rows.append([rooms, len(entries), sum(item.is_visible for item in entries), sum(not item.is_visible for item in entries), int(median(prices)) if prices else None, int(median([item.price_per_sqm for item in entries])), median(areas) if areas else None])
+
+    summary_rows = [["Home Hunter — выгрузка рынка квартир"], [], ["Показатель", "Значение"], ["Дата выгрузки", timezone.now()], ["Квартир", len(listings)], ["Активных", sum(item.is_active for item in listings)], ["Видимых", sum(item.is_visible for item in listings)], ["Скрытых", sum(not item.is_visible for item in listings)], ["Оценок пользователя", len(reviews)], ["Готов рассмотреть", len(considerations)], ["Историй цен", len(histories)], ["CIAN detail записей", len(states)], ["Источники", ", ".join(sorted({source_names.get(item.source, item.source) for item in listings}))]]
+    sheets = [("Обзор", summary_rows, [34, 24]), ("Квартиры", listing_rows, [10, 14, 18, 42, 52, 14, 14, 10, 12, 12, 12, 9, 10, 12, 36, 18, 18, 16, 18, 10, 10, 14, 14, 16, 16, 16, 20, 10, 10, 20, 20, 20, 14, 22, 22, 28, 28, 18, 20, 42, 48]), ("Оценки", review_rows, [12, 12, 14, 36, 16, 12, 22, 22, 30, 30, 30, 20, 20]), ("Цены", price_rows, [12, 12, 14, 20, 14, 14, 14, 16, 14, 24]), ("CIAN статусы", cian_rows, [12, 12, 14, 18, 18, 20, 36]), ("Рынок микрорайонов", market_rows, [18, 24, 14, 12, 12, 18, 18, 18]), ("Рынок по комнатам", rooms_rows, [10, 14, 12, 12, 18, 18, 18])]
     output = BytesIO()
     with ZipFile(output, "w", ZIP_DEFLATED) as archive:
         archive.writestr("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + ''.join(f'<Override PartName="/xl/worksheets/sheet{i}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for i in range(1, len(sheets) + 1)) + '</Types>')
