@@ -99,7 +99,7 @@ services:
       - ServerAliveCountMax=3
       - -o
       - ConnectTimeout=15
-      - ${CIAN_SSH_DESTINATION:-cian-tunnel@81.19.139.155}
+      - ${CIAN_SSH_DESTINATION:-cian-tunnel@185.161.251.49}
     volumes:
       - ${CIAN_SSH_DIR:-/etc/home-hunter/cian-ssh}:/run/cian-ssh:ro
     healthcheck:

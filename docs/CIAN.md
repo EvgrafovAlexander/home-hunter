@@ -47,7 +47,7 @@ VPS приложения 188.120.244.43
   cian-tunnel: OpenSSH client
        │ зашифрованное SSH-соединение TCP/22, отдельный ключ
        ▼
-VPS выхода 81.19.139.155
+  VPS выхода 185.161.251.49
   sshd, пользователь cian-tunnel
        │ HTTPS TCP/443 к запрошенным сайтам
        ▼
@@ -117,7 +117,7 @@ Retry-After может увеличить её. До конца паузы но�
 | CIAN_FULL_BATCH_PAGES | 2 | Число страниц full scan за один запуск; продолжение хранится в checkpoint. CIAN full scan только добавляет и обновляет объявления, но не деактивирует их. |
 | CIAN_BLOCK_COOLDOWN_SECONDS | 3600 | Пауза после блокировки |
 | CIAN_FULL_SCAN_ENABLED | false | Разрешение full |
-| CIAN_SSH_DESTINATION | cian-tunnel@81.19.139.155 | Адрес SSH |
+| CIAN_SSH_DESTINATION | cian-tunnel@185.161.251.49 | Адрес SSH |
 | CIAN_SSH_DIR | /etc/home-hunter/cian-ssh | Каталог ключа и known_hosts |
 
 Профиль в Docker volume cian_state, путь /app/.cian-state. Копировать его можно
@@ -194,18 +194,18 @@ chown 10001:10001 /etc/home-hunter/cian-ssh/id_ed25519*
 файла — 600, владелец cian-tunnel. Установить deploy/cian-sshd.conf в
 /etc/ssh/sshd_config.d/60-home-hunter-cian.conf, выполнить `sshd -t` и только
 при успехе `systemctl reload ssh`. Проверить применённые ограничения через
-`sshd -T -C user=cian-tunnel,host=81.19.139.155,addr=188.120.244.43`.
+`sshd -T -C user=cian-tunnel,host=185.161.251.49,addr=188.120.244.43`.
 
 Публичный ключ хоста /etc/ssh/ssh_host_ed25519_key.pub получить через доверенную
 административную сессию второго VPS. В known_hosts первого записать
-`81.19.139.155 ssh-ed25519 <публичный ключ хоста>`, владелец UID 10001, mode 600.
+`185.161.251.49 ssh-ed25519 <публичный ключ хоста>`, владелец UID 10001, mode 600.
 Так доверие к SSH-хосту закрепляется явно, а не отключением проверки ключей.
 При повторной установке существующие рабочие ключи не перегенерировать.
 
 ## Подтверждённое развёртывание 7 сентября 2026
 
 Код развёрнут на 188.120.244.43. Постоянный SSH-туннель идёт к
-cian-tunnel@81.19.139.155. Контейнер home_hunter-cian-tunnel-1 healthy,
+cian-tunnel@185.161.251.49. Контейнер home_hunter-cian-tunnel-1 healthy,
 опубликованных портов нет. На втором VPS проверена эффективная конфигурация sshd;
 ранее работавшие telemt, amnezia-dns, amnezia-awg2 и rss_bot продолжают работать.
 

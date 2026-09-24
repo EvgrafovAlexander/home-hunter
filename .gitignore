@@ -204,6 +204,10 @@ cython_debug/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 
+# Local tunnel exports and generated artifacts
+Amnezia-*.conf
+outputs/
+
 # Ruff stuff:
 .ruff_cache/
 
