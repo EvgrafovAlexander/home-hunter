@@ -73,6 +73,20 @@ def location_is_excluded(address: str | None) -> bool:
     return bool(rule and rule.is_excluded)
 
 
+def location_is_visible_with_rules(
+    address: str | None,
+    district: str | None,
+    microdistrict: str | None,
+) -> bool:
+    """Return base visibility while always enforcing street exclusions.
+
+    This is deliberately separate from ``enrichment.location_is_visible``:
+    the latter only knows about the static district/microdistrict denylist and
+    cannot enforce editable street rules (including manual location overrides).
+    """
+    return location_is_visible(address, district, microdistrict) and not location_is_excluded(address)
+
+
 def apply_location_rules():
     """Reapply current directory rules to already collected listings."""
     updated = 0
@@ -87,9 +101,10 @@ def apply_location_rules():
             "microdistrict_ref": resolution.microdistrict,
             "district": resolution.district.name,
             "microdistrict": resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict,
-            "is_visible": location_is_visible(listing.address, resolution.district.name,
-                                               resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict)
-            and not resolution.excluded,
+            "is_visible": location_is_visible_with_rules(
+                listing.address, resolution.district.name,
+                resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict,
+            ),
         }
         changed = [field for field, value in values.items() if getattr(listing, field) != value]
         if changed:
@@ -125,10 +140,10 @@ def apply_location_rules_for_assignments(*assignments):
             "microdistrict_ref": resolution.microdistrict,
             "district": resolution.district.name,
             "microdistrict": resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict,
-            "is_visible": location_is_visible(
+            "is_visible": location_is_visible_with_rules(
                 listing.address, resolution.district.name,
                 resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict,
-            ) and not resolution.excluded,
+            ),
         }
         changed = [field for field, value in values.items() if getattr(listing, field) != value]
         if changed:

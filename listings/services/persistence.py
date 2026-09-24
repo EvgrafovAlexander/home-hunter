@@ -5,8 +5,8 @@ from decimal import Decimal
 from django.db import transaction
 from collectors.base import NormalizedListing
 from listings.models import Listing, ListingSearchQuery, ListingSnapshot, PriceHistory, SearchQuery
-from listings.services.enrichment import calculate_price_per_sqm, location_is_visible, parse_address
-from listings.services.location_directory import resolve_location
+from listings.services.enrichment import calculate_price_per_sqm, parse_address
+from listings.services.location_directory import location_is_visible_with_rules, resolve_location
 
 SIGNIFICANT_FIELDS = (
     "price", "price_per_sqm", "title", "description", "address", "district", "microdistrict",
@@ -78,7 +78,7 @@ def process_listing(
         if listing.microdistrict_override:
             values["microdistrict"] = listing.microdistrict_override
         if any((listing.address_override, listing.district_override, listing.microdistrict_override)):
-            values["is_visible"] = location_is_visible(
+            values["is_visible"] = location_is_visible_with_rules(
                 values["address"], values["district"], values["microdistrict"],
             )
     # A missing price is not evidence that the last known price changed.
@@ -112,9 +112,9 @@ def process_listing(
             values["district"] = district_ref.name
         if microdistrict_ref:
             values["microdistrict"] = microdistrict_ref.name
-        values["is_visible"] = location_is_visible(
+        values["is_visible"] = location_is_visible_with_rules(
             values["address"], values["district"], values["microdistrict"],
-        ) and not resolution.excluded
+        )
     address_changed = not created and listing.address != values["address"]
     reactivated = not created and not listing.is_active
     changed = {key for key, value in values.items() if getattr(listing, key) != value}

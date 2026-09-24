@@ -18,7 +18,7 @@ from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollSt
                      Microdistrict, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
                      StreetAssignment, UserListingHide)
 from .services.enrichment import location_is_visible, parse_address
-from .services.location_directory import apply_location_rules_for_assignments
+from .services.location_directory import apply_location_rules_for_assignments, location_is_visible_with_rules
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
 from .services.scan_health import cian_detail_health
@@ -1153,7 +1153,7 @@ def data_quality(request):
         item.district_ref = district
         item.microdistrict_ref = microdistrict
         item.location_source = "manual"
-        item.is_visible = location_is_visible(item.address, item.district, item.microdistrict)
+        item.is_visible = location_is_visible_with_rules(item.address, item.district, item.microdistrict)
         update_fields = ["address", "district", "microdistrict", "address_override", "district_override",
                          "microdistrict_override", "district_ref", "microdistrict_ref", "location_source",
                          "is_visible"]

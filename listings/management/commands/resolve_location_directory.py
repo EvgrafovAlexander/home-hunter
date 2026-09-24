@@ -1,8 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from listings.models import Listing
-from listings.services.enrichment import location_is_visible
-from listings.services.location_directory import resolve_location
+from listings.services.location_directory import location_is_visible_with_rules, resolve_location
 
 
 class Command(BaseCommand):
@@ -28,7 +27,9 @@ class Command(BaseCommand):
                 "district": resolution.district.name,
                 "microdistrict": resolution.microdistrict.name if resolution.microdistrict else listing.microdistrict,
             }
-            values["is_visible"] = location_is_visible(listing.address, values["district"], values["microdistrict"]) and not resolution.excluded
+            values["is_visible"] = location_is_visible_with_rules(
+                listing.address, values["district"], values["microdistrict"],
+            )
             changed = [field for field, value in values.items() if getattr(listing, field) != value]
             if changed:
                 for field in changed:

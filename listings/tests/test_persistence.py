@@ -144,6 +144,31 @@ def test_excluded_street_rule_hides_listing_and_sets_microdistrict(search, item)
     assert not result.listing.is_visible
 
 
+def test_manual_location_override_cannot_bypass_excluded_street(search, item):
+    district = District.objects.get(name="Кировский")
+    microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+    StreetAssignment.objects.create(
+        street="ул. Лётчиков", district=district, microdistrict=microdistrict, is_excluded=True,
+    )
+    first = process_listing(search, replace(item, address="ул. Ленина, 1", district="Кировский"), timezone.now())
+    listing = first.listing
+    listing.address_override = "ул. Лётчиков, 14"
+    listing.district_override = "Кировский"
+    listing.microdistrict_override = "Южный"
+    listing.location_source = "manual"
+    listing.district_ref = district
+    listing.microdistrict_ref = microdistrict
+    listing.save(update_fields=[
+        "address_override", "district_override", "microdistrict_override", "location_source",
+        "district_ref", "microdistrict_ref",
+    ])
+
+    result = process_listing(search, replace(item, address="ул. Ленина, 1", district="Кировский"), timezone.now())
+
+    assert result.listing.address == "ул. Лётчиков, 14"
+    assert not result.listing.is_visible
+
+
 def test_keeps_source_price_per_sqm_and_district(search, item):
     result = process_listing(search, replace(
         item, price_per_sqm=111000, district="Советский", address="р-н Кировский",
