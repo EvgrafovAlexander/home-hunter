@@ -212,6 +212,24 @@ sudo systemctl enable --now home-hunter-geocoding.timer
 systemctl list-timers home-hunter-geocoding.timer
 ```
 
+### Определение микрорайона по полигонам
+
+Каталог полигонов Уфы хранится в `data/ufa_microdistrict_polygons.json` и может
+обновляться публичным источником:
+
+```bash
+python scripts/extract_ufa_microdistrict_polygons.py
+```
+
+Для предварительной проверки объявлений с уже сохранёнными координатами:
+
+```bash
+python manage.py resolve_microdistricts --source avito --only-missing --dry-run
+```
+
+После проверки результата примените изменения, убрав `--dry-run`. Ручные
+исправления объявлений команда не перезаписывает.
+
 ### Уведомления об опросах
 
 Задайте `TG_BOT_TOKEN` и `TG_CHAT_ID` в production `.env`. Сообщения Telegram

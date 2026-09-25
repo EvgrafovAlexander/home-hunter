@@ -4,9 +4,11 @@ from decimal import Decimal
 
 from django.db import transaction
 from collectors.base import NormalizedListing
-from listings.models import Listing, ListingSearchQuery, ListingSnapshot, PriceHistory, SearchQuery
+from listings.models import (Listing, ListingSearchQuery, ListingSnapshot, Microdistrict,
+                              MicrodistrictBoundary, PriceHistory, SearchQuery)
 from listings.services.enrichment import calculate_price_per_sqm, parse_address
 from listings.services.location_directory import location_is_visible_with_rules, resolve_location
+from listings.services.microdistrict_polygons import find_microdistrict_ref, resolve_microdistrict
 
 SIGNIFICANT_FIELDS = (
     "price", "price_per_sqm", "title", "description", "address", "district", "microdistrict",
@@ -115,6 +117,31 @@ def process_listing(
         values["is_visible"] = location_is_visible_with_rules(
             values["address"], values["district"], values["microdistrict"],
         )
+        # Avito cards usually provide a street and district but not a
+        # microdistrict.  Reuse coordinates already stored for the listing
+        # and classify them against the cached Ufa polygons.
+        if not values["microdistrict"] and listing.latitude is not None and listing.longitude is not None:
+            polygon_match = resolve_microdistrict(listing.latitude, listing.longitude)
+            if polygon_match:
+                values["microdistrict"] = polygon_match.title
+                values["microdistrict_source"] = "polygon"
+                values["microdistrict_confidence"] = polygon_match.confidence
+                values["microdistrict_polygon_id"] = polygon_match.polygon_id
+                values["microdistrict_boundary"] = MicrodistrictBoundary.objects.filter(
+                    source="bezposrednikov", source_polygon_id=polygon_match.polygon_id, is_active=True,
+                ).first()
+                microdistrict_ref = find_microdistrict_ref(
+                    polygon_match.title,
+                    Microdistrict.objects.select_related("district").all(),
+                )
+                if microdistrict_ref:
+                    district_ref = microdistrict_ref.district
+                    values["district"] = district_ref.name
+                    values["district_ref"] = district_ref
+                    values["microdistrict_ref"] = microdistrict_ref
+                values["is_visible"] = location_is_visible_with_rules(
+                    values["address"], values["district"], values["microdistrict"],
+                )
     address_changed = not created and listing.address != values["address"]
     reactivated = not created and not listing.is_active
     changed = {key for key, value in values.items() if getattr(listing, key) != value}

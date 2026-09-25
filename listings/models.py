@@ -46,6 +46,35 @@ class Microdistrict(models.Model):
         return f"{self.district.name} · {self.name}"
 
 
+class MicrodistrictBoundary(models.Model):
+    """Versioned source geometry used for coordinate-based classification."""
+
+    microdistrict = models.ForeignKey(
+        Microdistrict, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="boundaries",
+    )
+    source = models.CharField(max_length=50)
+    source_polygon_id = models.PositiveIntegerField()
+    title = models.CharField(max_length=255)
+    geometry = models.JSONField()
+    bbox = models.JSONField(default=list, blank=True)
+    geometry_hash = models.CharField(max_length=64)
+    confidence = models.DecimalField(max_digits=4, decimal_places=3, default=0.980)
+    is_active = models.BooleanField(default=True, db_index=True)
+    retrieved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("source", "title", "source_polygon_id")
+        constraints = [models.UniqueConstraint(
+            fields=("source", "source_polygon_id"), name="unique_boundary_source_polygon",
+        )]
+
+    def __str__(self) -> str:
+        return f"{self.source} · {self.title}"
+
+
 class StreetAssignment(models.Model):
     class Parity(models.TextChoices):
         ANY = "any", "Любая"
@@ -114,6 +143,13 @@ class Listing(models.Model):
     address = models.TextField(null=True, blank=True)
     district = models.CharField(max_length=255, null=True, blank=True)
     microdistrict = models.CharField(max_length=255, null=True, blank=True)
+    microdistrict_source = models.CharField(max_length=20, null=True, blank=True)
+    microdistrict_confidence = models.DecimalField(max_digits=4, decimal_places=3, null=True, blank=True)
+    microdistrict_polygon_id = models.PositiveIntegerField(null=True, blank=True)
+    microdistrict_boundary = models.ForeignKey(
+        "MicrodistrictBoundary", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="listings",
+    )
     address_override = models.TextField(null=True, blank=True)
     district_override = models.CharField(max_length=255, null=True, blank=True)
     microdistrict_override = models.CharField(max_length=255, null=True, blank=True)
