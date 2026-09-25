@@ -8,6 +8,7 @@ COPY config config
 COPY listings listings
 COPY collectors collectors
 COPY templates templates
+COPY data data
 COPY manage.py .
 RUN DJANGO_SECRET_KEY=build-only-static-key python manage.py collectstatic --noinput
 

@@ -16,5 +16,7 @@
 !Dockerfile
 !templates/
 !templates/**
+!data/
+!data/**
 **/__pycache__
 **/tests
