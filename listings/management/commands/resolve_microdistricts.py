@@ -6,7 +6,9 @@ from django.db.models import Q
 
 from listings.models import Listing, Microdistrict, MicrodistrictBoundary
 from listings.services.location_directory import location_is_visible_with_rules
-from listings.services.microdistrict_polygons import find_microdistrict_ref, resolve_microdistrict
+from listings.services.microdistrict_polygons import (
+    find_microdistrict_ref, normalized_microdistrict_label, resolve_microdistrict,
+)
 
 
 class Command(BaseCommand):
@@ -54,7 +56,7 @@ class Command(BaseCommand):
                 continue
             matched += 1
             microdistrict_ref = find_microdistrict_ref(result.title, directory)
-            canonical_name = microdistrict_ref.name if microdistrict_ref else result.title
+            canonical_name = microdistrict_ref.name if microdistrict_ref else normalized_microdistrict_label(result.title)
             values = {
                 "microdistrict": canonical_name,
                 "microdistrict_ref": microdistrict_ref,

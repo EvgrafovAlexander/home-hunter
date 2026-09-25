@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -76,6 +77,7 @@ def load_polygons() -> tuple[dict, ...]:
         return tuple({
             "id": row.source_polygon_id,
             "title": row.title,
+            "geometry_type": (row.geometry or {}).get("type", "Polygon"),
             "coordinates": (row.geometry or {}).get("coordinates", []),
             "confidence": float(row.confidence),
         } for row in rows)
@@ -112,10 +114,20 @@ def resolve_microdistrict(latitude, longitude) -> PolygonMatch | None:
 
 
 def canonical_microdistrict_name(value: str | None) -> str:
-    value = re.sub(r"\s+", " ", (value or "").replace("ё", "е").strip().casefold())
+    value = unicodedata.normalize("NFKC", value or "").replace("\xa0", " ")
+    value = re.sub(r"\s+", " ", value.replace("ё", "е").strip().casefold())
     value = re.sub(r"^(?:м-н|мкр\.?|микрорайон)\s+", "", value)
     value = re.sub(r"\s+(?:м-н|мкр\.?|микрорайон|ж/к|жк|пос\.?|поселок)$", "", value)
     return value.strip()
+
+
+def normalized_microdistrict_label(value: str | None) -> str:
+    """Return a readable label without source-specific suffixes."""
+    value = unicodedata.normalize("NFKC", value or "").replace("\xa0", " ")
+    value = re.sub(r"\s+", " ", value).strip()
+    value = re.sub(r"^(?:м-н|мкр\.?|микрорайон)\s+", "", value, flags=re.I)
+    value = re.sub(r"\s+(?:м-н|мкр\.?|микрорайон|ж/к|жк|пос\.?|поселок)$", "", value, flags=re.I)
+    return value.strip(" ,.-")
 
 
 def find_microdistrict_ref(title: str, microdistricts):
@@ -137,7 +149,7 @@ def enrich_listing_from_coordinates(listing) -> set[str]:
         return set()
     directory = Microdistrict.objects.select_related("district").all()
     microdistrict_ref = find_microdistrict_ref(match.title, directory)
-    canonical_name = microdistrict_ref.name if microdistrict_ref else match.title
+    canonical_name = microdistrict_ref.name if microdistrict_ref else normalized_microdistrict_label(match.title)
     boundary = MicrodistrictBoundary.objects.filter(
         source="bezposrednikov", source_polygon_id=match.polygon_id, is_active=True,
     ).first()
