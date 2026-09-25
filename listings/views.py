@@ -1,4 +1,5 @@
 from collections import Counter, defaultdict
+import json
 from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from math import ceil
@@ -16,7 +17,7 @@ from django.utils import timezone
 from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, District, GlobalListingHide,
                      Listing, ListingReview, ListingReviewRevision, ListingSearchQuery, ListingSnapshot, ManualDomclickJob,
                      Microdistrict, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
-                     StreetAssignment, UserListingHide)
+                     StreetAssignment, UserListingHide, MicrodistrictBoundary)
 from .services.enrichment import location_is_visible, parse_address
 from .services.location_directory import apply_location_rules_for_assignments, location_is_visible_with_rules
 from .services.change_history import change_events
@@ -1286,6 +1287,42 @@ def listing_map(request):
     return render(request, "listings/map.html", {
         "listings": map_listings, "result_count": len(map_listings), "filters": filters,
         "filter_options": filter_options(), "selected_listing_id": selected_listing.pk if selected_listing else None,
+    })
+
+
+def _geojson_coordinates(coordinates):
+    return [[[float(point[1]), float(point[0])] for point in ring] for ring in coordinates]
+
+
+@login_required
+def microdistrict_map(request):
+    selected_district = request.GET.get("district", "")
+    boundaries = (MicrodistrictBoundary.objects.filter(is_active=True)
+                  .select_related("microdistrict__district")
+                  .annotate(listing_count=Count(
+                      "listings", filter=Q(listings__is_active=True, listings__is_visible=True))))
+    if selected_district.isdigit():
+        boundaries = boundaries.filter(microdistrict__district_id=int(selected_district))
+    polygons = []
+    for boundary in boundaries.order_by("title"):
+        district = boundary.microdistrict.district if boundary.microdistrict_id else None
+        polygons.append({
+            "id": boundary.pk,
+            "title": boundary.title,
+            "district": district.name if district else "Не связан",
+            "district_id": district.pk if district else None,
+            "listing_count": boundary.listing_count,
+            "linked": bool(boundary.microdistrict_id),
+            "geometry": {"type": "Polygon", "coordinates": _geojson_coordinates(
+                (boundary.geometry or {}).get("coordinates", []),
+            )},
+        })
+    return render(request, "listings/microdistrict_map.html", {
+        "polygons_json": json.dumps(polygons, ensure_ascii=False),
+        "districts": District.objects.all(),
+        "selected_district": selected_district,
+        "polygon_count": len(polygons),
+        "linked_count": sum(item["linked"] for item in polygons),
     })
 
 
