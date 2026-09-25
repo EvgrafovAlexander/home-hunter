@@ -1138,8 +1138,8 @@ def data_quality(request):
         microdistrict = Microdistrict.objects.select_related("district").filter(
             pk=request.POST.get("microdistrict_id"),
         ).first()
-        if microdistrict and (not district or microdistrict.district_id == district.id):
-            district = microdistrict.district
+        if microdistrict and (not district or microdistrict.district_links.filter(district_id=district.id).exists()):
+            district = district or microdistrict.district
         elif microdistrict:
             microdistrict = None
         parsed = parse_address(address, district.name if district else None)
@@ -1205,7 +1205,8 @@ def location_directory(request):
                 )
             district = get_object_or_404(District, pk=request.POST.get("district_id"))
             microdistrict = Microdistrict.objects.filter(pk=request.POST.get("microdistrict_id")).first()
-            if microdistrict and microdistrict.district_id != district.id:
+            if microdistrict and not (microdistrict.district_id == district.id or
+                                      microdistrict.district_links.filter(district_id=district.id).exists()):
                 microdistrict = None
             street = (request.POST.get("street") or "").strip()
             if street:
@@ -1302,15 +1303,15 @@ def microdistrict_map(request):
                   .annotate(listing_count=Count(
                       "listings", filter=Q(listings__is_active=True, listings__is_visible=True))))
     if selected_district.isdigit():
-        boundaries = boundaries.filter(microdistrict__district_id=int(selected_district))
+        boundaries = boundaries.filter(microdistrict__district_links__district_id=int(selected_district)).distinct()
     polygons = []
     for boundary in boundaries.order_by("title"):
-        district = boundary.microdistrict.district if boundary.microdistrict_id else None
+        linked_districts = list(boundary.microdistrict.districts.all()) if boundary.microdistrict_id else []
         polygons.append({
             "id": boundary.pk,
             "title": boundary.title,
-            "district": district.name if district else "Не связан",
-            "district_id": district.pk if district else None,
+            "district": ", ".join(item.name for item in linked_districts) if linked_districts else "Не связан",
+            "district_id": linked_districts[0].pk if linked_districts else None,
             "listing_count": boundary.listing_count,
             "linked": bool(boundary.microdistrict_id),
             "geometry": {"type": "Polygon", "coordinates": _geojson_coordinates(

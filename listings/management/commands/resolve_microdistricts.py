@@ -70,8 +70,9 @@ class Command(BaseCommand):
                 ),
             }
             if microdistrict_ref:
-                values["district"] = microdistrict_ref.district.name
-                values["district_ref"] = microdistrict_ref.district
+                if not listing.district and not listing.district_ref:
+                    values["district"] = microdistrict_ref.district.name
+                    values["district_ref"] = microdistrict_ref.district
             changed = [field for field, value in values.items() if getattr(listing, field) != value]
             if changed:
                 would_update += 1

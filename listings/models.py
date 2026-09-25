@@ -35,6 +35,9 @@ class District(models.Model):
 class Microdistrict(models.Model):
     name = models.CharField(max_length=100)
     district = models.ForeignKey(District, on_delete=models.PROTECT, related_name="microdistricts")
+    districts = models.ManyToManyField(
+        "District", through="MicrodistrictDistrict", related_name="all_microdistricts", blank=True,
+    )
     aliases = models.JSONField(default=list, blank=True)
     sort_order = models.PositiveSmallIntegerField(default=0)
 
@@ -44,6 +47,17 @@ class Microdistrict(models.Model):
 
     def __str__(self) -> str:
         return f"{self.district.name} · {self.name}"
+
+
+class MicrodistrictDistrict(models.Model):
+    microdistrict = models.ForeignKey(Microdistrict, on_delete=models.CASCADE, related_name="district_links")
+    district = models.ForeignKey(District, on_delete=models.PROTECT, related_name="microdistrict_links")
+    is_primary = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=("microdistrict", "district"), name="unique_microdistrict_district_link",
+        )]
 
 
 class MicrodistrictBoundary(models.Model):

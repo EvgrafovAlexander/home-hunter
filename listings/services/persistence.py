@@ -137,9 +137,10 @@ def process_listing(
                     Microdistrict.objects.select_related("district").all(),
                 )
                 if microdistrict_ref:
-                    district_ref = microdistrict_ref.district
-                    values["district"] = district_ref.name
-                    values["district_ref"] = district_ref
+                    if not values.get("district") and not district_ref:
+                        district_ref = microdistrict_ref.district
+                        values["district"] = district_ref.name
+                        values["district_ref"] = district_ref
                     values["microdistrict_ref"] = microdistrict_ref
                 values["is_visible"] = location_is_visible_with_rules(
                     values["address"], values["district"], values["microdistrict"],

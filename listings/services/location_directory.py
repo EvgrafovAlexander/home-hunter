@@ -164,9 +164,10 @@ def resolve_location(address: str | None, district_name: str | None,
     district = next((item for item in districts if _matches(district_name, item.name, item.aliases)), None)
     microdistricts = list(Microdistrict.objects.select_related("district").all())
     candidates = [item for item in microdistricts if _matches(microdistrict_name, item.name, item.aliases)]
-    microdistrict = next((item for item in candidates if not district or item.district_id == district.id), None)
+    microdistrict = next((item for item in candidates if not district or item.district_id == district.id or
+                          item.district_links.filter(district_id=district.id).exists()), None)
     if microdistrict:
-        return LocationResolution(microdistrict.district, microdistrict, "parser")
+        return LocationResolution(district or microdistrict.district, microdistrict, "parser")
     if district:
         return LocationResolution(district, None, "parser")
 

@@ -162,9 +162,12 @@ def enrich_listing_from_coordinates(listing) -> set[str]:
         "microdistrict", "microdistrict_source", "microdistrict_confidence",
         "microdistrict_polygon_id", "microdistrict_boundary",
     }
-    if microdistrict_ref:
+    if microdistrict_ref and not listing.district and not listing.district_ref:
         listing.district = microdistrict_ref.district.name
         listing.district_ref = microdistrict_ref.district
         listing.microdistrict_ref = microdistrict_ref
         changed.update({"district", "district_ref", "microdistrict_ref"})
+    elif microdistrict_ref:
+        listing.microdistrict_ref = microdistrict_ref
+        changed.add("microdistrict_ref")
     return changed

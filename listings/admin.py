@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (Consideration, District, GlobalListingHide, Listing, ListingReview, ListingReviewRevision,
                      ListingSearchQuery, ListingSnapshot, Microdistrict, PriceHistory, ReviewTag, Scan, SearchQuery,
-                     StreetAssignment, UserListingHide)
+                     StreetAssignment, UserListingHide, MicrodistrictDistrict)
 
 
 class PriceHistoryInline(admin.TabularInline):
@@ -48,6 +48,7 @@ admin.site.register(PriceHistory)
 admin.site.register(ListingSnapshot)
 admin.site.register(District)
 admin.site.register(Microdistrict)
+admin.site.register(MicrodistrictDistrict)
 admin.site.register(StreetAssignment)
 admin.site.register(ReviewTag)
 admin.site.register(UserListingHide)
