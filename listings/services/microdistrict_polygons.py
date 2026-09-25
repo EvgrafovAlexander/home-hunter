@@ -11,7 +11,7 @@ from pathlib import Path
 from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 
-from listings.models import MicrodistrictBoundary
+from listings.models import Microdistrict, MicrodistrictBoundary
 
 
 POLYGONS_PATH = Path(settings.BASE_DIR) / "data" / "ufa_microdistrict_polygons.json"
@@ -125,3 +125,34 @@ def find_microdistrict_ref(title: str, microdistricts):
         if target in {canonical_microdistrict_name(name) for name in names}:
             return item
     return None
+
+
+def enrich_listing_from_coordinates(listing) -> set[str]:
+    """Fill a listing's missing location fields as soon as coordinates exist."""
+    if (listing.location_source == "manual" or listing.microdistrict_override or
+            listing.microdistrict or listing.latitude is None or listing.longitude is None):
+        return set()
+    match = resolve_microdistrict(listing.latitude, listing.longitude)
+    if not match:
+        return set()
+    directory = Microdistrict.objects.select_related("district").all()
+    microdistrict_ref = find_microdistrict_ref(match.title, directory)
+    canonical_name = microdistrict_ref.name if microdistrict_ref else match.title
+    boundary = MicrodistrictBoundary.objects.filter(
+        source="bezposrednikov", source_polygon_id=match.polygon_id, is_active=True,
+    ).first()
+    listing.microdistrict = canonical_name
+    listing.microdistrict_source = "polygon"
+    listing.microdistrict_confidence = match.confidence
+    listing.microdistrict_polygon_id = match.polygon_id
+    listing.microdistrict_boundary = boundary
+    changed = {
+        "microdistrict", "microdistrict_source", "microdistrict_confidence",
+        "microdistrict_polygon_id", "microdistrict_boundary",
+    }
+    if microdistrict_ref:
+        listing.district = microdistrict_ref.district.name
+        listing.district_ref = microdistrict_ref.district
+        listing.microdistrict_ref = microdistrict_ref
+        changed.update({"district", "district_ref", "microdistrict_ref"})
+    return changed

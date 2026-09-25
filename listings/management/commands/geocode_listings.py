@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from listings.models import Listing
 from listings.services.geocoding import GeocodingError, geocode_ufa_address
+from listings.services.microdistrict_polygons import enrich_listing_from_coordinates
 
 
 class Command(BaseCommand):
@@ -39,6 +40,8 @@ class Command(BaseCommand):
                 listing.geocode_status = "success"
             else:
                 listing.geocode_status = "not_found"
-            listing.save(update_fields=["latitude", "longitude", "geocode_status", "geocoded_at"])
+            update_fields = {"latitude", "longitude", "geocode_status", "geocoded_at"}
+            update_fields.update(enrich_listing_from_coordinates(listing))
+            listing.save(update_fields=update_fields)
             self.stdout.write(f"{listing.pk}: {listing.geocode_status}")
         self.stdout.write(f"Processed {len(listings)} listing(s)")
