@@ -20,6 +20,7 @@ from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollSt
                      StreetAssignment, UserListingHide, MicrodistrictBoundary)
 from .services.enrichment import location_is_visible, parse_address
 from .services.location_directory import apply_location_rules_for_assignments, location_is_visible_with_rules
+from .services.microdistrict_polygons import canonical_microdistrict_name, normalized_microdistrict_label
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
 from .services.scan_health import cian_detail_health
@@ -451,9 +452,17 @@ def microdistrict_market_stats(listings, period_since, filters):
             .exclude(microdistrict__isnull=True).exclude(microdistrict="")
             .exclude(price_per_sqm__isnull=True)
             .values("district", "microdistrict", "price_per_sqm", "price", "area", "first_seen_at", "is_visible"))
+    directory_names = {}
+    for item in Microdistrict.objects.prefetch_related("districts").all():
+        for district in item.districts.all():
+            directory_names[(district.name, canonical_microdistrict_name(item.name))] = item.name
     groups = {}
+    display_names = {}
     for row in rows:
-        key = (row["district"], row["microdistrict"])
+        key = (row["district"], canonical_microdistrict_name(row["microdistrict"]))
+        display_names[key] = directory_names.get(
+            key, normalized_microdistrict_label(row["microdistrict"]),
+        )
         groups.setdefault(key, []).append(row)
     all_sqm_prices = [row["price_per_sqm"] for rows in groups.values() for row in rows]
     overall_median = median(all_sqm_prices) if all_sqm_prices else None
@@ -468,8 +477,10 @@ def microdistrict_market_stats(listings, period_since, filters):
             continue
         if filters.get("district") and snapshot.listing.district != filters["district"]:
             continue
-        key = (snapshot.data.get("district") or snapshot.listing.district,
-               snapshot.data.get("microdistrict") or snapshot.listing.microdistrict)
+        key = (
+            snapshot.data.get("district") or snapshot.listing.district,
+            canonical_microdistrict_name(snapshot.data.get("microdistrict") or snapshot.listing.microdistrict),
+        )
         if key in groups:
             removed_counts[key] = removed_counts.get(key, 0) + 1
 
@@ -483,7 +494,8 @@ def microdistrict_market_stats(listings, period_since, filters):
         areas = [float(entry["area"]) for entry in entries if entry["area"] is not None]
         median_sqm = int(median(sqm_prices))
         stats.append({
-            "district": district, "microdistrict": microdistrict, "count": len(entries),
+            "district": district, "microdistrict": display_names.get((district, microdistrict), microdistrict),
+            "count": len(entries),
             "visible_count": sum(entry["is_visible"] for entry in entries),
             "hidden_count": sum(not entry["is_visible"] for entry in entries),
             "share_pct": round(len(entries) / eligible_total * 100, 1) if eligible_total else 0,
