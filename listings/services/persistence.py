@@ -8,7 +8,9 @@ from listings.models import (Listing, ListingSearchQuery, ListingSnapshot, Micro
                               MicrodistrictBoundary, PriceHistory, SearchQuery)
 from listings.services.enrichment import calculate_price_per_sqm, parse_address
 from listings.services.location_directory import location_is_visible_with_rules, resolve_location
-from listings.services.microdistrict_polygons import find_microdistrict_ref, resolve_microdistrict
+from listings.services.microdistrict_polygons import (
+    find_microdistrict_ref, normalized_microdistrict_label, resolve_microdistrict,
+)
 
 SIGNIFICANT_FIELDS = (
     "price", "price_per_sqm", "title", "description", "address", "district", "microdistrict",
@@ -123,7 +125,7 @@ def process_listing(
         if not values["microdistrict"] and listing.latitude is not None and listing.longitude is not None:
             polygon_match = resolve_microdistrict(listing.latitude, listing.longitude)
             if polygon_match:
-                values["microdistrict"] = polygon_match.title
+                values["microdistrict"] = normalized_microdistrict_label(polygon_match.title)
                 values["microdistrict_source"] = "polygon"
                 values["microdistrict_confidence"] = polygon_match.confidence
                 values["microdistrict_polygon_id"] = polygon_match.polygon_id
