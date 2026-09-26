@@ -14,7 +14,7 @@ from listings.models import (CianDetailPayload, CianDetailPollProgress, CianDeta
                              ListingSnapshot, PriceHistory)
 from listings.services.persistence import snapshot_data_from_listing
 from listings.services.enrichment import calculate_price_per_sqm, location_is_visible, parse_address
-from listings.services.location_directory import location_is_excluded
+from listings.services.location_directory import location_is_excluded, resolve_location
 from listings.services.microdistrict_polygons import enrich_listing_from_coordinates
 
 LOCK_ID = 724198501
@@ -94,6 +94,14 @@ def save_detail(listing_id, detail):
     listing.address = listing.address_override or parsed.address
     listing.district = listing.district_override or parsed.district
     listing.microdistrict = listing.microdistrict_override or parsed.microdistrict
+    if not listing.microdistrict_override:
+        resolution = resolve_location(listing.address, listing.district, listing.microdistrict)
+        if resolution.district:
+            listing.district = resolution.district.name
+            listing.district_ref = resolution.district
+        if resolution.microdistrict:
+            listing.microdistrict = resolution.microdistrict.name
+            listing.microdistrict_ref = resolution.microdistrict
     listing.is_visible = location_is_visible(listing.address, listing.district, listing.microdistrict) and not location_is_excluded(listing.address)
     enrich_listing_from_coordinates(listing)
     if "price" in changed:
