@@ -31,8 +31,10 @@ if(polygons.length){map.fitBounds(layer.getBounds().pad(.05))}
 {% if request.user.is_staff %}
 map.pm.addControls({position:'topleft',drawText:false,drawCircle:false,drawCircleMarker:false,drawPolyline:false,drawRectangle:false,drawMarker:false,editMode:false,dragMode:false,cutPolygon:false,removalMode:false});
 let drawnLayer=null;
+const syncSelectedGeometry=()=>{if(selectedFeature && selectedFeature._source==='manual')document.getElementById('manual-geometry').value=JSON.stringify(selectedFeature.toGeoJSON().geometry)};
 map.on('pm:create',event=>{if(drawnLayer)map.removeLayer(drawnLayer);drawnLayer=event.layer;document.getElementById('manual-boundary-id').value='';document.getElementById('manual-geometry').value=JSON.stringify(drawnLayer.toGeoJSON().geometry);drawnLayer.on('pm:edit',()=>document.getElementById('manual-geometry').value=JSON.stringify(drawnLayer.toGeoJSON().geometry));});
-document.getElementById('manual-boundary-form').addEventListener('submit',event=>{if(!drawnLayer && !document.getElementById('manual-boundary-id').value){event.preventDefault();alert('Сначала нарисуйте полигон на карте.');return}if(drawnLayer)document.getElementById('manual-geometry').value=JSON.stringify(drawnLayer.toGeoJSON().geometry)});
+map.on('pm:edit',syncSelectedGeometry);map.on('pm:dragend',syncSelectedGeometry);
+document.getElementById('manual-boundary-form').addEventListener('submit',event=>{if(!drawnLayer && !document.getElementById('manual-boundary-id').value){event.preventDefault();alert('Сначала нарисуйте полигон на карте.');return}if(drawnLayer)document.getElementById('manual-geometry').value=JSON.stringify(drawnLayer.toGeoJSON().geometry);else syncSelectedGeometry();if(!document.getElementById('manual-geometry').value){event.preventDefault();alert('Не удалось получить геометрию полигона.');}});
 document.getElementById('cancel-edit').addEventListener('click',()=>{if(drawnLayer){map.removeLayer(drawnLayer);drawnLayer=null}document.getElementById('manual-boundary-id').value='';document.getElementById('manual-geometry').value='';});
 {% endif %}
 </script>
