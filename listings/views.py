@@ -1,4 +1,5 @@
 from collections import Counter, defaultdict
+import hashlib
 import json
 from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
@@ -7,10 +8,11 @@ from statistics import median
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.db import transaction
 from django.db.models import Avg, Count, F, Max, Q
 from django.db.models.functions import TruncDate
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
@@ -20,7 +22,8 @@ from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollSt
                      StreetAssignment, UserListingHide, MicrodistrictBoundary)
 from .services.enrichment import location_is_visible, parse_address
 from .services.location_directory import apply_location_rules_for_assignments, location_is_visible_with_rules
-from .services.microdistrict_polygons import canonical_microdistrict_name, normalized_microdistrict_label
+from .services.microdistrict_polygons import (canonical_microdistrict_name, load_polygons,
+                                              normalized_microdistrict_label)
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
 from .services.scan_health import cian_detail_health
@@ -1309,6 +1312,72 @@ def _geojson_coordinates(coordinates):
 
 @login_required
 def microdistrict_map(request):
+    if request.method == "POST":
+        if not request.user.is_staff:
+            return HttpResponseForbidden("Только для сотрудников")
+        action = request.POST.get("action")
+        if action == "link":
+            boundary = get_object_or_404(MicrodistrictBoundary, pk=request.POST.get("boundary_id"))
+            microdistrict = get_object_or_404(Microdistrict, pk=request.POST.get("microdistrict_id"))
+            boundary.microdistrict = microdistrict
+            boundary.save(update_fields=["microdistrict", "updated_at"])
+            load_polygons.cache_clear()
+            messages.success(request, f"Полигон «{boundary.title}» связан с «{microdistrict.name}».")
+        elif action == "save_manual":
+            try:
+                payload = json.loads(request.POST.get("geometry") or "")
+                if payload.get("type") != "Polygon":
+                    raise ValueError("нужен полигон")
+                rings = payload.get("coordinates") or []
+                if not rings or len(rings[0]) < 4:
+                    raise ValueError("контур должен содержать минимум три точки")
+                # Leaflet/GeoJSON stores [longitude, latitude]; the classifier's
+                # historical internal format is [latitude, longitude].
+                coordinates = []
+                for ring in rings:
+                    converted = []
+                    for point in ring:
+                        longitude, latitude = float(point[0]), float(point[1])
+                        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+                            raise ValueError("некорректные координаты")
+                        converted.append([latitude, longitude])
+                    coordinates.append(converted)
+                geometry = {"type": "Polygon", "coordinates": coordinates}
+            except (TypeError, ValueError, json.JSONDecodeError, IndexError):
+                messages.error(request, "Не удалось сохранить полигон: проверьте геометрию.")
+            else:
+                microdistrict = get_object_or_404(Microdistrict, pk=request.POST.get("microdistrict_id"))
+                boundary_id = request.POST.get("boundary_id")
+                boundary = (MicrodistrictBoundary.objects.filter(pk=boundary_id, source="manual").first()
+                            if boundary_id else None)
+                points = [point for ring in coordinates for point in ring]
+                bbox = [min(p[0] for p in points), min(p[1] for p in points),
+                        max(p[0] for p in points), max(p[1] for p in points)]
+                digest = hashlib.sha256(json.dumps(
+                    geometry, ensure_ascii=False, sort_keys=True,
+                ).encode()).hexdigest()
+                if boundary is None:
+                    next_id = (MicrodistrictBoundary.objects.filter(source="manual")
+                               .aggregate(max_id=Max("source_polygon_id"))["max_id"] or 0) + 1
+                    boundary = MicrodistrictBoundary(source="manual", source_polygon_id=next_id)
+                boundary.title = microdistrict.name
+                boundary.geometry = geometry
+                boundary.bbox = bbox
+                boundary.geometry_hash = digest
+                boundary.microdistrict = microdistrict
+                boundary.confidence = Decimal("1.000")
+                boundary.is_active = True
+                boundary.save()
+                load_polygons.cache_clear()
+                messages.success(request, f"Ручная граница «{microdistrict.name}» сохранена.")
+        elif action == "deactivate":
+            boundary = get_object_or_404(MicrodistrictBoundary, pk=request.POST.get("boundary_id"), source="manual")
+            boundary.is_active = False
+            boundary.save(update_fields=["is_active", "updated_at"])
+            load_polygons.cache_clear()
+            messages.success(request, f"Ручная граница «{boundary.title}» отключена.")
+        return redirect("microdistrict_map")
+
     selected_district = request.GET.get("district", "")
     boundaries = (MicrodistrictBoundary.objects.filter(is_active=True)
                   .select_related("microdistrict__district")
@@ -1326,6 +1395,7 @@ def microdistrict_map(request):
             "district_id": linked_districts[0].pk if linked_districts else None,
             "listing_count": boundary.listing_count,
             "linked": bool(boundary.microdistrict_id),
+            "source": boundary.source,
             "geometry": {"type": "Polygon", "coordinates": _geojson_coordinates(
                 (boundary.geometry or {}).get("coordinates", []),
             )},
@@ -1336,6 +1406,8 @@ def microdistrict_map(request):
         "selected_district": selected_district,
         "polygon_count": len(polygons),
         "linked_count": sum(item["linked"] for item in polygons),
+        "unlinked_boundaries": MicrodistrictBoundary.objects.filter(is_active=True, microdistrict__isnull=True),
+        "microdistricts": Microdistrict.objects.select_related("district"),
     })
 
 

@@ -4,17 +4,36 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 <style>
 .district-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:16px 0}.district-toolbar select{padding:9px;border:1px solid var(--line);border-radius:8px;background:#fff}.district-legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:13px}.district-legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-2px}.district-map{height:680px;border:1px solid #dfe5df;border-radius:14px}.micro-popup b{font-size:16px}.micro-popup p{margin:6px 0;color:#5d6963}
+.map-editor{margin:16px 0;padding:14px;border:1px solid var(--line);border-radius:12px;background:#f8faf8}.map-editor form{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}.map-editor select,.map-editor button{padding:8px;border:1px solid var(--line);border-radius:7px;background:#fff}.map-editor small{color:var(--muted)}
 </style>
 <section class="hero"><p class="eyebrow">Границы районов</p><h1>Микрорайоны на карте</h1><p>{{ polygon_count }} полигонов, из них {{ linked_count }} связаны со справочником районов.</p></section>
+{% if messages %}<div class="map-editor">{% for message in messages %}<div>{{ message }}</div>{% endfor %}</div>{% endif %}
 <form class="district-toolbar" method="get"><label>Основной район <select name="district" onchange="this.form.submit()"><option value="">Все районы</option>{% for district in districts %}<option value="{{ district.pk }}"{% if selected_district == district.pk|stringformat:'s' %} selected{% endif %}>{{ district.name }}</option>{% endfor %}</select></label><div class="district-legend"><span><i style="background:#2a9d8f"></i>Связан со справочником</span><span><i style="background:#e9c46a"></i>Требует сопоставления</span></div></form>
+{% if request.user.is_staff %}
+<section class="map-editor">
+  <strong>Редактор границ</strong>
+  <small>Нарисуйте полигон инструментом на карте или выберите существующий несвязанный полигон.</small>
+  <form method="post" id="link-boundary-form">{% csrf_token %}<input type="hidden" name="action" value="link"><label>Полигон <select name="boundary_id" id="boundary-id" required><option value="">Выберите на карте</option>{% for boundary in unlinked_boundaries %}<option value="{{ boundary.pk }}">{{ boundary.title }} · {{ boundary.source }}</option>{% endfor %}</select></label><label>Микрорайон <select name="microdistrict_id" required><option value="">Выберите</option>{% for item in microdistricts %}<option value="{{ item.pk }}">{{ item.district.name }} · {{ item.name }}</option>{% endfor %}</select></label><button type="submit">Связать</button></form>
+  <form method="post" id="manual-boundary-form">{% csrf_token %}<input type="hidden" name="action" value="save_manual"><input type="hidden" name="boundary_id" id="manual-boundary-id"><input type="hidden" name="geometry" id="manual-geometry"><label>Микрорайон <select name="microdistrict_id" id="manual-microdistrict" required><option value="">Выберите</option>{% for item in microdistricts %}<option value="{{ item.pk }}">{{ item.district.name }} · {{ item.name }}</option>{% endfor %}</select></label><button type="submit">Сохранить нарисованную границу</button><button type="button" id="cancel-edit">Сбросить</button></form>
+</section>
+{% endif %}
 <div id="microdistrict-map" class="district-map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+{% if request.user.is_staff %}<link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.0/dist/leaflet-geoman.css"><script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.18.0/dist/leaflet-geoman.min.js"></script>{% endif %}
 <script>
 const polygons={{ polygons_json|safe }};
 const map=L.map('microdistrict-map').setView([54.7388,55.9721],11);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
 const layer=L.featureGroup().addTo(map);
-polygons.forEach(item=>{const color=item.linked?'#2a9d8f':'#e9c46a';const feature=L.geoJSON(item.geometry,{style:{color,weight:2,fillColor:color,fillOpacity:.22}}).bindPopup(`<div class="micro-popup"><b>${item.title}</b><p>Район: ${item.district}</p><p>Активных объявлений: ${item.listing_count}</p><p>${item.linked?'Связан со справочником':'Требует сопоставления'}</p></div>`);feature.addTo(layer)});
+let selectedFeature=null;
+polygons.forEach(item=>{const color=item.linked?'#2a9d8f':'#e9c46a';const feature=L.geoJSON(item.geometry,{style:{color,weight:2,fillColor:color,fillOpacity:.22}}).bindPopup(`<div class="micro-popup"><b>${item.title}</b><p>Район: ${item.district}</p><p>Активных объявлений: ${item.listing_count}</p><p>${item.linked?'Связан со справочником':'Требует сопоставления'}</p></div>`);feature.eachLayer(part=>{part._boundaryId=item.id;part._source=item.source;part.on('click',()=>{selectedFeature=part;const select=document.getElementById('boundary-id');if(select)select.value=item.id;const editId=document.getElementById('manual-boundary-id');if(editId && item.source==='manual'){editId.value=item.id;document.getElementById('manual-geometry').value=JSON.stringify(part.toGeoJSON().geometry);part.pm.enable();}});});feature.addTo(layer)});
 if(polygons.length){map.fitBounds(layer.getBounds().pad(.05))}
+{% if request.user.is_staff %}
+map.pm.addControls({position:'topleft',drawText:false,drawCircle:false,drawCircleMarker:false,drawPolyline:false,drawRectangle:false,drawMarker:false,editMode:false,dragMode:false,cutPolygon:false,removalMode:false});
+let drawnLayer=null;
+map.on('pm:create',event=>{if(drawnLayer)map.removeLayer(drawnLayer);drawnLayer=event.layer;document.getElementById('manual-boundary-id').value='';document.getElementById('manual-geometry').value=JSON.stringify(drawnLayer.toGeoJSON().geometry);drawnLayer.on('pm:edit',()=>document.getElementById('manual-geometry').value=JSON.stringify(drawnLayer.toGeoJSON().geometry));});
+document.getElementById('manual-boundary-form').addEventListener('submit',event=>{if(!drawnLayer && !document.getElementById('manual-boundary-id').value){event.preventDefault();alert('Сначала нарисуйте полигон на карте.');return}if(drawnLayer)document.getElementById('manual-geometry').value=JSON.stringify(drawnLayer.toGeoJSON().geometry)});
+document.getElementById('cancel-edit').addEventListener('click',()=>{if(drawnLayer){map.removeLayer(drawnLayer);drawnLayer=null}document.getElementById('manual-boundary-id').value='';document.getElementById('manual-geometry').value='';});
+{% endif %}
 </script>
 {% endblock %}
