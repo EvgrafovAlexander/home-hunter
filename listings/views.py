@@ -1395,6 +1395,7 @@ def microdistrict_map(request):
             "district_id": linked_districts[0].pk if linked_districts else None,
             "listing_count": boundary.listing_count,
             "linked": bool(boundary.microdistrict_id),
+            "microdistrict_id": boundary.microdistrict_id,
             "source": boundary.source,
             "geometry": {"type": "Polygon", "coordinates": _geojson_coordinates(
                 (boundary.geometry or {}).get("coordinates", []),
