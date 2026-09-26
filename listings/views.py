@@ -1366,6 +1366,7 @@ def microdistrict_map(request):
                 boundary.geometry_hash = digest
                 boundary.microdistrict = microdistrict
                 boundary.confidence = Decimal("1.000")
+                boundary.priority = 100
                 boundary.is_active = True
                 boundary.save()
                 load_polygons.cache_clear()

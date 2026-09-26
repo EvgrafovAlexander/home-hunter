@@ -74,6 +74,7 @@ class MicrodistrictBoundary(models.Model):
     bbox = models.JSONField(default=list, blank=True)
     geometry_hash = models.CharField(max_length=64)
     confidence = models.DecimalField(max_digits=4, decimal_places=3, default=0.980)
+    priority = models.PositiveSmallIntegerField(default=0, help_text="Higher priority wins when active polygons overlap")
     is_active = models.BooleanField(default=True, db_index=True)
     retrieved_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

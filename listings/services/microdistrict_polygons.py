@@ -69,7 +69,7 @@ def load_polygons() -> tuple[dict, ...]:
     # Keep the JSON file as a safe bootstrap/fallback for first deployment.
     try:
         rows = list(MicrodistrictBoundary.objects.filter(is_active=True).only(
-            "source_polygon_id", "title", "geometry", "confidence",
+            "source_polygon_id", "title", "geometry", "confidence", "priority",
         ))
     except (OperationalError, ProgrammingError, RuntimeError):
         rows = []
@@ -80,6 +80,7 @@ def load_polygons() -> tuple[dict, ...]:
             "geometry_type": (row.geometry or {}).get("type", "Polygon"),
             "coordinates": (row.geometry or {}).get("coordinates", []),
             "confidence": float(row.confidence),
+            "priority": row.priority,
         } for row in rows)
     if not POLYGONS_PATH.exists():
         return ()
@@ -109,7 +110,9 @@ def resolve_microdistrict(latitude, longitude) -> PolygonMatch | None:
     if not matches:
         return None
     # Boundary matches are deliberately lower confidence than points well inside.
-    boundary, polygon = sorted(matches, key=lambda item: (not item[0], item[1]["id"]))[0]
+    boundary, polygon = sorted(
+        matches, key=lambda item: (-item[1].get("priority", 0), not item[0], item[1]["id"]),
+    )[0]
     return PolygonMatch(polygon["id"], polygon["title"], 0.85 if boundary else 0.98)
 
 
