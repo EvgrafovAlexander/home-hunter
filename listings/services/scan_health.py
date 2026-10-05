@@ -119,7 +119,7 @@ def check_source_health(source: str) -> SourceHealth:
     if should_notify:
         label = SearchQuery.Source(source).label
         prefix = "✅ Восстановление" if health.state == "healthy" else "⚠️ Проблема"
-        send_telegram_message(f"{prefix}: {label}\n{health.detail}")
+        send_telegram_message(f"{prefix}: {label}\n{health.detail}", chat_id=settings.TG_CHAT_ID)
     return health
 
 
@@ -151,7 +151,7 @@ def check_cian_detail_health() -> SourceHealth:
         alert.state = health.state
         alert.save(update_fields=("state", "updated_at"))
     if health.state in {"error", "stale"} and (created or previous != health.state):
-        send_telegram_message(f"⚠️ CIAN detail: {health.label}\n{health.detail}")
+        send_telegram_message(f"⚠️ CIAN detail: {health.label}\n{health.detail}", chat_id=settings.TG_CHAT_ID)
     elif health.state == "healthy" and previous in {"error", "stale"}:
-        send_telegram_message(f"✅ CIAN detail восстановлен\n{health.detail}")
+        send_telegram_message(f"✅ CIAN detail восстановлен\n{health.detail}", chat_id=settings.TG_CHAT_ID)
     return health
