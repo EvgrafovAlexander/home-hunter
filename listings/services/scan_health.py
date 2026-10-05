@@ -70,8 +70,8 @@ def send_telegram_message(text: str, reply_markup=None, *, chat_id=None) -> bool
             )
             response.raise_for_status()
             sent = True
-        except requests.RequestException:
-            logger.exception("Telegram notification failed for chat %s", chat_id)
+        except requests.RequestException as exc:
+            logger.warning("Telegram notification failed for chat %s: %s", chat_id, type(exc).__name__)
     return sent
 
 
@@ -93,8 +93,8 @@ def send_telegram_photo(photo_url: str, caption: str, reply_markup=None, *, chat
             )
             response.raise_for_status()
             sent = True
-        except requests.RequestException:
-            logger.warning("Telegram photo notification failed for chat %s", chat_id, exc_info=True)
+        except requests.RequestException as exc:
+            logger.warning("Telegram photo notification failed for chat %s: %s", chat_id, type(exc).__name__)
     return sent
 
 
