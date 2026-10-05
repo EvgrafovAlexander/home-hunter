@@ -15,7 +15,7 @@ MIN_SIMILAR, MIN_ROOM_GROUP, MIN_LOCATION_GROUP = 5, 8, 12
 
 def _listing_score(listing):
     """Return a compact score and explainable reasons for the Telegram feed."""
-    position = market_position(listing)
+    position = market_position_details(listing)
     score = 5.0
     reasons = []
 
@@ -23,7 +23,7 @@ def _listing_score(listing):
         reasons.append((kind, text))
     discount = None
     if position:
-        discount, reference, samples = position
+        discount, reference, samples, _median_price = position
         score += max(-2, min(3, discount / 5))
         if discount >= settings.TG_DEAL_MIN_DISCOUNT_PERCENT:
             add("plus", f"На {discount}% дешевле {reference}")
@@ -101,6 +101,7 @@ def notify_new_listing(listing_id: int) -> bool:
     if not listing.is_visible or TelegramListingAlert.objects.filter(listing=listing).exists():
         return False
     score, discount, reasons = _listing_score(listing)
+    market = market_position_details(listing)
     source = SearchQuery.Source(listing.source).label
     facts = [
         " · ".join(filter(None, [_rooms(listing.rooms), f"{_area(listing.area)} м²" if listing.area else None])),
@@ -133,6 +134,20 @@ def notify_new_listing(listing_id: int) -> bool:
     pluses = [text for kind, text in reasons if kind == "plus"]
     minuses = [text for kind, text in reasons if kind == "minus"]
     infos = [text for kind, text in reasons if kind == "info"]
+    market_lines = []
+    if market:
+        market_discount, market_reference, market_samples, market_median = market
+        place = "микрорайона" if listing.microdistrict else "района"
+        direction = "ниже" if market_discount > 0 else "выше" if market_discount < 0 else "на уровне"
+        market_lines = [
+            f"📊 <b>Цена {direction} медианы {place} на {abs(market_discount)}%</b>",
+            f"Медиана: {_money(market_median)} ₽/м² · аналогов: {market_samples}",
+        ]
+    else:
+        market_lines = [
+            "📊 <b>Медиану сравнить не удалось</b>",
+            "Недостаточно похожих квартир для расчёта",
+        ]
     reason_blocks = []
     if pluses:
         reason_blocks.extend(["<b>Плюсы:</b>", *(f"✅ {html.escape(reason)}" for reason in pluses[:5])])
@@ -144,7 +159,7 @@ def notify_new_listing(listing_id: int) -> bool:
         heading, "", description, *facts,
         f"📍 <b>{escaped_location}</b>",
         f"🏠 {escaped_housing}" if escaped_housing else None,
-        f"⭐ <b>Оценка Home Hunter: {score}/10</b>", "", *reason_blocks,
+        *market_lines, "", f"⭐ <b>Оценка Home Hunter: {score}/10</b>", "", *reason_blocks,
         "", f"Источник: {html.escape(source)}",
     ]))
     keyboard = {"inline_keyboard": [[
@@ -164,7 +179,12 @@ def notify_new_listing(listing_id: int) -> bool:
 
 
 def market_position(listing: Listing):
-    """Return (discount, reference, samples), without mixing microdistricts."""
+    details = market_position_details(listing)
+    return details[:3] if details else None
+
+
+def market_position_details(listing: Listing):
+    """Return (discount, reference, samples, median_price), without mixing locations."""
     if (listing.price_per_sqm is None or not listing.district
             or listing.rooms is None or listing.area is None):
         return None
@@ -187,8 +207,9 @@ def market_position(listing: Listing):
         prices, reference = [row["price_per_sqm"] for row in rows], location
     else:
         return None
-    discount = round((1 - float(listing.price_per_sqm) / float(median(prices))) * 100)
-    return discount, reference, len(prices)
+    median_price = round(float(median(prices)))
+    discount = round((1 - float(listing.price_per_sqm) / median_price) * 100)
+    return discount, reference, len(prices), median_price
 
 
 def notify_new_deal(listing_id: int) -> bool:
@@ -197,10 +218,10 @@ def notify_new_deal(listing_id: int) -> bool:
     listing = Listing.objects.get(pk=listing_id)
     if not listing.is_visible or DealAlert.objects.filter(listing=listing).exists():
         return False
-    position = market_position(listing)
+    position = market_position_details(listing)
     if not position:
         return False
-    discount, reference, samples = position
+    discount, reference, samples, _median_price = position
     if discount < settings.TG_DEAL_MIN_DISCOUNT_PERCENT:
         return False
     source = SearchQuery.Source(listing.source).label
