@@ -23,6 +23,14 @@ class SourceHealth:
     detail: str
 
 
+def _telegram_destinations():
+    """Return configured Telegram chats without sending duplicates."""
+    return list(dict.fromkeys(
+        chat_id for chat_id in (settings.TG_CHAT_ID, getattr(settings, "TG_CHANNEL_ID", ""))
+        if chat_id
+    ))
+
+
 def source_health(source: str) -> SourceHealth:
     scans = list(Scan.objects.filter(source=source).order_by("-started_at", "-id")[:20])
     if not scans:
@@ -45,44 +53,49 @@ def source_health(source: str) -> SourceHealth:
 
 
 def send_telegram_message(text: str, reply_markup=None) -> bool:
-    if not settings.TG_BOT_TOKEN or not settings.TG_CHAT_ID:
+    destinations = _telegram_destinations()
+    if not settings.TG_BOT_TOKEN or not destinations:
         return False
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} \
         if settings.TELEGRAM_PROXY_URL else None
-    try:
-        data = {"chat_id": settings.TG_CHAT_ID, "text": text}
-        if reply_markup:
-            data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
-        response = requests.post(
-            f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/sendMessage",
-            data=data, proxies=proxies, timeout=20,
-        )
-        response.raise_for_status()
-        return True
-    except requests.RequestException:
-        logger.exception("Telegram notification failed")
-        return False
+    sent = False
+    for chat_id in destinations:
+        try:
+            data = {"chat_id": chat_id, "text": text}
+            if reply_markup:
+                data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
+            response = requests.post(
+                f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/sendMessage",
+                data=data, proxies=proxies, timeout=20,
+            )
+            response.raise_for_status()
+            sent = True
+        except requests.RequestException:
+            logger.exception("Telegram notification failed for chat %s", chat_id)
+    return sent
 
 
 def send_telegram_photo(photo_url: str, caption: str, reply_markup=None) -> bool:
-    if not settings.TG_BOT_TOKEN or not settings.TG_CHAT_ID or not photo_url:
+    destinations = _telegram_destinations()
+    if not settings.TG_BOT_TOKEN or not destinations or not photo_url:
         return False
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} \
         if settings.TELEGRAM_PROXY_URL else None
-    try:
-        data = {"chat_id": settings.TG_CHAT_ID, "photo": photo_url, "caption": caption}
-        if reply_markup:
-            data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
-        response = requests.post(
-            f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/sendPhoto",
-            data=data,
-            proxies=proxies, timeout=20,
-        )
-        response.raise_for_status()
-        return True
-    except requests.RequestException:
-        logger.warning("Telegram photo notification failed; falling back to text", exc_info=True)
-        return False
+    sent = False
+    for chat_id in destinations:
+        try:
+            data = {"chat_id": chat_id, "photo": photo_url, "caption": caption}
+            if reply_markup:
+                data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
+            response = requests.post(
+                f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/sendPhoto",
+                data=data, proxies=proxies, timeout=20,
+            )
+            response.raise_for_status()
+            sent = True
+        except requests.RequestException:
+            logger.warning("Telegram photo notification failed for chat %s", chat_id, exc_info=True)
+    return sent
 
 
 def check_source_health(source: str) -> SourceHealth:

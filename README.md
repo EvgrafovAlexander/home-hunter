@@ -232,8 +232,11 @@ python manage.py resolve_microdistricts --source avito --only-missing --dry-run
 
 ### Уведомления об опросах
 
-Задайте `TG_BOT_TOKEN` и `TG_CHAT_ID` в production `.env`. Сообщения Telegram
-отправляются через внутренний SOCKS-туннель `cian-tunnel`; для этого укажите
+Задайте `TG_BOT_TOKEN` и `TG_CHAT_ID` в production `.env`. При необходимости
+укажите `TG_CHANNEL_ID`, чтобы дублировать уведомления в Telegram-канал (бот
+должен быть администратором канала; для закрытого канала используйте его chat ID,
+обычно вида `-100...`). Сообщения Telegram отправляются через внутренний
+SOCKS-туннель `cian-tunnel`; для этого укажите
 `TELEGRAM_PROXY_URL=socks5h://cian-tunnel:1080`. Таймер проверяет устаревание
 данных раз в час, а после каждого scan состояние оценивается сразу.
 
