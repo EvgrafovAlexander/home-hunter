@@ -86,8 +86,10 @@ def _brief_description(title):
     value = re.sub(r"\b\d+\s*[-‑–—]?\s*(?:комн(?:ат(?:ная|ы|ая))?\.?\s*(?:кв\.?)?|к\.)", " ", value, flags=re.I)
     value = re.sub(r"\b\d+(?:[,.]\d+)?\s*м(?:²|2)\b", " ", value, flags=re.I)
     value = re.sub(r"\b\d+\s*/\s*\d+\s*(?:этаж|эт\.?)\b", " ", value, flags=re.I)
-    value = re.sub(r"\s*[·•,;|]+\s*", " ", value)
+    value = re.sub(r"\s*[·•,;|.]+\s*", " ", value)
     value = " ".join(value.split()).strip(" -–—")
+    if value.lower() in {"квартира", "кв"}:
+        return None
     return html.escape(value[:180]) if len(value) >= 4 else None
 
 
