@@ -152,16 +152,19 @@ def notify_new_listing(listing_id: int) -> bool:
     if pluses:
         reason_blocks.extend(["<b>Плюсы:</b>", *(f"✅ {html.escape(reason)}" for reason in pluses[:5])])
     if minuses:
-        reason_blocks.extend(["<b>Минусы:</b>", *(f"⚠️ {html.escape(reason)}" for reason in minuses[:5])])
+        reason_blocks.extend(["", "<b>Минусы:</b>", *(f"⚠️ {html.escape(reason)}" for reason in minuses[:5])])
     if infos:
-        reason_blocks.extend(["<b>Что ещё учтено:</b>", *(f"ℹ️ {html.escape(reason)}" for reason in infos[:3])])
-    text = "\n".join(filter(None, [
-        heading, "", description, *facts,
-        f"📍 <b>{escaped_location}</b>",
-        f"🏠 {escaped_housing}" if escaped_housing else None,
-        *market_lines, "", f"⭐ <b>Оценка Home Hunter: {score}/10</b>", "", *reason_blocks,
-        "", f"Источник: {html.escape(source)}",
-    ]))
+        reason_blocks.extend(["", "<b>Что ещё учтено:</b>", *(f"ℹ️ {html.escape(reason)}" for reason in infos[:3])])
+    lines = [heading, ""]
+    if description:
+        lines.extend([description, ""])
+    lines.extend([*facts, "", f"📍 <b>{escaped_location}</b>"])
+    if escaped_housing:
+        lines.extend(["", f"🏠 {escaped_housing}"])
+    lines.extend(["", *market_lines, "", f"⭐ <b>Оценка Home Hunter: {score}/10</b>", ""])
+    lines.extend(reason_blocks)
+    lines.extend(["", f"Источник: {html.escape(source)}"])
+    text = "\n".join(line for line in lines if line is not None)
     keyboard = {"inline_keyboard": [[
         {"text": "📝 Оценить квартиру", "url": f"{settings.PUBLIC_BASE_URL}/reviews/?listing={listing.pk}"},
     ], [{"text": "Открыть объявление", "url": listing.url}, {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"}]]}
