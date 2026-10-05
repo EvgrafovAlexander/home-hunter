@@ -452,6 +452,20 @@ class TelegramListingAlert(models.Model):
     sent_at = models.DateTimeField(auto_now_add=True)
 
 
+class TelegramPriceAlert(models.Model):
+    """One Telegram notification for a concrete price transition."""
+
+    listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="telegram_price_alerts")
+    old_price = models.BigIntegerField()
+    new_price = models.BigIntegerField()
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=["listing", "old_price", "new_price"], name="unique_telegram_price_alert",
+        )]
+
+
 class ManualDomclickJob(models.Model):
     class Status(models.TextChoices):
         QUEUED = "queued", "Ожидает ноутбук"

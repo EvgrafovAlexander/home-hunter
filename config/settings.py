@@ -109,6 +109,8 @@ TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 TG_CHAT_ID = os.getenv("TG_CHAT_ID", "")
 TG_CHANNEL_ID = os.getenv("TG_CHANNEL_ID", "")
 TG_LISTING_ALERTS_ENABLED = os.getenv("TG_LISTING_ALERTS_ENABLED", "false").lower() == "true"
+TG_PRICE_ALERTS_ENABLED = os.getenv("TG_PRICE_ALERTS_ENABLED", "false").lower() == "true"
+TG_PRICE_ALERT_MIN_PERCENT = float(os.getenv("TG_PRICE_ALERT_MIN_PERCENT", "3"))
 TELEGRAM_PROXY_URL = os.getenv("TELEGRAM_PROXY_URL", "")
 TG_DEAL_ALERTS_ENABLED = os.getenv("TG_DEAL_ALERTS_ENABLED", "false").lower() == "true"
 TG_DEAL_MIN_DISCOUNT_PERCENT = int(os.getenv("TG_DEAL_MIN_DISCOUNT_PERCENT", "7"))

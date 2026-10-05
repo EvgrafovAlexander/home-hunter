@@ -244,6 +244,10 @@ SOCKS-туннель `cian-tunnel`; для этого укажите
 `TELEGRAM_PROXY_URL=socks5h://cian-tunnel:1080`. Таймер проверяет устаревание
 данных раз в час, а после каждого scan состояние оценивается сразу.
 
+Изменения цены при включённом `TG_PRICE_ALERTS_ENABLED=true` отправляются только
+при изменении от `TG_PRICE_ALERT_MIN_PERCENT` процентов (по умолчанию 3%):
+снижения — в канал, повышения — только в `TG_CHAT_ID`.
+
 ```bash
 sudo cp deploy/systemd/home-hunter-scan-health.* /etc/systemd/system/
 sudo systemctl daemon-reload

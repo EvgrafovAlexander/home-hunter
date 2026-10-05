@@ -149,6 +149,7 @@ def process_listing(
     reactivated = not created and not listing.is_active
     changed = {key for key, value in values.items() if getattr(listing, key) != value}
     price_changed = not created and "price" in changed
+    old_price = listing.price if price_changed else None
     if created or price_changed:
         PriceHistory.objects.create(listing=listing, price=values["price"], observed_at=observed_at)
     if created or changed.intersection(SIGNIFICANT_FIELDS) or reactivated:
@@ -177,4 +178,8 @@ def process_listing(
     if created:
         from listings.services.deal_alerts import notify_new_listing
         transaction.on_commit(lambda listing_id=listing.pk: notify_new_listing(listing_id))
+    elif price_changed:
+        from listings.services.price_alerts import notify_price_change
+        transaction.on_commit(lambda listing_id=listing.pk, old=old_price, new=values["price"]:
+                              notify_price_change(listing_id, old, new))
     return PersistenceResult(listing, created, not created and bool(changed), price_changed)
