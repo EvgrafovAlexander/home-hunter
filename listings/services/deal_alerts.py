@@ -1,5 +1,6 @@
 import html
 import logging
+import re
 from statistics import median
 
 from django.conf import settings
@@ -79,6 +80,17 @@ def _rooms(value):
     return f"{value} комнат"
 
 
+def _brief_description(title):
+    """Remove source-generated room/area/floor fragments from the title."""
+    value = " ".join((title or "").replace("\xa0", " ").split())
+    value = re.sub(r"\b\d+\s*[-‑–—]?\s*(?:комн(?:ат(?:ная|ы|ая))?\.?\s*(?:кв\.?)?|к\.)", " ", value, flags=re.I)
+    value = re.sub(r"\b\d+(?:[,.]\d+)?\s*м(?:²|2)\b", " ", value, flags=re.I)
+    value = re.sub(r"\b\d+\s*/\s*\d+\s*(?:этаж|эт\.?)\b", " ", value, flags=re.I)
+    value = re.sub(r"\s*[·•,;|]+\s*", " ", value)
+    value = " ".join(value.split()).strip(" -–—")
+    return html.escape(value[:180]) if len(value) >= 4 else None
+
+
 def notify_new_listing(listing_id: int) -> bool:
     """Publish one visible new listing to the channel with an explainable score."""
     if not settings.TG_LISTING_ALERTS_ENABLED or not getattr(settings, "TG_CHANNEL_ID", ""):
@@ -113,7 +125,7 @@ def notify_new_listing(listing_id: int) -> bool:
     ]))
     is_deal = discount is not None and discount >= settings.TG_DEAL_MIN_DISCOUNT_PERCENT
     heading = "🟢 ВЫГОДНЫЙ ВАРИАНТ" if is_deal else "🆕 НОВАЯ КВАРТИРА"
-    description = html.escape(" ".join((listing.title or "Квартира").split())[:180])
+    description = _brief_description(listing.title)
     escaped_location = html.escape(location) if location else "Адрес не указан"
     escaped_housing = html.escape(housing) if housing else ""
     pluses = [text for kind, text in reasons if kind == "plus"]
