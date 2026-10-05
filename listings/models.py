@@ -442,6 +442,16 @@ class DealAlert(models.Model):
     sent_at = models.DateTimeField(auto_now_add=True)
 
 
+class TelegramListingAlert(models.Model):
+    """One Telegram feed publication per listing."""
+
+    listing = models.OneToOneField(Listing, on_delete=models.CASCADE, related_name="telegram_alert")
+    score = models.DecimalField(max_digits=4, decimal_places=1)
+    is_deal = models.BooleanField(default=False)
+    reasons = models.JSONField(default=list)
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+
 class ManualDomclickJob(models.Model):
     class Status(models.TextChoices):
         QUEUED = "queued", "Ожидает ноутбук"

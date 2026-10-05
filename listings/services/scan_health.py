@@ -52,8 +52,8 @@ def source_health(source: str) -> SourceHealth:
     return SourceHealth("healthy", "В норме", "Последний опрос завершился успешно")
 
 
-def send_telegram_message(text: str, reply_markup=None) -> bool:
-    destinations = _telegram_destinations()
+def send_telegram_message(text: str, reply_markup=None, *, chat_id=None) -> bool:
+    destinations = [chat_id] if chat_id else _telegram_destinations()
     if not settings.TG_BOT_TOKEN or not destinations:
         return False
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} \
@@ -75,8 +75,8 @@ def send_telegram_message(text: str, reply_markup=None) -> bool:
     return sent
 
 
-def send_telegram_photo(photo_url: str, caption: str, reply_markup=None) -> bool:
-    destinations = _telegram_destinations()
+def send_telegram_photo(photo_url: str, caption: str, reply_markup=None, *, chat_id=None) -> bool:
+    destinations = [chat_id] if chat_id else _telegram_destinations()
     if not settings.TG_BOT_TOKEN or not destinations or not photo_url:
         return False
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} \

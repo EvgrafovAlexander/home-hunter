@@ -175,6 +175,6 @@ def process_listing(
                          "missed_full_scans": 0},
     )
     if created:
-        from listings.services.deal_alerts import notify_new_deal
-        transaction.on_commit(lambda listing_id=listing.pk: notify_new_deal(listing_id))
+        from listings.services.deal_alerts import notify_new_listing
+        transaction.on_commit(lambda listing_id=listing.pk: notify_new_listing(listing_id))
     return PersistenceResult(listing, created, not created and bool(changed), price_changed)
