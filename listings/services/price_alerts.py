@@ -16,6 +16,8 @@ def notify_price_change(listing_id: int, old_price: int | None, new_price: int |
     if not settings.TG_PRICE_ALERTS_ENABLED or not old_price or not new_price or old_price == new_price:
         return False
     listing = Listing.objects.get(pk=listing_id)
+    if not listing.is_visible:
+        return False
     change_percent = (new_price - old_price) / old_price * 100
     if abs(change_percent) < settings.TG_PRICE_ALERT_MIN_PERCENT:
         return False
