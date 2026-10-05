@@ -1,3 +1,4 @@
+import html
 import logging
 from statistics import median
 
@@ -16,39 +17,48 @@ def _listing_score(listing):
     position = market_position(listing)
     score = 5.0
     reasons = []
+
+    def add(kind, text):
+        reasons.append((kind, text))
     discount = None
     if position:
         discount, reference, samples = position
         score += max(-2, min(3, discount / 5))
         if discount >= settings.TG_DEAL_MIN_DISCOUNT_PERCENT:
-            reasons.append(f"на {discount}% дешевле {reference}")
+            add("plus", f"На {discount}% дешевле {reference}")
         elif discount > 0:
-            reasons.append(f"на {discount}% дешевле медианы рынка")
+            add("plus", f"На {discount}% дешевле медианы рынка")
         elif discount < 0:
-            reasons.append(f"на {abs(discount)}% дороже медианы рынка")
+            add("minus", f"На {abs(discount)}% дороже медианы рынка")
         else:
-            reasons.append("цена близка к медиане рынка")
+            add("info", "Цена близка к медиане рынка")
     else:
-        reasons.append("недостаточно аналогов для сравнения цены")
+        add("info", "Недостаточно аналогов для сравнения цены")
     if listing.area is not None and listing.area >= 55:
         score += 0.5
-        reasons.append("площадь от 55 м²")
+        add("plus", "Площадь от 55 м²")
     if listing.district in {"Кировский", "Ленинский", "Октябрьский", "Советский"}:
         score += 0.5
-        reasons.append("предпочтительный район")
+        add("plus", "Предпочтительный район")
     if listing.floor is not None and listing.floor >= 7:
         score += 0.3
-        reasons.append("высокий этаж")
+        add("plus", "Высокий этаж")
+    elif listing.floor is not None:
+        add("minus", "Этаж ниже предпочтительного")
     if listing.repair_type:
         score += 0.3
-        reasons.append(f"ремонт: {listing.repair_type}")
+        add("plus", f"Ремонт: {listing.repair_type}")
     if listing.image_url:
         score += 0.2
-        reasons.append("есть фото")
+        add("plus", "Есть фото")
+    else:
+        add("minus", "Фото отсутствуют")
     if listing.address:
         score += 0.2
-        reasons.append("указан адрес")
-    return round(max(0, min(10, score)), 1), discount, reasons[:5]
+        add("plus", "Указан полный адрес")
+    else:
+        add("minus", "Адрес не указан")
+    return round(max(0, min(10, score)), 1), discount, reasons[:8]
 
 
 def _money(value):
@@ -103,21 +113,32 @@ def notify_new_listing(listing_id: int) -> bool:
     ]))
     is_deal = discount is not None and discount >= settings.TG_DEAL_MIN_DISCOUNT_PERCENT
     heading = "🟢 ВЫГОДНЫЙ ВАРИАНТ" if is_deal else "🆕 НОВАЯ КВАРТИРА"
-    description = " ".join((listing.title or "Квартира").split())[:180]
+    description = html.escape(" ".join((listing.title or "Квартира").split())[:180])
+    escaped_location = html.escape(location) if location else "Адрес не указан"
+    escaped_housing = html.escape(housing) if housing else ""
+    pluses = [text for kind, text in reasons if kind == "plus"]
+    minuses = [text for kind, text in reasons if kind == "minus"]
+    infos = [text for kind, text in reasons if kind == "info"]
+    reason_blocks = []
+    if pluses:
+        reason_blocks.extend(["<b>Плюсы:</b>", *(f"✅ {html.escape(reason)}" for reason in pluses[:5])])
+    if minuses:
+        reason_blocks.extend(["<b>Минусы:</b>", *(f"⚠️ {html.escape(reason)}" for reason in minuses[:5])])
+    if infos:
+        reason_blocks.extend(["<b>Что ещё учтено:</b>", *(f"ℹ️ {html.escape(reason)}" for reason in infos[:3])])
     text = "\n".join(filter(None, [
         heading, "", description, *facts,
-        f"📍 {location}" if location else "📍 Адрес не указан",
-        f"🏠 {housing}" if housing else None,
-        f"⭐ Оценка Home Hunter: {score}/10", "", "Почему такая оценка:",
-        *(f"• {reason}" for reason in reasons),
-        "", f"Источник: {source}",
+        f"📍 <b>{escaped_location}</b>",
+        f"🏠 {escaped_housing}" if escaped_housing else None,
+        f"⭐ <b>Оценка Home Hunter: {score}/10</b>", "", *reason_blocks,
+        "", f"Источник: {html.escape(source)}",
     ]))
     keyboard = {"inline_keyboard": [[
         {"text": "📝 Оценить квартиру", "url": f"{settings.PUBLIC_BASE_URL}/reviews/?listing={listing.pk}"},
     ], [{"text": "Открыть объявление", "url": listing.url}, {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"}]]}
-    sent = send_telegram_photo(listing.image_url, text, keyboard, chat_id=settings.TG_CHANNEL_ID) if listing.image_url else False
+    sent = send_telegram_photo(listing.image_url, text, keyboard, chat_id=settings.TG_CHANNEL_ID, parse_mode="HTML") if listing.image_url else False
     if not sent:
-        sent = send_telegram_message(text, keyboard, chat_id=settings.TG_CHANNEL_ID)
+        sent = send_telegram_message(text, keyboard, chat_id=settings.TG_CHANNEL_ID, parse_mode="HTML")
     if not sent:
         return False
     try:

@@ -52,7 +52,7 @@ def source_health(source: str) -> SourceHealth:
     return SourceHealth("healthy", "В норме", "Последний опрос завершился успешно")
 
 
-def send_telegram_message(text: str, reply_markup=None, *, chat_id=None) -> bool:
+def send_telegram_message(text: str, reply_markup=None, *, chat_id=None, parse_mode=None) -> bool:
     destinations = [chat_id] if chat_id else _telegram_destinations()
     if not settings.TG_BOT_TOKEN or not destinations:
         return False
@@ -62,6 +62,8 @@ def send_telegram_message(text: str, reply_markup=None, *, chat_id=None) -> bool
     for chat_id in destinations:
         try:
             data = {"chat_id": chat_id, "text": text}
+            if parse_mode:
+                data["parse_mode"] = parse_mode
             if reply_markup:
                 data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
             response = requests.post(
@@ -75,7 +77,7 @@ def send_telegram_message(text: str, reply_markup=None, *, chat_id=None) -> bool
     return sent
 
 
-def send_telegram_photo(photo_url: str, caption: str, reply_markup=None, *, chat_id=None) -> bool:
+def send_telegram_photo(photo_url: str, caption: str, reply_markup=None, *, chat_id=None, parse_mode=None) -> bool:
     destinations = [chat_id] if chat_id else _telegram_destinations()
     if not settings.TG_BOT_TOKEN or not destinations or not photo_url:
         return False
@@ -85,6 +87,8 @@ def send_telegram_photo(photo_url: str, caption: str, reply_markup=None, *, chat
     for chat_id in destinations:
         try:
             data = {"chat_id": chat_id, "photo": photo_url, "caption": caption}
+            if parse_mode:
+                data["parse_mode"] = parse_mode
             if reply_markup:
                 data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
             response = requests.post(
