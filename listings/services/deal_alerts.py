@@ -102,30 +102,12 @@ def _listing_score(listing):
             add("info", "Цена близка к медиане рынка")
     else:
         add("info", "Недостаточно аналогов для сравнения цены")
-    if listing.area is not None and listing.area >= 55:
-        score += 0.5
-        add("plus", "Площадь от 55 м²")
-    if listing.district in {"Кировский", "Ленинский", "Октябрьский", "Советский"}:
-        score += 0.5
-        add("plus", "Предпочтительный район")
-    if listing.floor is not None and listing.floor >= 7:
-        score += 0.3
-        add("plus", "Высокий этаж")
-    elif listing.floor is not None:
-        add("minus", "Этаж ниже предпочтительного")
-    if listing.repair_type:
+    if listing.repair_type and listing.repair_type.lower() not in {"без ремонта", "требует ремонта"}:
         score += 0.3
         add("plus", f"Ремонт: {listing.repair_type}")
-    if listing.image_url:
-        score += 0.2
-        add("plus", "Есть фото")
-    else:
-        add("minus", "Фото отсутствуют")
-    if listing.address:
-        score += 0.2
-        add("plus", "Указан полный адрес")
-    else:
-        add("minus", "Адрес не указан")
+    if listing.kitchen_area and listing.area and float(listing.kitchen_area) / float(listing.area) >= .20:
+        score += 0.3
+        add("plus", f"Кухня {_area(listing.kitchen_area)} м² — выше обычной доли")
     return round(max(0, min(10, score)), 1), discount, reasons[:8]
 
 
