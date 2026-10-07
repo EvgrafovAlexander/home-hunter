@@ -46,8 +46,8 @@ def notify_price_change(listing_id: int, old_price: int | None, new_price: int |
         f"<a href=\"{html.escape(listing.url, quote=True)}\">Открыть объявление</a>",
     ]))
     keyboard = {"inline_keyboard": [[
-        {"text": "📝 Оценить квартиру", "url": f"{settings.PUBLIC_BASE_URL}/reviews/?listing={listing.pk}"},
-    ], [{"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"}]]}
+        {"text": "📝 Оценить в Telegram", "url": f"https://t.me/{settings.TG_BOT_USERNAME}?start=review_{listing.pk}_0_0"},
+    ], [{"text": "📝 Оценить в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/reviews/?listing={listing.pk}"}], [{"text": "Открыть объявление", "url": listing.url}, {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"}]]}
     if not send_telegram_message(text, keyboard, chat_id=target, parse_mode="HTML"):
         return False
     try:
