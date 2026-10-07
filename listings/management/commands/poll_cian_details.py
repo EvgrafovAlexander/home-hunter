@@ -116,6 +116,9 @@ def save_detail(listing_id, detail):
     state.status, state.last_available_at, state.first_unavailable_at = "published", observed, None
     state.detail_data = {"status": "published", "photo_ids": detail.photo_ids, "photos": detail.photos, "edited_at": detail.edited_at}
     state.save()
+    if listing.latitude is not None and listing.longitude is not None:
+        from listings.services.deal_alerts import refresh_telegram_listing_score
+        transaction.on_commit(lambda listing_id=listing.pk: refresh_telegram_listing_score(listing_id))
     return True
 
 

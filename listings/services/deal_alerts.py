@@ -5,9 +5,11 @@ from statistics import median
 
 from django.conf import settings
 from django.db import IntegrityError
+from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from listings.models import DealAlert, Listing, SearchQuery, TelegramListingAlert
-from listings.services.scan_health import (edit_telegram_reply_markup, send_telegram_message,
+from listings.services.scan_health import (edit_telegram_message, edit_telegram_reply_markup, send_telegram_message,
                                            send_telegram_message_result, send_telegram_photo,
                                            send_telegram_photo_result)
 
@@ -34,11 +36,48 @@ def _send_reviewable_listing(listing, text):
     if not result:
         result = send_telegram_message_result(text, initial_keyboard, chat_id=settings.TG_CHANNEL_ID, parse_mode="HTML")
     if not result:
-        return False
+        return None
     if not settings.TG_BOT_USERNAME:
         logger.warning("TG_BOT_USERNAME is not configured; review deep link was not added")
-        return True
-    return edit_telegram_reply_markup(chat_id=settings.TG_CHANNEL_ID, message_id=result["message_id"], reply_markup=_review_keyboard(listing, result["message_id"]))
+        return result
+    edit_telegram_reply_markup(chat_id=settings.TG_CHANNEL_ID, message_id=result["message_id"], reply_markup=_review_keyboard(listing, result["message_id"]))
+    return result
+
+
+def _telegram_fit_score(listing):
+    """Calculate the same personal Fit score as the web feed, when coordinates exist."""
+    if listing.latitude is None or listing.longitude is None:
+        return None, []
+    user = get_user_model().objects.filter(username=settings.TG_REVIEW_DJANGO_USERNAME).first()
+    if not user:
+        return None, []
+    from listings.services.personal_filters import annotate_personal_filter
+    from listings.views import add_listing_score, scoring_preference_for
+    annotate_personal_filter([listing], user)
+    add_listing_score([listing], scoring_preference_for(user))
+    return listing.score, getattr(listing, "score_reasons", [])
+
+
+def refresh_telegram_listing_score(listing_id: int) -> bool:
+    """Replace the temporary score in the already published message after geocoding."""
+    try:
+        alert = TelegramListingAlert.objects.select_related("listing").get(listing_id=listing_id)
+    except TelegramListingAlert.DoesNotExist:
+        return False
+    score, reasons = _telegram_fit_score(alert.listing)
+    if score is None or not alert.message_id or not alert.message_text:
+        return False
+    text = re.sub(r"Оценка Home Hunter: [^<\n]+", f"Оценка Home Hunter: {score}/100", alert.message_text, count=1)
+    if not edit_telegram_message(chat_id=alert.chat_id or settings.TG_CHANNEL_ID, message_id=alert.message_id,
+                                 text=text, message_kind=alert.message_kind or "text", parse_mode="HTML"):
+        return False
+    alert.score = score
+    alert.reasons = reasons
+    alert.message_text = text
+    alert.score_ready = True
+    alert.score_updated_at = timezone.now()
+    alert.save(update_fields=("score", "reasons", "message_text", "score_ready", "score_updated_at"))
+    return True
 
 
 def _listing_score(listing):
@@ -189,18 +228,23 @@ def notify_new_listing(listing_id: int) -> bool:
     lines.extend([*facts, "", f"📍 <b>{escaped_location}</b>"])
     if escaped_housing:
         lines.extend(["", f"🏠 {escaped_housing}"])
-    lines.extend(["", *market_lines, "", f"⭐ <b>Оценка Home Hunter: {score}/10</b>", ""])
+    lines.extend(["", *market_lines, "", "⭐ <b>Оценка Home Hunter: ⏳</b>", ""])
     lines.extend(reason_blocks)
     lines.extend(["", f"Источник: {html.escape(source)}"])
     text = "\n".join(line for line in lines if line is not None)
-    sent = _send_reviewable_listing(listing, text)
-    if not sent:
+    result = _send_reviewable_listing(listing, text)
+    if not result:
         return False
     try:
-        TelegramListingAlert.objects.create(listing=listing, score=score, is_deal=is_deal, reasons=reasons)
+        TelegramListingAlert.objects.create(
+            listing=listing, score=None, is_deal=is_deal, reasons=reasons,
+            chat_id=str(settings.TG_CHANNEL_ID), message_id=result.get("message_id"),
+            message_kind="photo" if listing.image_url else "text", message_text=text,
+        )
     except IntegrityError:
         logger.info("Telegram listing alert was already recorded for listing=%s", listing_id)
         return False
+    refresh_telegram_listing_score(listing.pk)
     return True
 
 

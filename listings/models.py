@@ -509,9 +509,15 @@ class TelegramListingAlert(models.Model):
     """One Telegram feed publication per listing."""
 
     listing = models.OneToOneField(Listing, on_delete=models.CASCADE, related_name="telegram_alert")
-    score = models.DecimalField(max_digits=4, decimal_places=1)
+    score = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
     is_deal = models.BooleanField(default=False)
     reasons = models.JSONField(default=list)
+    chat_id = models.CharField(max_length=100, blank=True)
+    message_id = models.BigIntegerField(null=True, blank=True)
+    message_kind = models.CharField(max_length=10, choices=(("text", "Текст"), ("photo", "Фото")), blank=True)
+    message_text = models.TextField(blank=True)
+    score_ready = models.BooleanField(default=False)
+    score_updated_at = models.DateTimeField(null=True, blank=True)
     sent_at = models.DateTimeField(auto_now_add=True)
 
 

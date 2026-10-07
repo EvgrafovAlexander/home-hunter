@@ -43,5 +43,7 @@ class Command(BaseCommand):
             update_fields = {"latitude", "longitude", "geocode_status", "geocoded_at"}
             update_fields.update(enrich_listing_from_coordinates(listing))
             listing.save(update_fields=update_fields)
+            from listings.services.deal_alerts import refresh_telegram_listing_score
+            refresh_telegram_listing_score(listing.pk)
             self.stdout.write(f"{listing.pk}: {listing.geocode_status}")
         self.stdout.write(f"Processed {len(listings)} listing(s)")

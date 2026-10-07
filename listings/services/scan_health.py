@@ -154,6 +154,24 @@ def edit_telegram_reply_markup(*, chat_id, message_id, reply_markup) -> bool:
         return False
 
 
+def edit_telegram_message(*, chat_id, message_id, text, message_kind="text", parse_mode=None) -> bool:
+    """Replace the text/caption of a previously published Telegram message."""
+    if not settings.TG_BOT_TOKEN or not chat_id or not message_id:
+        return False
+    method = "editMessageCaption" if message_kind == "photo" else "editMessageText"
+    data = {"chat_id": chat_id, "message_id": message_id, "caption" if message_kind == "photo" else "text": text}
+    if parse_mode:
+        data["parse_mode"] = parse_mode
+    proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} if settings.TELEGRAM_PROXY_URL else None
+    try:
+        response = requests.post(f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/{method}", data=data, proxies=proxies, timeout=20)
+        response.raise_for_status()
+        return True
+    except requests.RequestException as exc:
+        logger.warning("Telegram message edit failed for %s/%s: %s", chat_id, message_id, type(exc).__name__)
+        return False
+
+
 def check_source_health(source: str) -> SourceHealth:
     if not polling_enabled(source, Scan.Mode.FAST):
         return SourceHealth("disabled", "Отключено", "Опросы отключены в интерфейсе")
