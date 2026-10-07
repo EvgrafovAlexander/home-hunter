@@ -434,6 +434,13 @@ def add_listing_score(listings, preferences=None):
             location_score = 50
         condition_value, condition_reason = condition_score(item)
         reasons.append(condition_reason)
+        # Keep the market signal visible as context, but never let it affect Fit.
+        market_delta_pct = getattr(item, "market_delta_pct", None)
+        if market_delta_pct is not None:
+            if market_delta_pct <= -10:
+                reasons.append("Deal: существенно ниже рынка")
+            elif market_delta_pct >= 10:
+                reasons.append("Deal: существенно выше рынка")
         layout_score = layout_fit_score(item)
         if preference_checks:
             preference_score = 100 * sum(preference_checks) / len(preference_checks)
