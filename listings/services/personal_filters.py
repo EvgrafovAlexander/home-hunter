@@ -83,10 +83,6 @@ def hard_filter_result(listing: Listing, preference: ScoringPreference, *, zones
         allowed_rooms = {int(value) for value in preference.preferred_rooms if str(value).isdigit()}
         if listing.rooms is None or listing.rooms not in allowed_rooms:
             return False, "комнатность не входит в выбранные", None
-    if preference.floor_min is not None and (listing.floor is None or listing.floor < preference.floor_min):
-        return False, "этаж ниже минимального", None
-    if preference.floor_max is not None and (listing.floor is None or listing.floor > preference.floor_max):
-        return False, "этаж выше максимального", None
     if preference.preferred_districts and (not listing.district or listing.district not in preference.preferred_districts):
         return False, "район не входит в выбранные", None
     if preference.require_lift and (listing.passenger_lifts_count is None and listing.cargo_lifts_count is None):
@@ -135,10 +131,6 @@ def apply_scalar_hard_filters(queryset, preference):
         rooms = [int(value) for value in preference.preferred_rooms if str(value).isdigit()]
         if rooms:
             queryset = queryset.filter(rooms__in=rooms)
-    if preference.floor_min is not None:
-        queryset = queryset.filter(floor__isnull=False, floor__gte=preference.floor_min)
-    if preference.floor_max is not None:
-        queryset = queryset.filter(floor__isnull=False, floor__lte=preference.floor_max)
     if preference.preferred_districts:
         queryset = queryset.filter(district__in=preference.preferred_districts)
     if preference.require_lift:
