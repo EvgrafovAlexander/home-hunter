@@ -353,146 +353,139 @@ def condition_score(listing):
     return 50, "состояние не подтверждено"
 
 
+FIT_WEIGHTS = {
+    "location_weight": 40,
+    "area_rooms_weight": 25,
+    "condition_weight": 15,
+    "layout_weight": 10,
+    "house_weight": 5,
+    "floor_weight": 5,
+}
+
+
+def area_rooms_fit_score(item, preferences):
+    if item.area is None:
+        area_score = 40
+    elif preferences.max_area and item.area > preferences.max_area:
+        area_score = 35
+    elif preferences.max_area and preferences.min_area:
+        midpoint = (float(preferences.min_area) + float(preferences.max_area)) / 2
+        distance = abs(float(item.area) - midpoint) / max(midpoint - float(preferences.min_area), 1)
+        area_score = round(max(55, 100 - distance * 30))
+    else:
+        area_score = round(min(100, 70 + max(0, float(item.area) - 55) * 1.5))
+    if preferences.preferred_rooms:
+        room_score = 100 if item.rooms in {int(value) for value in preferences.preferred_rooms if str(value).isdigit()} else 35
+    else:
+        room_score = 70 if item.rooms is not None else 45
+    return round(area_score * 0.7 + room_score * 0.3)
+
+
+def layout_fit_score(item):
+    scores = []
+    if item.kitchen_area is not None and item.area:
+        ratio = float(item.kitchen_area) / float(item.area)
+        scores.append(100 if ratio >= .20 else 80 if ratio >= .16 else 60 if ratio >= .12 else 35)
+    if item.bathrooms_combined is not None or item.bathrooms_separate is not None:
+        scores.append(75 if (item.bathrooms_separate or 0) else 60)
+    return round(sum(scores) / len(scores)) if scores else 50
+
+
+def house_fit_score(item):
+    signals = []
+    signals.append(80 if item.building_material_type else 50)
+    signals.append(80 if item.built_year else 50)
+    signals.append(80 if item.passenger_lifts_count is not None or item.cargo_lifts_count is not None else 50)
+    signals.append(75 if item.parking_type else 50)
+    return round(sum(signals) / len(signals))
+
+
 def add_listing_score(listings, preferences=None):
-    """Attach an explainable 0–100 search score to each listing."""
+    """Attach an explainable 0–100 Fit Score; market signals belong to Deal Score."""
     listings = list(listings)
     preferences = preferences or ScoringPreference()
-    history = {}
-    for entry in (PriceHistory.objects.filter(listing_id__in=[item.pk for item in listings], price__isnull=False)
-                  .order_by("listing_id", "observed_at", "id")):
-        history.setdefault(entry.listing_id, [entry.price, entry.price])[1] = entry.price
-    now = timezone.now()
     for item in listings:
         reasons = []
-        market_delta_pct = getattr(item, "market_delta_pct", None)
-        market_samples = getattr(item, "market_samples", 0)
-        if market_delta_pct is not None:
-            if market_delta_pct <= -10:
-                market_score = 75; reasons.append("существенно ниже рынка")
-            elif market_delta_pct <= -4:
-                market_score = 68; reasons.append("ниже рынка")
-            elif market_delta_pct < 0:
-                market_score = 68; reasons.append("чуть ниже рынка")
-            elif market_delta_pct >= 10:
-                market_score = 0; reasons.append("существенно выше рынка")
-            elif market_delta_pct >= 4:
-                market_score = 22; reasons.append("выше рынка")
-            else:
-                market_score = 50
-        else:
-            market_score = 50
-        # A discount based on a small sample is informative, but should not dominate the ranking.
-        market_confidence = min(1, (market_samples or 0) / 20)
-        market_score = 50 + (market_score - 50) * market_confidence
-        if market_samples:
-            strict_samples = getattr(item, "market_strict_samples", 0)
-            fallback_samples = getattr(item, "market_fallback_samples", 0)
-            if fallback_samples:
-                reasons.append(f"цена сопоставлена с {strict_samples} аналогами от 55 м² и {fallback_samples} резервными")
-            else:
-                reasons.append(f"цена сопоставлена с {market_samples} аналогами")
-        age_days = max(0, (now - item.first_seen_at).total_seconds() / 86400) if item.first_seen_at else 999
-        if age_days <= 1:
-            freshness_score = 100; reasons.append("добавлено сегодня")
-        elif age_days <= 3:
-            freshness_score = 80; reasons.append("свежее")
-        elif age_days <= 7:
-            freshness_score = 65; reasons.append("добавлено за неделю")
-        elif age_days <= 30:
-            freshness_score = 42
-        else:
-            freshness_score = 20
-        data_score = 0
-        for value, points in ((item.address, 35), (item.district, 15), (item.microdistrict, 15),
-                              (item.price, 15), (item.area, 10)):
-            data_score += points if value not in (None, "") else 0
-        if item.image_url:
-            data_score += 10; reasons.append("есть фото")
-        else:
-            reasons.append("нет фото")
-        if item.floor and item.floors_total:
-            if item.floor == 1 or item.floor == item.floors_total:
-                floor_score = 20; reasons.append("крайний этаж")
-            else:
-                floor_score = 100
-        else:
-            floor_score = 55
-        first_last = history.get(item.pk)
-        if first_last and first_last[1] < first_last[0]:
-            history_score = 100; reasons.append("цена снижалась")
-        elif first_last and first_last[1] > first_last[0]:
-            history_score = 25; reasons.append("цена повышалась")
-        else:
-            history_score = 55
         preference_checks = []
-        if preferences.min_area is not None:
-            preference_checks.append(item.area is not None and item.area >= preferences.min_area)
-            if not preference_checks[-1]: reasons.append("площадь меньше вашей цели")
-        if preferences.min_kitchen_area is not None and item.kitchen_area is not None:
-            preference_checks.append(item.kitchen_area >= preferences.min_kitchen_area)
-            if not preference_checks[-1]: reasons.append("кухня меньше вашей цели")
-        if preferences.floor_min is not None:
-            preference_checks.append(item.floor is not None and item.floor >= preferences.floor_min)
-            if not preference_checks[-1]: reasons.append("этаж ниже вашей цели")
-        if preferences.floor_max is not None:
-            preference_checks.append(item.floor is not None and item.floor <= preferences.floor_max)
-            if not preference_checks[-1]: reasons.append("этаж выше вашей цели")
-        if preferences.preferred_districts:
-            preference_checks.append(item.district in preferences.preferred_districts)
-            if not preference_checks[-1]: reasons.append("район не в ваших предпочтениях")
+        if preferences.min_kitchen_area is not None:
+            matches = item.kitchen_area is not None and item.kitchen_area >= preferences.min_kitchen_area
+            preference_checks.append(matches)
+            if not matches:
+                reasons.append("кухня меньше вашей цели")
+        if preferences.preferred_repair_types:
+            matches = item.repair_type in preferences.preferred_repair_types
+            preference_checks.append(matches)
+            if not matches:
+                reasons.append("тип ремонта не соответствует предпочтению")
         if preferences.prefer_photo:
-            preference_checks.append(bool(item.image_url))
-            if not preference_checks[-1]: reasons.append("нет обязательного фото")
-        if preferences.preferred_repair_types and item.repair_type is not None:
-            preference_checks.append(item.repair_type in preferences.preferred_repair_types)
-            if not preference_checks[-1]: reasons.append("тип ремонта не соответствует предпочтению")
-        if preferences.require_lift and (item.passenger_lifts_count is not None or item.cargo_lifts_count is not None):
-            preference_checks.append(bool((item.passenger_lifts_count or 0) + (item.cargo_lifts_count or 0)))
-            if not preference_checks[-1]: reasons.append("нет лифта")
-        if preferences.require_balcony and (item.balconies_count is not None or item.loggias_count is not None):
-            preference_checks.append(bool((item.balconies_count or 0) + (item.loggias_count or 0)))
-            if not preference_checks[-1]: reasons.append("нет балкона или лоджии")
-        if preferences.prefer_furniture and item.has_furniture is not None:
-            preference_checks.append(item.has_furniture)
-            if not preference_checks[-1]: reasons.append("мебель не указана")
+            matches = bool(item.image_url)
+            preference_checks.append(matches)
+            if not matches:
+                reasons.append("нет обязательного фото")
+        if preferences.prefer_furniture:
+            matches = item.has_furniture is True
+            preference_checks.append(matches)
+            if not matches:
+                reasons.append("мебель не указана")
         if preferences.use_ufa_target_zones:
             location_score, location_reason = geo_zone_location_score(item)
             reasons.insert(0, location_reason)
+        else:
+            location_score = 50
         condition_value, condition_reason = condition_score(item)
         reasons.append(condition_reason)
-        components = {
-            "market_weight": market_score, "freshness_weight": freshness_score,
-            "data_weight": data_score, "floor_weight": floor_score,
-            "price_history_weight": history_score,
-            "condition_weight": condition_value,
-        }
+        layout_score = layout_fit_score(item)
         if preference_checks:
-            components["preference_weight"] = 100 * sum(preference_checks) / len(preference_checks)
-        if preferences.use_ufa_target_zones:
-            components["location_weight"] = location_score
-        total_weight = sum(getattr(preferences, weight) for weight in components)
-        score = sum(value * getattr(preferences, weight) for weight, value in components.items()) / total_weight if total_weight else 0
-        item.score = round(max(0, min(100, score)))
-        labels = {
-            "market_weight": "Цена относительно рынка", "location_weight": "Локация",
-            "freshness_weight": "Свежесть", "data_weight": "Полнота данных",
-            "floor_weight": "Этаж", "price_history_weight": "История цены",
-            "condition_weight": "Состояние квартиры",
-            "preference_weight": "Ваши условия",
-        }
-        item.score_breakdown = [
-            {"label": labels[key], "score": round(value), "weight": getattr(preferences, key),
-             "contribution": round(value * getattr(preferences, key) / total_weight) if total_weight else 0}
-            for key, value in components.items() if getattr(preferences, key)
-        ]
+            preference_score = 100 * sum(preference_checks) / len(preference_checks)
+            layout_score = round(layout_score * .7 + preference_score * .3)
+        floor_score = 100 if item.floor and item.floors_total and 1 < item.floor < item.floors_total else 20 if item.floor else 55
+        if preferences.floor_min is not None and (item.floor is None or item.floor < preferences.floor_min):
+            floor_score = min(floor_score, 30)
+            reasons.append("этаж ниже вашей цели")
+        if preferences.floor_max is not None and (item.floor is None or item.floor > preferences.floor_max):
+            floor_score = min(floor_score, 30)
+            reasons.append("этаж выше вашей цели")
         personal_reasons = [
             reason for reason in reasons if reason in {
-                "площадь меньше вашей цели", "кухня меньше вашей цели", "этаж ниже вашей цели",
-                "этаж выше вашей цели", "район не в ваших предпочтениях", "нет обязательного фото",
+                "кухня меньше вашей цели", "этаж ниже вашей цели", "этаж выше вашей цели", "нет обязательного фото",
                 "тип ремонта не соответствует предпочтению", "нет лифта",
                 "нет балкона или лоджии", "мебель не указана",
             }
         ]
+        components = {
+            "location_weight": location_score,
+            "area_rooms_weight": area_rooms_fit_score(item, preferences),
+            "condition_weight": condition_value,
+            "layout_weight": layout_score,
+            "house_weight": house_fit_score(item),
+            "floor_weight": floor_score,
+        }
+        labels = {
+            "location_weight": "Зона и локация", "area_rooms_weight": "Площадь и комнаты",
+            "condition_weight": "Состояние квартиры", "layout_weight": "Планировка и кухня",
+            "house_weight": "Дом", "floor_weight": "Этаж",
+        }
+        if getattr(item, "geo_zone_configured", False):
+            zone_floor = {"A": 76, "B": 51, "C": 26, "D": 0}.get(getattr(item, "geo_zone_tier", None), 0)
+            non_location = {key: value for key, value in components.items() if key != "location_weight"}
+            non_total = sum(FIT_WEIGHTS[key] for key in non_location)
+            non_score = sum(value * FIT_WEIGHTS[key] for key, value in non_location.items()) / non_total if non_total else 0
+            item.score = round(zone_floor + non_score * .24)
+            item.score_breakdown = [{"label": "Приоритет зоны", "score": round(location_score), "weight": 75,
+                                    "contribution": zone_floor}]
+            item.score_breakdown.extend(
+                {"label": labels[key], "score": round(value), "weight": FIT_WEIGHTS[key],
+                 "contribution": round(value * FIT_WEIGHTS[key] / non_total * 24) if non_total else 0}
+                for key, value in non_location.items()
+            )
+        else:
+            total_weight = sum(FIT_WEIGHTS.values())
+            item.score = round(sum(value * FIT_WEIGHTS[key] for key, value in components.items()) / total_weight)
+            item.score_breakdown = [
+                {"label": labels[key], "score": round(value), "weight": FIT_WEIGHTS[key],
+                 "contribution": round(value * FIT_WEIGHTS[key] / total_weight)}
+                for key, value in components.items()
+            ]
         item.score_reasons = (personal_reasons + [reason for reason in reasons if reason not in personal_reasons])[:3]
         item.score_label = "Высокий интерес" if item.score >= 75 else (
             "Стоит посмотреть" if item.score >= 60 else "Нейтрально"
