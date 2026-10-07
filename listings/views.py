@@ -318,6 +318,24 @@ def target_location_score(listing):
     return 18, "далеко от целевых локаций"
 
 
+def geo_zone_location_score(listing):
+    """Translate a configured personal zone priority into a Fit component."""
+    tier = getattr(listing, "geo_zone_tier", None)
+    if tier == GeoZone.Tier.A:
+        return 100, "идеальная зона"
+    if tier == GeoZone.Tier.B:
+        return 80, "хорошая зона"
+    if tier == GeoZone.Tier.C:
+        return 55, "компромиссная зона"
+    if tier == GeoZone.Tier.D:
+        return 0, "зона не рассматривается"
+    if getattr(listing, "geo_zone_configured", False):
+        if listing.latitude is None or listing.longitude is None:
+            return 40, "зона не определена: нет координат"
+        return 25, "вне заданных зон"
+    return target_location_score(listing)
+
+
 def condition_score(listing):
     """Prefer explicit CIAN condition; unknown condition remains neutral."""
     explicit_conditions = {
@@ -438,7 +456,7 @@ def add_listing_score(listings, preferences=None):
             preference_checks.append(item.has_furniture)
             if not preference_checks[-1]: reasons.append("мебель не указана")
         if preferences.use_ufa_target_zones:
-            location_score, location_reason = target_location_score(item)
+            location_score, location_reason = geo_zone_location_score(item)
             reasons.insert(0, location_reason)
         condition_value, condition_reason = condition_score(item)
         reasons.append(condition_reason)

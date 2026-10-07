@@ -117,6 +117,7 @@ def annotate_personal_filter(listings, user):
         listing.hard_filter_allowed = allowed
         listing.hard_filter_reason = reason
         listing.geo_zone_tier = tier
+        listing.geo_zone_configured = bool(zones)
         if allowed:
             result.append(listing)
     return result
