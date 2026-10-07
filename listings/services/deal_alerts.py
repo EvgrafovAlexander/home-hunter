@@ -228,7 +228,7 @@ def notify_new_listing(listing_id: int) -> bool:
     lines.extend([*facts, "", f"📍 <b>{escaped_location}</b>"])
     if escaped_housing:
         lines.extend(["", f"🏠 {escaped_housing}"])
-    lines.extend(["", *market_lines, "", "⭐ <b>Оценка Home Hunter: ⏳</b>", ""])
+    lines.extend(["", *market_lines, "", "🔄 <b>Оценка Home Hunter: пересчитывается</b>", ""])
     lines.extend(reason_blocks)
     lines.extend(["", f"Источник: {html.escape(source)}"])
     text = "\n".join(line for line in lines if line is not None)
