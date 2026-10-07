@@ -267,9 +267,6 @@ def notify_new_deal(listing_id: int) -> bool:
     if listing.repair_type:
         criteria.append(f"ремонт: {listing.repair_type}")
     criteria_text = "\n".join(f"✓ {item}" for item in criteria) or "• критерии требуют проверки"
-    keyboard = {"inline_keyboard": [[
-        {"text": "📝 Оценить квартиру", "callback_data": f"review:start:{listing.pk}"},
-    ], [{"text": "Открыть объявление", "url": listing.url}, {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"}]]}
     text = "\n".join([
         "🟢 НОВАЯ КВАРТИРА НИЖЕ РЫНКА", "",
         f"{listing.price:,} ₽ · {listing.price_per_sqm:,} ₽/м²" if listing.price and listing.price_per_sqm else (f"{listing.price:,} ₽" if listing.price else "Цена не указана"),
@@ -277,9 +274,7 @@ def notify_new_deal(listing_id: int) -> bool:
         f"📉 На {discount}% ниже медианы похожих квартир", f"{reference} · {samples} аналогов", "",
         "Подходит по критериям:", criteria_text, "", "⭐ Моя оценка: не выставлена", f"Источник: {source} · добавлено сегодня",
     ])
-    sent = send_telegram_photo(listing.image_url, text, keyboard) if listing.image_url else False
-    if not sent:
-        sent = send_telegram_message(text, keyboard)
+    sent = _send_reviewable_listing(listing, text)
     if not sent:
         return False
     try:
