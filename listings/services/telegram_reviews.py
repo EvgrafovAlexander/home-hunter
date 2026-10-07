@@ -63,9 +63,10 @@ def _allowed(user_id):
     return str(user_id) in configured
 
 
-def _reviewer():
+def _reviewer(telegram_user_id):
     User = get_user_model()
-    return User.objects.filter(username=settings.TG_REVIEW_DJANGO_USERNAME).first() or User.objects.filter(is_staff=True).first()
+    username = settings.TG_REVIEW_USER_MAP.get(str(telegram_user_id), settings.TG_REVIEW_DJANGO_USERNAME)
+    return User.objects.filter(username=username).first() or User.objects.filter(is_staff=True).first()
 
 
 def _categories_keyboard(session):
@@ -95,7 +96,7 @@ def _show_category(session):
 
 def _start_session(user_id, listing_id, channel_chat_id="", channel_message_id=None):
     listing = Listing.objects.filter(pk=listing_id, is_active=True, is_visible=True).first()
-    user = _reviewer()
+    user = _reviewer(user_id)
     if not listing or not user:
         return False
     session, _ = TelegramReviewSession.objects.update_or_create(

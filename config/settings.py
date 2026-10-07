@@ -111,6 +111,13 @@ TG_CHANNEL_ID = os.getenv("TG_CHANNEL_ID", "")
 TG_BOT_USERNAME = os.getenv("TG_BOT_USERNAME", "")
 TG_REVIEW_USER_IDS = tuple(filter(None, (item.strip() for item in os.getenv("TG_REVIEW_USER_IDS", "").split(","))))
 TG_REVIEW_DJANGO_USERNAME = os.getenv("TG_REVIEW_DJANGO_USERNAME", "admin")
+TG_REVIEW_USER_MAP = {
+    key.strip(): value.strip()
+    for item in os.getenv("TG_REVIEW_USER_MAP", "").split(",")
+    if ":" in item
+    for key, value in [item.split(":", 1)]
+    if key.strip() and value.strip()
+}
 TG_POLLING_ENABLED = os.getenv("TG_POLLING_ENABLED", "false").lower() == "true"
 TG_POLLING_TIMEOUT = int(os.getenv("TG_POLLING_TIMEOUT", "25"))
 TG_LISTING_ALERTS_ENABLED = os.getenv("TG_LISTING_ALERTS_ENABLED", "false").lower() == "true"
