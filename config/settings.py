@@ -108,6 +108,10 @@ NOMINATIM_USER_AGENT = os.getenv("NOMINATIM_USER_AGENT", "")
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 TG_CHAT_ID = os.getenv("TG_CHAT_ID", "")
 TG_CHANNEL_ID = os.getenv("TG_CHANNEL_ID", "")
+TG_REVIEW_USER_IDS = tuple(filter(None, (item.strip() for item in os.getenv("TG_REVIEW_USER_IDS", "").split(","))))
+TG_REVIEW_DJANGO_USERNAME = os.getenv("TG_REVIEW_DJANGO_USERNAME", "admin")
+TG_POLLING_ENABLED = os.getenv("TG_POLLING_ENABLED", "false").lower() == "true"
+TG_POLLING_TIMEOUT = int(os.getenv("TG_POLLING_TIMEOUT", "25"))
 TG_LISTING_ALERTS_ENABLED = os.getenv("TG_LISTING_ALERTS_ENABLED", "false").lower() == "true"
 TG_PRICE_ALERTS_ENABLED = os.getenv("TG_PRICE_ALERTS_ENABLED", "false").lower() == "true"
 TG_PRICE_ALERT_MIN_PERCENT = float(os.getenv("TG_PRICE_ALERT_MIN_PERCENT", "3"))

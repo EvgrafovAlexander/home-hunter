@@ -271,6 +271,43 @@ class ListingReviewRevision(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+class TelegramReviewSession(models.Model):
+    """Per-user Telegram draft; one channel can safely serve many reviewers."""
+
+    class State(models.TextChoices):
+        RATING = "rating", "Оценка"
+        TAGS = "tags", "Теги"
+        INTEREST = "interest", "Причина интереса"
+        DEAL_BREAKER = "deal_breaker", "Стоп-фактор"
+        COMMENT = "comment", "Комментарий"
+        DECISION = "decision", "Решение"
+
+    telegram_user_id = models.CharField(max_length=64)
+    telegram_chat_id = models.CharField(max_length=64)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="telegram_review_sessions")
+    listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="telegram_review_sessions")
+    state = models.CharField(max_length=20, choices=State.choices, default=State.RATING)
+    category_index = models.PositiveSmallIntegerField(default=0)
+    rating = models.PositiveSmallIntegerField(null=True, blank=True)
+    decision = models.CharField(max_length=12, blank=True)
+    tag_codes = models.JSONField(default=list, blank=True)
+    interest_reason = models.TextField(blank=True)
+    deal_breaker = models.TextField(blank=True)
+    comment = models.TextField(blank=True)
+    channel_message_id = models.BigIntegerField(null=True, blank=True)
+    channel_chat_id = models.CharField(max_length=64, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("telegram_user_id", "listing"), name="unique_telegram_review_session")]
+
+
+class TelegramPollingState(models.Model):
+    key = models.CharField(max_length=50, unique=True, default="default")
+    offset = models.BigIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class Consideration(models.Model):
     class Stage(models.TextChoices):
         NEW = "new", "Новое"

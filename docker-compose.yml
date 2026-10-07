@@ -67,6 +67,21 @@ services:
         condition: service_healthy
       cian-tunnel:
         condition: service_healthy
+  telegram-poll:
+    build:
+      context: .
+      target: web
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DJANGO_DEBUG: "false"
+      TELEGRAM_PROXY_URL: socks5h://cian-tunnel:1080
+    command: ["python", "manage.py", "telegram_poll"]
+    depends_on:
+      db:
+        condition: service_healthy
   cian-tunnel:
     profiles: ["cian", "collector", "domclick"]
     build:

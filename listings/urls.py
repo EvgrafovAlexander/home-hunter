@@ -23,4 +23,5 @@ urlpatterns = [
     path("microdistricts/map/", views.microdistrict_map, name="microdistrict_map"),
     path("api/domclick-agent/jobs/next/", agent_views.next_domclick_job),
     path("api/domclick-agent/jobs/<int:job_id>/complete/", agent_views.complete_domclick_job),
+    path("api/telegram/webhook/", views.telegram_webhook, name="telegram_webhook"),
 ]

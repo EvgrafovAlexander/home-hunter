@@ -13,6 +13,7 @@ from django.db import transaction
 from django.db.models import Avg, Count, F, Max, Q
 from django.db.models.functions import TruncDate
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
@@ -27,12 +28,25 @@ from .services.microdistrict_polygons import (canonical_microdistrict_name, load
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
 from .services.scan_health import cian_detail_health
+from .services.telegram_reviews import handle_update
 
 
 SCAN_STALE_AFTER = timedelta(hours=6)
 SCHEDULE_TIME_ZONE = ZoneInfo("Europe/Moscow")
 DISPLAY_TIME_ZONE = ZoneInfo("Asia/Yekaterinburg")
 MARKET_MIN_SIMILAR = 5
+
+
+@csrf_exempt
+def telegram_webhook(request):
+    if request.method != "POST":
+        return JsonResponse({"ok": False}, status=405)
+    try:
+        payload = json.loads(request.body or b"{}")
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False}, status=400)
+    handle_update(payload)
+    return JsonResponse({"ok": True})
 MARKET_MIN_ROOM_GROUP = 8
 MARKET_MIN_DISTRICT_GROUP = 12
 MICRODISTRICT_MARKET_MIN_SAMPLE = 5

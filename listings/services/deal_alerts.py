@@ -166,7 +166,7 @@ def notify_new_listing(listing_id: int) -> bool:
     lines.extend(["", f"Источник: {html.escape(source)}"])
     text = "\n".join(line for line in lines if line is not None)
     keyboard = {"inline_keyboard": [[
-        {"text": "📝 Оценить квартиру", "url": f"{settings.PUBLIC_BASE_URL}/reviews/?listing={listing.pk}"},
+        {"text": "📝 Оценить квартиру", "callback_data": f"review:start:{listing.pk}"},
     ], [{"text": "Открыть объявление", "url": listing.url}, {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"}]]}
     sent = send_telegram_photo(listing.image_url, text, keyboard, chat_id=settings.TG_CHANNEL_ID, parse_mode="HTML") if listing.image_url else False
     if not sent:
@@ -245,7 +245,7 @@ def notify_new_deal(listing_id: int) -> bool:
         criteria.append(f"ремонт: {listing.repair_type}")
     criteria_text = "\n".join(f"✓ {item}" for item in criteria) or "• критерии требуют проверки"
     keyboard = {"inline_keyboard": [[
-        {"text": "📝 Оценить квартиру", "url": f"{settings.PUBLIC_BASE_URL}/reviews/?listing={listing.pk}"},
+        {"text": "📝 Оценить квартиру", "callback_data": f"review:start:{listing.pk}"},
     ], [{"text": "Открыть объявление", "url": listing.url}, {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"}]]}
     text = "\n".join([
         "🟢 НОВАЯ КВАРТИРА НИЖЕ РЫНКА", "",
