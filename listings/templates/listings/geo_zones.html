@@ -8,11 +8,11 @@
 <main class="zones-page">
   <section class="hero"><p class="eyebrow">Персональная география</p><h1>Мои зоны поиска</h1><p>Назовите зону понятным именем и назначьте ей приоритет. Зона «Не рассматриваю» исключает квартиру из персональной выдачи независимо от цены.</p></section>
   <section class="zone-editor">
-    <form method="post" class="zone-form" id="zone-form">{% csrf_token %}<label>Название зоны<input name="name" required placeholder="Коридор проспекта Октября"></label><label>Приоритет<select name="tier">{% for value,label in tiers %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label><button type="submit">Сохранить зону</button><input type="hidden" name="geometry" id="zone-geometry"></form>
+    <form method="post" class="zone-form" id="zone-form">{% csrf_token %}<label>Название зоны<input name="name" id="zone-name" required placeholder="Коридор проспекта Октября"></label><label>Приоритет<select name="tier" id="zone-tier">{% for value,label in tiers %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label><button type="submit" id="zone-submit">Сохранить зону</button><input type="hidden" name="zone_id" id="zone-id"><input type="hidden" name="geometry" id="zone-geometry"></form>
     <p class="muted">Используйте инструменты рисования в левом верхнем углу. Поддерживаются Polygon и MultiPolygon через сохранённый GeoJSON.</p>
     <div id="zone-map" class="zone-map"></div>
   </section>
-  <section class="zone-list">{% for zone in zones %}<div class="zone-row"><span><b>{{ zone.name }}</b> · {{ zone.get_tier_display }}</span><form method="post">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="zone_id" value="{{ zone.id }}"><button>Удалить</button></form></div>{% empty %}<p class="muted">Зон пока нет.</p>{% endfor %}</section>
+  <section class="zone-list">{% for zone in zones %}<div class="zone-row"><span><b>{{ zone.name }}</b> · {{ zone.get_tier_display }}</span><span><button type="button" class="edit-zone" data-zone-id="{{ zone.id }}">Изменить</button><form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="zone_id" value="{{ zone.id }}"><button>Удалить</button></form></span></div>{% empty %}<p class="muted">Зон пока нет.</p>{% endfor %}</section>
 </main>
 <script type="application/json" id="zones-data">{{ zones_json|safe }}</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
@@ -22,12 +22,13 @@
 <script>
 const map=L.map('zone-map').setView([54.7388,55.9721],11);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
-const colors={A:'#16805d',B:'#3b82f6',C:'#d38b16',D:'#b42318'}, labels={A:'Идеальная зона',B:'Хорошая зона',C:'Компромиссная зона',D:'Не рассматриваю'}, drawn=L.featureGroup().addTo(map);
+const colors={A:'#16805d',B:'#3b82f6',C:'#d38b16',D:'#b42318'}, labels={A:'Идеальная зона',B:'Хорошая зона',C:'Компромиссная зона',D:'Не рассматриваю'}, drawn=L.featureGroup().addTo(map), zoneLayers={};
 const data=JSON.parse(document.getElementById('zones-data').textContent);
-data.forEach(zone=>L.geoJSON(zone.geometry,{style:{color:colors[zone.tier]||'#555',fillOpacity:.16}}).bindTooltip(zone.name+' · '+(labels[zone.tier]||zone.tier)).addTo(drawn));
+data.forEach(zone=>{zoneLayers[zone.id]=L.geoJSON(zone.geometry,{style:{color:colors[zone.tier]||'#555',fillOpacity:.16}}).bindTooltip(zone.name+' · '+(labels[zone.tier]||zone.tier)).addTo(drawn)});
 map.pm.addControls({position:'topleft',drawText:false,drawCircle:false,drawCircleMarker:false,drawPolyline:false,drawRectangle:false,drawMarker:false,editMode:false,dragMode:false,cutPolygon:false});
 let current=null;
 map.on('pm:create',event=>{if(current)drawn.removeLayer(current);current=event.layer;drawn.addLayer(current);document.getElementById('zone-geometry').value=JSON.stringify(current.toGeoJSON().geometry);});
+document.querySelectorAll('.edit-zone').forEach(button=>button.addEventListener('click',()=>{const zone=data.find(item=>String(item.id)===button.dataset.zoneId);if(!zone)return;document.getElementById('zone-id').value=zone.id;document.getElementById('zone-name').value=zone.name;document.getElementById('zone-tier').value=zone.tier;document.getElementById('zone-submit').textContent='Сохранить изменения';document.getElementById('zone-geometry').value=JSON.stringify(zone.geometry);if(current)drawn.removeLayer(current);current=L.geoJSON(zone.geometry,{style:{color:colors[zone.tier]||'#555',fillOpacity:.28}}).addTo(drawn);map.fitBounds(current.getBounds().pad(.2));}));
 document.getElementById('zone-form').addEventListener('submit',event=>{if(!document.getElementById('zone-geometry').value){event.preventDefault();alert('Сначала нарисуйте Polygon на карте.')}});
 </script>
 {% endblock %}

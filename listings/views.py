@@ -1409,17 +1409,22 @@ def geo_zones(request):
                 or geometry.get("type") not in {"Polygon", "MultiPolygon"}):
             messages.error(request, "Укажите название, уровень и GeoJSON Polygon/MultiPolygon.")
             return redirect("geo_zones")
-        GeoZone.objects.update_or_create(
-            user=request.user, name=name,
-            defaults={"tier": tier, "geometry": geometry, "is_active": True},
-        )
+        zone_id = _integer(request.POST.get("zone_id"))
+        if zone_id:
+            zone = get_object_or_404(GeoZone, pk=zone_id, user=request.user)
+            zone.name, zone.tier, zone.geometry, zone.is_active = name, tier, geometry, True
+            zone.save(update_fields=("name", "tier", "geometry", "is_active", "updated_at"))
+        else:
+            GeoZone.objects.create(
+                user=request.user, name=name, tier=tier, geometry=geometry, is_active=True,
+            )
         messages.success(request, f"Зона «{name}» сохранена.")
         return redirect("geo_zones")
     zones = list(GeoZone.objects.filter(user=request.user))
     return render(request, "listings/geo_zones.html", {
         "zones": zones,
         "zones_json": json.dumps([
-            {"name": zone.name, "tier": zone.tier, "geometry": zone.geometry}
+            {"id": zone.id, "name": zone.name, "tier": zone.tier, "geometry": zone.geometry}
             for zone in zones
         ], ensure_ascii=False),
         "tiers": GeoZone.Tier.choices,
