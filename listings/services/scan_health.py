@@ -77,6 +77,25 @@ def send_telegram_message(text: str, reply_markup=None, *, chat_id=None, parse_m
     return sent
 
 
+def send_telegram_message_result(text: str, reply_markup=None, *, chat_id, parse_mode=None):
+    """Send to one chat and retain Telegram's message id for later edits."""
+    if not settings.TG_BOT_TOKEN or not chat_id:
+        return None
+    proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} if settings.TELEGRAM_PROXY_URL else None
+    try:
+        data = {"chat_id": chat_id, "text": text}
+        if parse_mode:
+            data["parse_mode"] = parse_mode
+        if reply_markup:
+            data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
+        response = requests.post(f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/sendMessage", data=data, proxies=proxies, timeout=20)
+        response.raise_for_status()
+        return response.json().get("result")
+    except requests.RequestException as exc:
+        logger.warning("Telegram message failed for chat %s: %s", chat_id, type(exc).__name__)
+        return None
+
+
 def send_telegram_photo(photo_url: str, caption: str, reply_markup=None, *, chat_id=None, parse_mode=None) -> bool:
     destinations = [chat_id] if chat_id else _telegram_destinations()
     if not settings.TG_BOT_TOKEN or not destinations or not photo_url:
@@ -100,6 +119,39 @@ def send_telegram_photo(photo_url: str, caption: str, reply_markup=None, *, chat
         except requests.RequestException as exc:
             logger.warning("Telegram photo notification failed for chat %s: %s", chat_id, type(exc).__name__)
     return sent
+
+
+def send_telegram_photo_result(photo_url: str, caption: str, reply_markup=None, *, chat_id, parse_mode=None):
+    if not settings.TG_BOT_TOKEN or not chat_id or not photo_url:
+        return None
+    proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} if settings.TELEGRAM_PROXY_URL else None
+    try:
+        data = {"chat_id": chat_id, "photo": photo_url, "caption": caption}
+        if parse_mode:
+            data["parse_mode"] = parse_mode
+        if reply_markup:
+            data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
+        response = requests.post(f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/sendPhoto", data=data, proxies=proxies, timeout=20)
+        response.raise_for_status()
+        return response.json().get("result")
+    except requests.RequestException as exc:
+        logger.warning("Telegram photo failed for chat %s: %s", chat_id, type(exc).__name__)
+        return None
+
+
+def edit_telegram_reply_markup(*, chat_id, message_id, reply_markup) -> bool:
+    if not settings.TG_BOT_TOKEN:
+        return False
+    proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} if settings.TELEGRAM_PROXY_URL else None
+    try:
+        response = requests.post(f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/editMessageReplyMarkup", data={
+            "chat_id": chat_id, "message_id": message_id, "reply_markup": json.dumps(reply_markup, ensure_ascii=False),
+        }, proxies=proxies, timeout=20)
+        response.raise_for_status()
+        return True
+    except requests.RequestException as exc:
+        logger.warning("Telegram markup edit failed for chat %s: %s", chat_id, type(exc).__name__)
+        return False
 
 
 def check_source_health(source: str) -> SourceHealth:

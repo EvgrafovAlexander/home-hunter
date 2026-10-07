@@ -108,6 +108,7 @@ NOMINATIM_USER_AGENT = os.getenv("NOMINATIM_USER_AGENT", "")
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 TG_CHAT_ID = os.getenv("TG_CHAT_ID", "")
 TG_CHANNEL_ID = os.getenv("TG_CHANNEL_ID", "")
+TG_BOT_USERNAME = os.getenv("TG_BOT_USERNAME", "")
 TG_REVIEW_USER_IDS = tuple(filter(None, (item.strip() for item in os.getenv("TG_REVIEW_USER_IDS", "").split(","))))
 TG_REVIEW_DJANGO_USERNAME = os.getenv("TG_REVIEW_DJANGO_USERNAME", "admin")
 TG_POLLING_ENABLED = os.getenv("TG_POLLING_ENABLED", "false").lower() == "true"

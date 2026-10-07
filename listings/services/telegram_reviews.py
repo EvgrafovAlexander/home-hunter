@@ -2,6 +2,7 @@
 import html
 import json
 import logging
+import re
 
 import requests
 from django.conf import settings
@@ -92,21 +93,27 @@ def _show_category(session):
     _send(session.telegram_chat_id, f"Квартира: {session.listing.title}\n\nВыберите критерии: {label}. Можно выбрать несколько или пропустить категорию.", {"inline_keyboard": _categories_keyboard(session)})
 
 
-def _start(user_id, listing_id, callback):
+def _start_session(user_id, listing_id, channel_chat_id="", channel_message_id=None):
     listing = Listing.objects.filter(pk=listing_id, is_active=True, is_visible=True).first()
     user = _reviewer()
     if not listing or not user:
-        _answer(callback["id"], "Квартира или пользователь не найдены")
-        return
-    message = callback.get("message") or {}
+        return False
     session, _ = TelegramReviewSession.objects.update_or_create(
         telegram_user_id=str(user_id), listing=listing,
         defaults={"telegram_chat_id": str(user_id), "user": user, "state": TelegramReviewSession.State.RATING,
-                  "category_index": 0, "rating": None, "tag_codes": [], "interest_reason": "", "deal_breaker": "", "comment": "",
-                  "channel_message_id": message.get("message_id"), "channel_chat_id": str(message.get("chat", {}).get("id", ""))},
+                  "category_index": 0, "rating": None, "decision": "", "tag_codes": [], "interest_reason": "", "deal_breaker": "", "comment": "",
+                  "channel_message_id": channel_message_id, "channel_chat_id": str(channel_chat_id)},
     )
-    _answer(callback["id"])
     _send(user_id, f"📝 Оценка квартиры\n{listing.title}\n\nСначала поставьте общую оценку от 1 до 10.", {"inline_keyboard": [[{"text": str(n), "callback_data": f"review:rating:{n}"} for n in range(1, 6)], [{"text": str(n), "callback_data": f"review:rating:{n}"} for n in range(6, 11)]]})
+    return True
+
+
+def _start(user_id, listing_id, callback):
+    message = callback.get("message") or {}
+    if _start_session(user_id, listing_id, message.get("chat", {}).get("id", ""), message.get("message_id")):
+        _answer(callback["id"])
+    else:
+        _answer(callback["id"], "Квартира или пользователь не найдены")
 
 
 def _save(session):
@@ -171,6 +178,12 @@ def handle_update(update):
     if not user_id or not _allowed(user_id) or message.get("chat", {}).get("type") != "private":
         return
     text = (message.get("text") or "").strip()
+    deep_link = re.fullmatch(r"/start(?:@\w+)?\s+review_(\d+)_(-?\d+)_(\d+)", text)
+    if deep_link:
+        if _start_session(user_id, int(deep_link.group(1)), deep_link.group(2), int(deep_link.group(3))):
+            return
+        _send(user_id, "Квартира больше недоступна для оценки.")
+        return
     session = TelegramReviewSession.objects.filter(telegram_user_id=str(user_id)).select_related("listing", "user").first()
     if text in {"/cancel", "отмена"}:
         if session: session.delete()

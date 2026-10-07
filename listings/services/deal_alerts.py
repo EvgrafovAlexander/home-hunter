@@ -7,10 +7,38 @@ from django.conf import settings
 from django.db import IntegrityError
 
 from listings.models import DealAlert, Listing, SearchQuery, TelegramListingAlert
-from listings.services.scan_health import send_telegram_message, send_telegram_photo
+from listings.services.scan_health import (edit_telegram_reply_markup, send_telegram_message,
+                                           send_telegram_message_result, send_telegram_photo,
+                                           send_telegram_photo_result)
 
 logger = logging.getLogger(__name__)
 MIN_SIMILAR, MIN_ROOM_GROUP, MIN_LOCATION_GROUP = 5, 8, 12
+
+
+def _review_keyboard(listing, channel_message_id):
+    link = f"https://t.me/{settings.TG_BOT_USERNAME}?start=review_{listing.pk}_{settings.TG_CHANNEL_ID}_{channel_message_id}"
+    return {"inline_keyboard": [
+        [{"text": "📝 Оценить в Telegram", "url": link}],
+        [{"text": "📝 Оценить в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/reviews/?listing={listing.pk}"}],
+        [{"text": "Открыть объявление", "url": listing.url}, {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"}],
+    ]}
+
+
+def _send_reviewable_listing(listing, text):
+    """Publish first, then add a deep link containing its message id."""
+    initial_keyboard = {"inline_keyboard": [[
+        {"text": "Открыть объявление", "url": listing.url},
+        {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"},
+    ]]}
+    result = send_telegram_photo_result(listing.image_url, text, initial_keyboard, chat_id=settings.TG_CHANNEL_ID, parse_mode="HTML") if listing.image_url else None
+    if not result:
+        result = send_telegram_message_result(text, initial_keyboard, chat_id=settings.TG_CHANNEL_ID, parse_mode="HTML")
+    if not result:
+        return False
+    if not settings.TG_BOT_USERNAME:
+        logger.warning("TG_BOT_USERNAME is not configured; review deep link was not added")
+        return True
+    return edit_telegram_reply_markup(chat_id=settings.TG_CHANNEL_ID, message_id=result["message_id"], reply_markup=_review_keyboard(listing, result["message_id"]))
 
 
 def _listing_score(listing):
@@ -165,12 +193,7 @@ def notify_new_listing(listing_id: int) -> bool:
     lines.extend(reason_blocks)
     lines.extend(["", f"Источник: {html.escape(source)}"])
     text = "\n".join(line for line in lines if line is not None)
-    keyboard = {"inline_keyboard": [[
-        {"text": "📝 Оценить квартиру", "callback_data": f"review:start:{listing.pk}"},
-    ], [{"text": "Открыть объявление", "url": listing.url}, {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"}]]}
-    sent = send_telegram_photo(listing.image_url, text, keyboard, chat_id=settings.TG_CHANNEL_ID, parse_mode="HTML") if listing.image_url else False
-    if not sent:
-        sent = send_telegram_message(text, keyboard, chat_id=settings.TG_CHANNEL_ID, parse_mode="HTML")
+    sent = _send_reviewable_listing(listing, text)
     if not sent:
         return False
     try:
