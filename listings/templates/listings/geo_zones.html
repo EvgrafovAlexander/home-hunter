@@ -31,6 +31,6 @@ const updateGeometry=()=>{if(currentEditable)document.getElementById('zone-geome
 map.on('pm:create',event=>{if(current)drawn.removeLayer(current);current=event.layer;currentEditable=event.layer;drawn.addLayer(current);updateGeometry();});
 map.on('pm:edit',event=>{if(event.layer===currentEditable)updateGeometry();});
 document.querySelectorAll('.edit-zone').forEach(button=>button.addEventListener('click',()=>{const zone=data.find(item=>String(item.id)===button.dataset.zoneId);if(!zone)return;document.getElementById('zone-id').value=zone.id;document.getElementById('zone-name').value=zone.name;document.getElementById('zone-tier').value=zone.tier;document.getElementById('zone-submit').textContent='Сохранить изменения';if(current)drawn.removeLayer(current);current=L.geoJSON(zone.geometry,{style:{color:colors[zone.tier]||'#555',fillOpacity:.28}}).addTo(drawn);currentEditable=current.getLayers()[0];currentEditable.pm.enable({allowSelfIntersection:false});updateGeometry();map.fitBounds(current.getBounds().pad(.2));}));
-document.getElementById('zone-form').addEventListener('submit',event=>{if(!document.getElementById('zone-geometry').value){event.preventDefault();alert('Сначала нарисуйте Polygon на карте.')}});
+document.getElementById('zone-form').addEventListener('submit',event=>{updateGeometry();if(!document.getElementById('zone-geometry').value){event.preventDefault();alert('Сначала нарисуйте Polygon на карте.')}});
 </script>
 {% endblock %}
