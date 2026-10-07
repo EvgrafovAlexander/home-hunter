@@ -12,6 +12,21 @@ from django.utils import timezone
 from ..models import CianDetailPollState, Consideration, Listing, ListingReview, ListingSearchQuery, PriceHistory, SearchQuery
 
 
+TARGET_MIN_AREA = Decimal("55")
+
+
+def _data_layer(listing):
+    """Classify a record without removing it from the analytical export."""
+    if listing.area is None:
+        return "Вне рабочей выборки", "Нет площади", False
+    area = Decimal(str(listing.area))
+    if area >= TARGET_MIN_AREA:
+        return "Кандидат — от 55 м²", "", True
+    if area >= Decimal("45"):
+        return "Резервный аналог — 45–54 м²", "Площадь ниже рабочего порога", False
+    return "Вне рабочей выборки", "Площадь менее 45 м²", False
+
+
 def _text(value):
     if value is None:
         return ""
@@ -90,18 +105,20 @@ def build_market_xlsx(user):
     review_decisions = dict(ListingReview.Decision.choices)
     stages = dict(Consideration.Stage.choices)
 
-    listing_headers = ["ID", "Источник", "Внешний ID", "Заголовок", "URL", "Цена, ₽", "Цена за м², ₽", "Комнат", "Площадь, м²", "Кухня, м²", "Жилая, м²", "Этаж", "Этажность", "Год постройки", "Адрес", "Район", "Микрорайон", "Ремонт", "Материал дома", "Мебель", "Лифт", "Балкон/лоджия", "Санузлы совм.", "Санузлы раздельн.", "Парковка", "Высота потолка, м", "Статус публикации", "Активно", "Видимо", "Первое появление", "Последнее появление", "Обновлено", "Моя оценка, /10", "Моё решение", "Этап shortlist", "Комментарий", "Причина интереса", "Стоп-фактор", "CIAN detail status", "CIAN detail checked", "Поисковые запросы", "Фото URL"]
+    listing_headers = ["ID", "Источник", "Внешний ID", "Заголовок", "URL", "Цена, ₽", "Цена за м², ₽", "Комнат", "Площадь, м²", "Слой данных", "Критерий 55 м²", "Причина исключения", "Кухня, м²", "Жилая, м²", "Этаж", "Этажность", "Год постройки", "Адрес", "Район", "Микрорайон", "Ремонт", "Материал дома", "Мебель", "Лифт", "Балкон/лоджия", "Санузлы совм.", "Санузлы раздельн.", "Парковка", "Высота потолка, м", "Статус публикации", "Активно", "Видимо", "Первое появление", "Последнее появление", "Обновлено", "Моя оценка, /10", "Моё решение", "Этап shortlist", "Комментарий", "Причина интереса", "Стоп-фактор", "CIAN detail status", "CIAN detail checked", "Поисковые запросы", "Фото URL"]
     listing_rows = [listing_headers]
     for item in listings:
         review = own_reviews.get(item.id)
         consideration = considerations.get(review.id) if review else None
         state = states_by_listing.get(item.id)
-        listing_rows.append([item.id, source_names.get(item.source, item.source), item.external_id, item.title, item.url, item.price, item.price_per_sqm, item.rooms, item.area, item.kitchen_area, item.living_area, item.floor, item.floors_total, item.built_year, item.address, item.district, item.microdistrict, item.repair_type, item.building_material_type, item.has_furniture, (item.passenger_lifts_count or 0) + (item.cargo_lifts_count or 0), (item.balconies_count or 0) + (item.loggias_count or 0), item.bathrooms_combined, item.bathrooms_separate, item.parking_type, item.ceiling_height, item.get_publication_status_display(), item.is_active, item.is_visible, item.first_seen_at, item.last_seen_at, item.updated_at, review.rating if review else None, review_decisions.get(review.decision) if review else None, stages.get(consideration.stage) if consideration else None, review.comment if review else None, review.interest_reason if review else None, review.deal_breaker if review else None, state.status if state else None, state.last_checked_at if state else None, "; ".join(relations_by_listing.get(item.id, [])), item.image_url])
+        data_layer, exclusion_reason, is_candidate = _data_layer(item)
+        listing_rows.append([item.id, source_names.get(item.source, item.source), item.external_id, item.title, item.url, item.price, item.price_per_sqm, item.rooms, item.area, data_layer, "Да" if is_candidate else "Нет", exclusion_reason, item.kitchen_area, item.living_area, item.floor, item.floors_total, item.built_year, item.address, item.district, item.microdistrict, item.repair_type, item.building_material_type, item.has_furniture, (item.passenger_lifts_count or 0) + (item.cargo_lifts_count or 0), (item.balconies_count or 0) + (item.loggias_count or 0), item.bathrooms_combined, item.bathrooms_separate, item.parking_type, item.ceiling_height, item.get_publication_status_display(), item.is_active, item.is_visible, item.first_seen_at, item.last_seen_at, item.updated_at, review.rating if review else None, review_decisions.get(review.decision) if review else None, stages.get(consideration.stage) if consideration else None, review.comment if review else None, review.interest_reason if review else None, review.deal_breaker if review else None, state.status if state else None, state.last_checked_at if state else None, "; ".join(relations_by_listing.get(item.id, [])), item.image_url])
 
-    review_rows = [["Review ID", "Listing ID", "Источник", "Адрес", "Автор", "Оценка, /10", "Решение", "Этап", "Комментарий", "Причина интереса", "Стоп-фактор", "Создано", "Обновлено"]]
+    review_rows = [["Review ID", "Listing ID", "Ссылка на объявление", "Источник", "Адрес", "Комнат", "Площадь, м²", "Цена за м², ₽", "Слой данных", "Вне текущего критерия", "Автор", "Оценка, /10", "Решение", "Этап", "Комментарий", "Причина интереса", "Стоп-фактор", "Создано", "Обновлено"]]
     for review in reviews:
         consideration = considerations.get(review.id)
-        review_rows.append([review.id, review.listing_id, source_names.get(review.listing.source, review.listing.source), review.listing.address, review.author.username, review.rating, review_decisions.get(review.decision, review.decision), stages.get(consideration.stage) if consideration else None, review.comment, review.interest_reason, review.deal_breaker, review.created_at, review.updated_at])
+        data_layer, _exclusion_reason, is_candidate = _data_layer(review.listing)
+        review_rows.append([review.id, review.listing_id, review.listing.url, source_names.get(review.listing.source, review.listing.source), review.listing.address, review.listing.rooms, review.listing.area, review.listing.price_per_sqm, data_layer, "Нет" if is_candidate else "Да", review.author.username, review.rating, review_decisions.get(review.decision, review.decision), stages.get(consideration.stage) if consideration else None, review.comment, review.interest_reason, review.deal_breaker, review.created_at, review.updated_at])
 
     price_rows = [["ID", "Listing ID", "Источник", "Дата", "Цена, ₽", "Цена за м², ₽", "Площадь, м²", "Изменение цены, ₽", "Изменение, %", "Источник записи"]]
     previous_prices = {}
@@ -117,7 +134,7 @@ def build_market_xlsx(user):
     for item in states:
         cian_rows.append([item.id, item.listing_id, source_names.get(item.listing.source, item.listing.source), item.listing.external_id, item.status, item.last_checked_at, item.last_error])
 
-    market_rows = [["Район", "Микрорайон", "Объявлений", "Видимых", "Скрытых", "Медианная цена, ₽", "Медиана за м², ₽", "Медиана площади, м²"]]
+    market_rows = [["Район", "Микрорайон", "Все активные", "Кандидаты 55+", "Резерв 45–54", "Видимых", "Скрытых", "Медиана цены, ₽ (55+)", "Медиана за м², ₽ (55+)", "Медиана за м², ₽ (45–54)", "Медиана площади, м² (55+)"]]
     market_groups = {}
     for item in listings:
         if not item.is_active or not item.district or not item.microdistrict or item.price_per_sqm is None:
@@ -126,25 +143,37 @@ def build_market_xlsx(user):
     for (district, microdistrict), entries in sorted(market_groups.items(), key=lambda pair: (-len(pair[1]), pair[0])):
         if len(entries) < 5:
             continue
-        prices = [item.price for item in entries if item.price is not None]
-        areas = [float(item.area) for item in entries if item.area is not None]
-        market_rows.append([district, microdistrict, len(entries), sum(item.is_visible for item in entries), sum(not item.is_visible for item in entries), int(median(prices)) if prices else None, int(median([item.price_per_sqm for item in entries])), median(areas) if areas else None])
+        candidates = [item for item in entries if item.area is not None and item.area >= TARGET_MIN_AREA]
+        reserve = [item for item in entries if item.area is not None and Decimal("45") <= item.area < TARGET_MIN_AREA]
+        candidate_prices = [item.price for item in candidates if item.price is not None]
+        candidate_sqm = [item.price_per_sqm for item in candidates]
+        reserve_sqm = [item.price_per_sqm for item in reserve]
+        candidate_areas = [float(item.area) for item in candidates]
+        market_rows.append([district, microdistrict, len(entries), len(candidates), len(reserve), sum(item.is_visible for item in entries), sum(not item.is_visible for item in entries), int(median(candidate_prices)) if candidate_prices else None, int(median(candidate_sqm)) if candidate_sqm else None, int(median(reserve_sqm)) if reserve_sqm else None, median(candidate_areas) if candidate_areas else None])
 
-    rooms_rows = [["Комнат", "Объявлений", "Видимых", "Скрытых", "Медианная цена, ₽", "Медиана за м², ₽", "Медиана площади, м²"]]
+    rooms_rows = [["Комнат", "Все активные", "Кандидаты 55+", "Резерв 45–54", "Видимых", "Скрытых", "Медиана цены, ₽ (55+)", "Медиана за м², ₽ (55+)", "Медиана за м², ₽ (45–54)", "Медиана площади, м² (55+)"]]
     for rooms in (2, 3):
         entries = [item for item in listings if item.is_active and item.rooms == rooms and item.price_per_sqm is not None]
-        prices = [item.price for item in entries if item.price is not None]
-        areas = [float(item.area) for item in entries if item.area is not None]
-        rooms_rows.append([rooms, len(entries), sum(item.is_visible for item in entries), sum(not item.is_visible for item in entries), int(median(prices)) if prices else None, int(median([item.price_per_sqm for item in entries])), median(areas) if areas else None])
+        candidates = [item for item in entries if item.area is not None and item.area >= TARGET_MIN_AREA]
+        reserve = [item for item in entries if item.area is not None and Decimal("45") <= item.area < TARGET_MIN_AREA]
+        candidate_prices = [item.price for item in candidates if item.price is not None]
+        candidate_sqm = [item.price_per_sqm for item in candidates]
+        reserve_sqm = [item.price_per_sqm for item in reserve]
+        candidate_areas = [float(item.area) for item in candidates]
+        rooms_rows.append([rooms, len(entries), len(candidates), len(reserve), sum(item.is_visible for item in entries), sum(not item.is_visible for item in entries), int(median(candidate_prices)) if candidate_prices else None, int(median(candidate_sqm)) if candidate_sqm else None, int(median(reserve_sqm)) if reserve_sqm else None, median(candidate_areas) if candidate_areas else None])
 
-    summary_rows = [["Home Hunter — выгрузка рынка квартир"], [], ["Показатель", "Значение"], ["Дата выгрузки", timezone.now()], ["Квартир", len(listings)], ["Активных", sum(item.is_active for item in listings)], ["Видимых", sum(item.is_visible for item in listings)], ["Скрытых", sum(not item.is_visible for item in listings)], ["Оценок пользователя", len(reviews)], ["Готов рассмотреть", len(considerations)], ["Историй цен", len(histories)], ["CIAN detail записей", len(states)], ["Источники", ", ".join(sorted({source_names.get(item.source, item.source) for item in listings}))]]
-    sheets = [("Обзор", summary_rows, [34, 24]), ("Квартиры", listing_rows, [10, 14, 18, 42, 52, 14, 14, 10, 12, 12, 12, 9, 10, 12, 36, 18, 18, 16, 18, 10, 10, 14, 14, 16, 16, 16, 20, 10, 10, 20, 20, 20, 14, 22, 22, 28, 28, 18, 20, 42, 48]), ("Оценки", review_rows, [12, 12, 14, 36, 16, 12, 22, 22, 30, 30, 30, 20, 20]), ("Цены", price_rows, [12, 12, 14, 20, 14, 14, 14, 16, 14, 24]), ("CIAN статусы", cian_rows, [12, 12, 14, 18, 18, 20, 36]), ("Рынок микрорайонов", market_rows, [18, 24, 14, 12, 12, 18, 18, 18]), ("Рынок по комнатам", rooms_rows, [10, 14, 12, 12, 18, 18, 18])]
+    candidate_total = sum(item.is_active and item.area is not None and item.area >= TARGET_MIN_AREA for item in listings)
+    reserve_total = sum(item.is_active and item.area is not None and Decimal("45") <= item.area < TARGET_MIN_AREA for item in listings)
+    historical_reviews_total = sum(review.listing.area is not None and review.listing.area < TARGET_MIN_AREA for review in reviews)
+    summary_rows = [["Home Hunter — выгрузка рынка квартир"], [], ["Показатель", "Значение"], ["Дата выгрузки", timezone.now()], ["Квартир", len(listings)], ["Активных", sum(item.is_active for item in listings)], ["Рабочие кандидаты — от 55 м²", candidate_total], ["Резервные аналоги — 45–54 м²", reserve_total], ["Видимых", sum(item.is_visible for item in listings)], ["Скрытых", sum(not item.is_visible for item in listings)], ["Оценок пользователя", len(reviews)], ["Оценок вне текущего критерия", historical_reviews_total], ["Готов рассмотреть", len(considerations)], ["Историй цен", len(histories)], ["CIAN detail записей", len(states)], ["Источники", ", ".join(sorted({source_names.get(item.source, item.source) for item in listings}))]]
+    methodology_rows = [["Правила использования выгрузки"], ["Рабочая выборка", "Только активные квартиры площадью от 55 м². Только их можно ранжировать и рекомендовать к просмотру."], ["Резервные аналоги", "Активные квартиры 45–54 м². Используются только при недостатке строгих аналогов; не являются кандидатами."], ["Строгие аналоги", "Тот же микрорайон, та же комнатность и близкая площадь. Основной ориентир — минимум 5 аналогов от 55 м²."], ["Низкая уверенность", "Если строгих аналогов меньше 5, вывод должен явно указывать размер выборки и использование резервных аналогов."], ["Цена", "Это цена предложения, а не подтверждённая цена сделки. Медиана — основной агрегат; среднее — только дополнительный."], ["Исторические оценки", "Оценки квартир меньше 55 м² сохранены для истории, но не являются текущим сигналом выбора."]]
+    sheets = [("Обзор", summary_rows, [34, 30]), ("Методика", methodology_rows, [26, 108]), ("Квартиры", listing_rows, [10, 14, 18, 42, 52, 14, 14, 10, 12, 28, 16, 28, 12, 12, 9, 10, 12, 36, 18, 18, 16, 18, 10, 10, 14, 14, 16, 16, 16, 20, 10, 10, 20, 20, 20, 14, 22, 22, 28, 28, 18, 20, 42, 48]), ("Оценки", review_rows, [12, 12, 52, 14, 36, 10, 12, 14, 28, 22, 16, 12, 22, 22, 30, 30, 30, 20, 20]), ("Цены", price_rows, [12, 12, 14, 20, 14, 14, 14, 16, 14, 24]), ("CIAN статусы", cian_rows, [12, 12, 14, 18, 18, 20, 36]), ("Рынок микрорайонов", market_rows, [18, 24, 14, 16, 16, 12, 12, 22, 22, 24, 24]), ("Рынок по комнатам", rooms_rows, [10, 14, 16, 16, 12, 12, 22, 22, 24, 24])]
     output = BytesIO()
     with ZipFile(output, "w", ZIP_DEFLATED) as archive:
         archive.writestr("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' + ''.join(f'<Override PartName="/xl/worksheets/sheet{i}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for i in range(1, len(sheets) + 1)) + '</Types>')
         archive.writestr("_rels/.rels", '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
         archive.writestr("xl/workbook.xml", _workbook_xml([name for name, _, _ in sheets]))
-        archive.writestr("xl/_rels/workbook.xml.rels", '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + ''.join(f'<Relationship Id="rId{i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i}.xml"/>' for i in range(1, len(sheets) + 1)) + '<Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>')
+        archive.writestr("xl/_rels/workbook.xml.rels", '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + ''.join(f'<Relationship Id="rId{i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i}.xml"/>' for i in range(1, len(sheets) + 1)) + f'<Relationship Id="rId{len(sheets) + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>')
         archive.writestr("xl/styles.xml", _styles_xml())
         for index, (_, rows, widths) in enumerate(sheets, 1):
             archive.writestr(f"xl/worksheets/sheet{index}.xml", _sheet_xml(rows, widths))
