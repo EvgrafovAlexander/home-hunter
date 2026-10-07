@@ -50,6 +50,9 @@ def telegram_webhook(request):
 MARKET_MIN_ROOM_GROUP = 8
 MARKET_MIN_DISTRICT_GROUP = 12
 MICRODISTRICT_MARKET_MIN_SAMPLE = 5
+# Candidate/review threshold.  Smaller listings remain in the database and in
+# the market-comparison pool, but are not shown as purchase candidates.
+MIN_TARGET_AREA = Decimal("55")
 
 
 def _next_at(now, hour: int, minute: int):
@@ -214,6 +217,9 @@ def add_market_position(listings):
         listing.market_delta_pct = None
         listing.market_reference = ""
         listing.market_samples = 0
+        listing.market_strict_samples = 0
+        listing.market_fallback_samples = 0
+        listing.market_confidence = "none"
         listing.market_state = ""
         listing.market_label = ""
         if (listing.price_per_sqm is None or not listing.district
@@ -228,16 +234,33 @@ def add_market_position(listings):
         same_room = [(area, price) for pk, rooms, area, price in local_prices
                      if pk != listing.pk and rooms == listing.rooms]
         all_local_prices = [price for pk, _, _, price in local_prices if pk != listing.pk]
-        similar = [price for area, price in same_room if abs(area - float(listing.area)) <= 10]
-        if len(similar) >= MARKET_MIN_SIMILAR:
-            prices, reference = similar, "похожим квартирам"
+        similar = [(area, price) for area, price in same_room if abs(area - float(listing.area)) <= 10]
+        strict_similar = [(area, price) for area, price in similar if area >= float(MIN_TARGET_AREA)]
+        if float(listing.area) >= float(MIN_TARGET_AREA) and len(strict_similar) >= MARKET_MIN_SIMILAR:
+            prices, reference = [price for _, price in strict_similar], "похожим квартирам от 55 м²"
+            listing.market_strict_samples = len(strict_similar)
+            listing.market_confidence = "high"
+        elif float(listing.area) >= float(MIN_TARGET_AREA) and len(similar) >= MARKET_MIN_SIMILAR:
+            prices, reference = [price for _, price in similar], "похожим квартирам (включая 45–54 м²)"
+            listing.market_strict_samples = len(strict_similar)
+            listing.market_fallback_samples = len(similar) - len(strict_similar)
+            listing.market_confidence = "medium"
+        elif len(similar) >= MARKET_MIN_SIMILAR:
+            prices, reference = [price for _, price in similar], "похожим квартирам"
+            listing.market_confidence = "medium"
         elif len(same_room) >= MARKET_MIN_ROOM_GROUP:
             prices, reference = [price for _, price in same_room], f"{location_label} и комнатности"
+            listing.market_confidence = "low"
         elif len(all_local_prices) >= MARKET_MIN_DISTRICT_GROUP:
             prices, reference = all_local_prices, location_label
+            listing.market_confidence = "low"
         else:
             continue
         listing.market_samples = len(prices)
+        if not listing.market_strict_samples and float(listing.area) >= float(MIN_TARGET_AREA):
+            listing.market_strict_samples = len([price for area, price in similar if area >= float(MIN_TARGET_AREA)])
+        if not listing.market_fallback_samples and float(listing.area) >= float(MIN_TARGET_AREA):
+            listing.market_fallback_samples = max(0, listing.market_samples - listing.market_strict_samples)
         listing.market_reference = reference
         listing.market_delta_pct = round((float(listing.price_per_sqm) / float(median(prices)) - 1) * 100)
         if listing.market_delta_pct <= -4:
@@ -330,7 +353,12 @@ def add_listing_score(listings, preferences=None):
         market_confidence = min(1, (market_samples or 0) / 20)
         market_score = 50 + (market_score - 50) * market_confidence
         if market_samples:
-            reasons.append(f"цена сопоставлена с {market_samples} аналогами")
+            strict_samples = getattr(item, "market_strict_samples", 0)
+            fallback_samples = getattr(item, "market_fallback_samples", 0)
+            if fallback_samples:
+                reasons.append(f"цена сопоставлена с {strict_samples} аналогами от 55 м² и {fallback_samples} резервными")
+            else:
+                reasons.append(f"цена сопоставлена с {market_samples} аналогами")
         age_days = max(0, (now - item.first_seen_at).total_seconds() / 86400) if item.first_seen_at else 999
         if age_days <= 1:
             freshness_score = 100; reasons.append("добавлено сегодня")
@@ -526,6 +554,9 @@ def microdistrict_market_stats(listings, period_since, filters):
 @login_required
 def listing_feed(request):
     listings, filters = filtered_listings(request)
+    # Keep sub-55 m² records available for market statistics/comparables, but
+    # do not present them as purchase candidates in the main feed.
+    listings = listings.filter(area__gte=MIN_TARGET_AREA)
     preferences = scoring_preference_for(request.user)
     ordering = request.GET.get("sort", "new")
     sortings = {
@@ -564,6 +595,7 @@ def listing_feed(request):
 @login_required
 def shortlist(request):
     listings, filters = filtered_listings(request)
+    listings = listings.filter(area__gte=MIN_TARGET_AREA)
     if not request.GET.get("days"):
         listings = listings.filter(first_seen_at__gte=timezone.now() - timedelta(days=7))
         filters["days"] = "7"
@@ -589,6 +621,8 @@ def _review_queue(user):
         global_hides__is_active=True,
     ).exclude(
         user_hides__user=user,
+    ).filter(
+        area__gte=MIN_TARGET_AREA,
     ).exclude(
         reviews__author=user,
     ).order_by("-first_seen_at", "-id")
@@ -638,6 +672,7 @@ def review_queue(request):
         # already has a review; the sequential queue intentionally excludes
         # reviewed listings.
         listing = (Listing.objects.filter(pk=requested_id, is_active=True, is_visible=True)
+                   .filter(area__gte=MIN_TARGET_AREA)
                    .exclude(global_hides__is_active=True)
                    .exclude(user_hides__user=request.user).first())
     if listing is None:
@@ -774,7 +809,9 @@ def hidden_listing_feed(request):
 
 @login_required
 def listing_detail(request, listing_id: int):
-    listing = get_object_or_404(Listing, pk=listing_id)
+    # Sub-55 m² records remain available for market statistics, but are not
+    # candidate cards and must not be reachable as a purchase/review card.
+    listing = get_object_or_404(Listing, pk=listing_id, area__gte=MIN_TARGET_AREA)
     own_review = ListingReview.objects.filter(listing=listing, author=request.user).first()
     peer_reviews = (ListingReview.objects.filter(listing=listing).exclude(author=request.user)
                     .select_related("author").prefetch_related("tags")) if own_review else []
@@ -1302,12 +1339,14 @@ def scoring_settings(request):
 @login_required
 def listing_map(request):
     listings, filters = filtered_listings(request)
+    listings = listings.filter(area__gte=MIN_TARGET_AREA)
     map_listings = list(listings.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
                         .order_by("-first_seen_at")[:500])
     selected_listing_id = _integer(request.GET.get("listing"))
     selected_listing = None
     if selected_listing_id:
         selected_listing = (Listing.objects.filter(pk=selected_listing_id)
+                            .filter(area__gte=MIN_TARGET_AREA)
                             .exclude(latitude__isnull=True).exclude(longitude__isnull=True).first())
         if selected_listing and all(item.pk != selected_listing.pk for item in map_listings):
             map_listings.append(selected_listing)
@@ -1482,6 +1521,19 @@ def dashboard(request):
     } for change in changes if change["difference"] > 0), key=lambda change: change["difference"], reverse=True)[:10]
     microdistrict_stats = microdistrict_market_stats(market_listings, period_since, filters)
 
+    area_market_stats = []
+    for label, lower, upper in (("45–54 м²", Decimal("45"), Decimal("55")),
+                                ("55–64 м²", Decimal("55"), Decimal("65")),
+                                ("65+ м²", Decimal("65"), None)):
+        segment = market_listings.filter(area__gte=lower)
+        if upper is not None:
+            segment = segment.filter(area__lt=upper)
+        segment_prices = list(segment.exclude(price_per_sqm__isnull=True).values_list("price_per_sqm", flat=True))
+        area_market_stats.append({
+            "label": label, "count": segment.count(),
+            "median_sqm": int(median(segment_prices)) if segment_prices else None,
+        })
+
     def distribution(values, *, buckets, formatter):
         if not values:
             return []
@@ -1508,6 +1560,7 @@ def dashboard(request):
         "daily_max": max((item["count"] for item in daily), default=1) or 1,
         "district_stats": district_stats,
         "microdistrict_stats": microdistrict_stats,
+        "area_market_stats": area_market_stats,
         "microdistrict_min_sample": MICRODISTRICT_MARKET_MIN_SAMPLE,
         "price_drop_count": len(price_drops), "price_unchanged_count": max(0, len(price_changes) - len(changes)),
         "price_increase_count": sum(change["difference"] > 0 for change in changes),

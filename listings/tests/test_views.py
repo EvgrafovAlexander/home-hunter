@@ -19,7 +19,7 @@ class ListingViewsTests(TestCase):
         now = timezone.now()
         self.match = Listing.objects.create(
             source="cian", external_id="match", url="https://example.test/match", title="Двушка",
-            price=6_500_000, price_per_sqm=125_000, rooms=2, area="52.00", floor=4,
+            price=6_500_000, price_per_sqm=125_000, rooms=2, area="55.00", floor=4,
             floors_total=9, district="Кировский", first_seen_at=now - timedelta(hours=2),
         )
         Listing.objects.create(
@@ -58,6 +58,20 @@ class ListingViewsTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("listing_feed"), {"rooms": 2, "price_max": 7_000_000})
         self.assertContains(response, "Двушка")
+
+    def test_sub55_listings_are_not_candidates_or_review_queue_items(self):
+        small = Listing.objects.create(
+            source="avito", external_id="small", url="https://example.test/small", title="Маленькая",
+            price=5_000_000, price_per_sqm=120_000, rooms=2, area="54.90", district="Кировский",
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_feed"))
+        self.assertNotContains(response, "Маленькая")
+        response = self.client.get(reverse("review_queue"))
+        self.assertNotContains(response, "Маленькая")
+        response = self.client.get(reverse("review_queue"), {"listing": small.pk})
+        self.assertNotContains(response, "Маленькая")
+        self.assertEqual(self.client.get(reverse("listing_detail", args=[small.pk])).status_code, 404)
         self.assertNotContains(response, "Трешка")
         self.assertEqual(response.context["result_count"], 1)
         self.assertContains(response, reverse("listing_detail", args=[self.match.pk]))
@@ -130,7 +144,7 @@ class ListingViewsTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("listing_feed"))
         self.assertContains(response, "На 17% ниже рынка")
-        self.assertContains(response, "похожим квартирам, 5 аналогов")
+        self.assertContains(response, "похожим квартирам (включая 45–54 м²), 5 аналогов")
 
     def test_listing_score_rewards_market_discount_and_freshness(self):
         promising = Listing.objects.create(
@@ -158,7 +172,7 @@ class ListingViewsTests(TestCase):
             )
         candidate = Listing.objects.create(
             source="avito", external_id="score-best", url="https://example.test/best", title="Лучший по оценке",
-            price=5_000_000, price_per_sqm=100_000, rooms=2, area="52.00", district="Кировский",
+            price=5_000_000, price_per_sqm=100_000, rooms=2, area="55.00", district="Кировский",
             address="ул. Тестовая, 1", image_url="https://example.test/photo.jpg",
         )
         self.client.force_login(self.user)

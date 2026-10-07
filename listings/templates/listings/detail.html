@@ -24,7 +24,7 @@
       <div class="offer-content">
         <div class="price-row">
           <div><p class="offer-price">{% if item.price %}{{ item.price|intcomma }} ₽{% else %}Цена не указана{% endif %}</p>{% if item.price_per_sqm %}<p class="price-sqm">{{ item.price_per_sqm|intcomma }} ₽ за м²</p>{% endif %}</div>
-          {% if item.market_label %}<span class="market-position market-position--{{ item.market_state }}">{{ item.market_label }} <small>по {{ item.market_reference }}, {{ item.market_samples }} аналогов</small></span>{% endif %}
+          {% if item.market_label %}<span class="market-position market-position--{{ item.market_state }}">{{ item.market_label }} <small>по {{ item.market_reference }}, {{ item.market_samples }} аналогов{% if item.market_fallback_samples %}; резервных: {{ item.market_fallback_samples }}{% endif %}</small></span>{% endif %}
         </div>
         <div class="offer-facts">
           <div class="offer-fact"><span>Комнат</span><b>{% if item.rooms is not None %}{{ item.rooms }}{% else %}—{% endif %}</b></div>
