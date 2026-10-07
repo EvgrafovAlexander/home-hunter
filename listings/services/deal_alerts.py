@@ -58,6 +58,32 @@ def _telegram_fit_score(listing):
     return listing.score, getattr(listing, "score_reasons", [])
 
 
+def _telegram_personal_details(listing):
+    """Return concise, preference-driven explanations for the final score."""
+    user = get_user_model().objects.filter(username=settings.TG_REVIEW_DJANGO_USERNAME).first()
+    if not user:
+        return []
+    from listings.views import scoring_preference_for
+    preference = scoring_preference_for(user)
+    details = []
+    tier_labels = {"A": "Идеальная зона", "B": "Хорошая зона", "C": "Компромиссная зона", "D": "Не рассматривается"}
+    tier = getattr(listing, "geo_zone_tier", None)
+    if tier in tier_labels:
+        details.append(("plus" if tier in {"A", "B"} else "minus", tier_labels[tier]))
+    if preference.preferred_rooms:
+        rooms = {int(value) for value in preference.preferred_rooms if str(value).isdigit()}
+        details.append(("plus" if listing.rooms in rooms else "minus", "Комнатность соответствует цели" if listing.rooms in rooms else "Комнатность отличается от цели"))
+    if preference.min_area is not None or preference.max_area is not None:
+        fits = listing.area is not None and (preference.min_area is None or listing.area >= preference.min_area) and (preference.max_area is None or listing.area <= preference.max_area)
+        details.append(("plus" if fits else "minus", "Площадь соответствует диапазону" if fits else "Площадь вне заданного диапазона"))
+    if preference.floor_min is not None or preference.floor_max is not None:
+        fits = listing.floor is not None and (preference.floor_min is None or listing.floor >= preference.floor_min) and (preference.floor_max is None or listing.floor <= preference.floor_max)
+        details.append(("plus" if fits else "minus", "Этаж соответствует предпочтению" if fits else "Этаж ниже или выше предпочтения"))
+    if listing.repair_type in preference.preferred_repair_types:
+        details.append(("plus", "Состояние соответствует предпочтению"))
+    return details[:5]
+
+
 def refresh_telegram_listing_score(listing_id: int) -> bool:
     """Replace the temporary score in the already published message after geocoding."""
     try:
@@ -68,6 +94,13 @@ def refresh_telegram_listing_score(listing_id: int) -> bool:
     if score is None or not alert.message_id or not alert.message_text:
         return False
     text = re.sub(r"Оценка Home Hunter: [^<\n]+", f"Оценка Home Hunter: {score}/100", alert.message_text, count=1)
+    personal_details = _telegram_personal_details(alert.listing)
+    if personal_details:
+        text = re.sub(r"\n\n<b>По вашим настройкам:</b>\n.*?\n\nИсточник:", "\nИсточник:", text, count=1, flags=re.S)
+        blocks = ["<b>По вашим настройкам:</b>"]
+        blocks.extend(("✅ " if kind == "plus" else "⚠️ ") + html.escape(label) for kind, label in personal_details)
+        personal_block = "\n".join(blocks)
+        text = text.replace("\nИсточник:", f"\n\n{personal_block}\n\nИсточник:", 1)
     if not edit_telegram_message(chat_id=alert.chat_id or settings.TG_CHANNEL_ID, message_id=alert.message_id,
                                  text=text, message_kind=alert.message_kind or "text", parse_mode="HTML"):
         return False
