@@ -20,7 +20,7 @@ from django.utils import timezone
 from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, District, GlobalListingHide,
                      Listing, ListingReview, ListingReviewRevision, ListingSearchQuery, ListingSnapshot, ManualDomclickJob,
                      Microdistrict, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
-                     StreetAssignment, UserListingHide, MicrodistrictBoundary)
+                     StreetAssignment, UserListingHide, MicrodistrictBoundary, GeoZone)
 from .services.enrichment import location_is_visible, parse_address
 from .services.location_directory import apply_location_rules_for_assignments, location_is_visible_with_rules
 from .services.microdistrict_polygons import (canonical_microdistrict_name, load_polygons,
@@ -29,6 +29,7 @@ from .services.change_history import change_events
 from .services.polling import default_polling_enabled
 from .services.scan_health import cian_detail_health
 from .services.telegram_reviews import handle_update
+from .services.personal_filters import apply_scalar_hard_filters, annotate_personal_filter
 
 
 SCAN_STALE_AFTER = timedelta(hours=6)
@@ -277,6 +278,19 @@ def add_market_position(listings):
 
 def scoring_preference_for(user):
     return ScoringPreference.objects.filter(user=user).first() or ScoringPreference(user=user)
+
+
+def personal_candidate_queryset(queryset, user):
+    """Apply configured hard filters, including user GeoZone polygons."""
+    preference = scoring_preference_for(user)
+    queryset = apply_scalar_hard_filters(queryset, preference)
+    zones = list(GeoZone.objects.filter(user=user, is_active=True))
+    if not zones:
+        return queryset
+    # The current GeoJSON implementation is deliberately bounded to the same
+    # candidate window used by the feed.  A future PostGIS migration can push
+    # this predicate into SQL without changing the view contract.
+    return annotate_personal_filter(list(queryset[:1000]), user)
 
 
 # Centres of the requested Ufa areas. Their overlapping radii form the target corridors.
@@ -558,6 +572,7 @@ def listing_feed(request):
     # do not present them as purchase candidates in the main feed.
     listings = listings.filter(area__gte=MIN_TARGET_AREA)
     preferences = scoring_preference_for(request.user)
+    listings = personal_candidate_queryset(listings, request.user)
     ordering = request.GET.get("sort", "new")
     sortings = {
         "new": "-first_seen_at", "price_up": "price", "price_down": "-price",
@@ -565,14 +580,30 @@ def listing_feed(request):
     }
     if ordering not in sortings:
         ordering = "new"
+    if isinstance(listings, list):
+        candidates = listings
+        candidate_count = len(candidates)
+        candidates.sort(key=lambda item: (item.first_seen_at, item.id), reverse=True)
+    else:
+        candidate_count = listings.count()
+        candidates = list(listings.order_by("-first_seen_at", "-id")[:500])
     if ordering == "score":
-        page_listings = list(listings.order_by("-first_seen_at", "-id")[:500])
+        page_listings = candidates[:500]
         add_market_position(page_listings)
         add_listing_score(page_listings, preferences)
         page_listings.sort(key=lambda item: (-item.score, -item.first_seen_at.timestamp()))
         page_listings = page_listings[:200]
     else:
-        page_listings = list(listings.order_by(sortings[ordering], "-id")[:200])
+        page_listings = candidates
+        if ordering == "price_up":
+            page_listings.sort(key=lambda item: (item.price is None, item.price or 0, -item.id))
+        elif ordering == "price_down":
+            page_listings.sort(key=lambda item: (item.price is not None, item.price or 0, item.id), reverse=True)
+        elif ordering == "sqm_up":
+            page_listings.sort(key=lambda item: (item.price_per_sqm is None, item.price_per_sqm or 0, -item.id))
+        elif ordering == "area_down":
+            page_listings.sort(key=lambda item: (item.area is not None, item.area or 0, item.id), reverse=True)
+        page_listings = page_listings[:200]
         add_market_position(page_listings)
         add_listing_score(page_listings, preferences)
     # Keep the personal review visible alongside the automatic score.  Reviews
@@ -587,7 +618,7 @@ def listing_feed(request):
                              else "reject" if item.my_review else "pending")
     return render(request, "listings/feed.html", {
         "listings": page_listings,
-        "result_count": listings.count(), "filters": filters, "filter_options": filter_options(),
+        "result_count": candidate_count, "filters": filters, "filter_options": filter_options(),
         "sort": ordering,
     })
 
@@ -599,7 +630,8 @@ def shortlist(request):
     if not request.GET.get("days"):
         listings = listings.filter(first_seen_at__gte=timezone.now() - timedelta(days=7))
         filters["days"] = "7"
-    recent = list(listings.order_by("-first_seen_at", "-id")[:500])
+    listings = personal_candidate_queryset(listings, request.user)
+    recent = (listings if isinstance(listings, list) else list(listings.order_by("-first_seen_at", "-id")[:500]))
     add_market_position(recent)
     add_listing_score(recent, scoring_preference_for(request.user))
     best = [item for item in recent if item.market_state == "below"]
@@ -664,7 +696,7 @@ def _save_review(request, listing):
 
 @login_required
 def review_queue(request):
-    queue = _review_queue(request.user)
+    queue = personal_candidate_queryset(_review_queue(request.user), request.user)
     requested_id = _integer(request.GET.get("listing") or request.POST.get("listing_id"))
     listing = None
     if requested_id:
@@ -675,8 +707,10 @@ def review_queue(request):
                    .filter(area__gte=MIN_TARGET_AREA)
                    .exclude(global_hides__is_active=True)
                    .exclude(user_hides__user=request.user).first())
+        if listing:
+            listing = next(iter(annotate_personal_filter([listing], request.user)), None)
     if listing is None:
-        listing = queue.first()
+        listing = queue[0] if isinstance(queue, list) and queue else queue.first() if not isinstance(queue, list) else None
     if request.method == "POST":
         if not listing:
             return redirect("review_queue")
@@ -812,6 +846,7 @@ def listing_detail(request, listing_id: int):
     # Sub-55 m² records remain available for market statistics, but are not
     # candidate cards and must not be reachable as a purchase/review card.
     listing = get_object_or_404(Listing, pk=listing_id, area__gte=MIN_TARGET_AREA)
+    annotate_personal_filter([listing], request.user)
     own_review = ListingReview.objects.filter(listing=listing, author=request.user).first()
     peer_reviews = (ListingReview.objects.filter(listing=listing).exclude(author=request.user)
                     .select_related("author").prefetch_related("tags")) if own_review else []
@@ -1313,7 +1348,10 @@ def scoring_settings(request):
     preference, _ = ScoringPreference.objects.get_or_create(user=request.user)
     if request.method == "POST":
         preference.min_area = _decimal(request.POST.get("min_area"))
+        preference.max_area = _decimal(request.POST.get("max_area"))
         preference.min_kitchen_area = _decimal(request.POST.get("min_kitchen_area"))
+        preference.max_price = _integer(request.POST.get("max_price"))
+        preference.preferred_rooms = [value for value in request.POST.getlist("preferred_rooms") if value.isdigit()]
         preference.floor_min = _integer(request.POST.get("floor_min"))
         preference.floor_max = _integer(request.POST.get("floor_max"))
         if preference.floor_min and preference.floor_max and preference.floor_min > preference.floor_max:
@@ -1337,11 +1375,51 @@ def scoring_settings(request):
 
 
 @login_required
+def geo_zones(request):
+    if request.method == "POST":
+        action = request.POST.get("action", "save")
+        if action == "delete":
+            GeoZone.objects.filter(pk=request.POST.get("zone_id"), user=request.user).delete()
+            return redirect("geo_zones")
+        name = (request.POST.get("name") or "").strip()
+        tier = request.POST.get("tier")
+        try:
+            geometry = json.loads(request.POST.get("geometry") or "")
+        except (TypeError, ValueError):
+            geometry = None
+        if (not name or tier not in GeoZone.Tier.values or not isinstance(geometry, dict)
+                or geometry.get("type") not in {"Polygon", "MultiPolygon"}):
+            messages.error(request, "Укажите название, уровень и GeoJSON Polygon/MultiPolygon.")
+            return redirect("geo_zones")
+        GeoZone.objects.update_or_create(
+            user=request.user, name=name,
+            defaults={"tier": tier, "geometry": geometry, "is_active": True},
+        )
+        messages.success(request, f"Зона «{name}» сохранена.")
+        return redirect("geo_zones")
+    zones = list(GeoZone.objects.filter(user=request.user))
+    return render(request, "listings/geo_zones.html", {
+        "zones": zones,
+        "zones_json": json.dumps([
+            {"name": zone.name, "tier": zone.tier, "geometry": zone.geometry}
+            for zone in zones
+        ], ensure_ascii=False),
+        "tiers": GeoZone.Tier.choices,
+    })
+
+
+@login_required
 def listing_map(request):
     listings, filters = filtered_listings(request)
     listings = listings.filter(area__gte=MIN_TARGET_AREA)
-    map_listings = list(listings.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
-                        .order_by("-first_seen_at")[:500])
+    listings = personal_candidate_queryset(listings, request.user)
+    if isinstance(listings, list):
+        map_listings = [item for item in listings if item.latitude is not None and item.longitude is not None]
+        map_listings.sort(key=lambda item: (item.first_seen_at, item.id), reverse=True)
+        map_listings = map_listings[:500]
+    else:
+        map_listings = list(listings.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
+                            .order_by("-first_seen_at")[:500])
     selected_listing_id = _integer(request.GET.get("listing"))
     selected_listing = None
     if selected_listing_id:

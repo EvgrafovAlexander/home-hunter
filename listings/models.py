@@ -117,7 +117,10 @@ class ScoringPreference(models.Model):
     """Personal scoring settings, deliberately separate from shared market data."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="scoring_preference")
     min_area = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    max_area = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
     min_kitchen_area = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    max_price = models.BigIntegerField(null=True, blank=True)
+    preferred_rooms = models.JSONField(default=list, blank=True)
     floor_min = models.PositiveSmallIntegerField(null=True, blank=True)
     floor_max = models.PositiveSmallIntegerField(null=True, blank=True)
     preferred_districts = models.JSONField(default=list, blank=True)
@@ -136,6 +139,29 @@ class ScoringPreference(models.Model):
     condition_weight = models.PositiveSmallIntegerField(default=25)
     use_ufa_target_zones = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class GeoZone(models.Model):
+    class Tier(models.TextChoices):
+        A = "A", "Идеальная зона"
+        B = "B", "Хорошая зона"
+        C = "C", "Компромиссная зона"
+        D = "D", "Не рассматриваю"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="geo_zones")
+    name = models.CharField(max_length=120)
+    tier = models.CharField(max_length=1, choices=Tier.choices)
+    geometry = models.JSONField(help_text="GeoJSON Polygon или MultiPolygon")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("tier", "name", "id")
+        constraints = [models.UniqueConstraint(fields=("user", "name"), name="unique_user_geo_zone_name")]
+
+    def __str__(self):
+        return f"{self.name} ({self.tier})"
 
 
 class Listing(models.Model):

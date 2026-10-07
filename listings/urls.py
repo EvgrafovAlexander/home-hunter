@@ -19,6 +19,7 @@ urlpatterns = [
     path("data-quality/", views.data_quality, name="data_quality"),
     path("directory/", views.location_directory, name="location_directory"),
     path("scoring-settings/", views.scoring_settings, name="scoring_settings"),
+    path("geo-zones/", views.geo_zones, name="geo_zones"),
     path("map/", views.listing_map, name="listing_map"),
     path("microdistricts/map/", views.microdistrict_map, name="microdistrict_map"),
     path("api/domclick-agent/jobs/next/", agent_views.next_domclick_job),
