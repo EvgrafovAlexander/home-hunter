@@ -26,9 +26,11 @@ const colors={A:'#16805d',B:'#3b82f6',C:'#d38b16',D:'#b42318'}, labels={A:'Ид�
 const data=JSON.parse(document.getElementById('zones-data').textContent);
 data.forEach(zone=>{zoneLayers[zone.id]=L.geoJSON(zone.geometry,{style:{color:colors[zone.tier]||'#555',fillOpacity:.16}}).bindTooltip(zone.name+' · '+(labels[zone.tier]||zone.tier)).addTo(drawn)});
 map.pm.addControls({position:'topleft',drawText:false,drawCircle:false,drawCircleMarker:false,drawPolyline:false,drawRectangle:false,drawMarker:false,editMode:false,dragMode:false,cutPolygon:false});
-let current=null;
-map.on('pm:create',event=>{if(current)drawn.removeLayer(current);current=event.layer;drawn.addLayer(current);document.getElementById('zone-geometry').value=JSON.stringify(current.toGeoJSON().geometry);});
-document.querySelectorAll('.edit-zone').forEach(button=>button.addEventListener('click',()=>{const zone=data.find(item=>String(item.id)===button.dataset.zoneId);if(!zone)return;document.getElementById('zone-id').value=zone.id;document.getElementById('zone-name').value=zone.name;document.getElementById('zone-tier').value=zone.tier;document.getElementById('zone-submit').textContent='Сохранить изменения';document.getElementById('zone-geometry').value=JSON.stringify(zone.geometry);if(current)drawn.removeLayer(current);current=L.geoJSON(zone.geometry,{style:{color:colors[zone.tier]||'#555',fillOpacity:.28}}).addTo(drawn);map.fitBounds(current.getBounds().pad(.2));}));
+let current=null,currentEditable=null;
+const updateGeometry=()=>{if(currentEditable)document.getElementById('zone-geometry').value=JSON.stringify(currentEditable.toGeoJSON().geometry);};
+map.on('pm:create',event=>{if(current)drawn.removeLayer(current);current=event.layer;currentEditable=event.layer;drawn.addLayer(current);updateGeometry();});
+map.on('pm:edit',event=>{if(event.layer===currentEditable)updateGeometry();});
+document.querySelectorAll('.edit-zone').forEach(button=>button.addEventListener('click',()=>{const zone=data.find(item=>String(item.id)===button.dataset.zoneId);if(!zone)return;document.getElementById('zone-id').value=zone.id;document.getElementById('zone-name').value=zone.name;document.getElementById('zone-tier').value=zone.tier;document.getElementById('zone-submit').textContent='Сохранить изменения';if(current)drawn.removeLayer(current);current=L.geoJSON(zone.geometry,{style:{color:colors[zone.tier]||'#555',fillOpacity:.28}}).addTo(drawn);currentEditable=current.getLayers()[0];currentEditable.pm.enable({allowSelfIntersection:false});updateGeometry();map.fitBounds(current.getBounds().pad(.2));}));
 document.getElementById('zone-form').addEventListener('submit',event=>{if(!document.getElementById('zone-geometry').value){event.preventDefault();alert('Сначала нарисуйте Polygon на карте.')}});
 </script>
 {% endblock %}
