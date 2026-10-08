@@ -165,6 +165,21 @@ def edit_telegram_message(*, chat_id, message_id, text, message_kind="text", par
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} if settings.TELEGRAM_PROXY_URL else None
     try:
         response = requests.post(f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/{method}", data=data, proxies=proxies, timeout=20)
+        if response.ok:
+            return True
+        # sendPhoto can fail and fall back to sendMessage. Older rows stored
+        # the intended photo kind, so retry those edits as text when Telegram
+        # confirms there is no caption to edit.
+        if message_kind == "photo" and "there is no caption in the message" in response.text.lower():
+            text_data = {"chat_id": chat_id, "message_id": message_id, "text": text}
+            if parse_mode:
+                text_data["parse_mode"] = parse_mode
+            fallback = requests.post(
+                f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/editMessageText",
+                data=text_data, proxies=proxies, timeout=20,
+            )
+            if fallback.ok:
+                return True
         response.raise_for_status()
         return True
     except requests.RequestException as exc:

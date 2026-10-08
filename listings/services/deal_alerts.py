@@ -35,11 +35,14 @@ def _send_reviewable_listing(listing, text):
         {"text": "Открыть объявление", "url": listing.url},
         {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"},
     ]]}
+    message_kind = "photo" if listing.image_url else "text"
     result = send_telegram_photo_result(listing.image_url, text, initial_keyboard, chat_id=settings.TG_CHANNEL_ID, parse_mode="HTML") if listing.image_url else None
     if not result:
         result = send_telegram_message_result(text, initial_keyboard, chat_id=settings.TG_CHANNEL_ID, parse_mode="HTML")
+        message_kind = "text"
     if not result:
         return None
+    result["_home_hunter_message_kind"] = message_kind
     if not settings.TG_BOT_USERNAME:
         logger.warning("TG_BOT_USERNAME is not configured; review deep link was not added")
         return result
@@ -114,6 +117,20 @@ def refresh_telegram_listing_score(listing_id: int) -> bool:
     alert.score_updated_at = timezone.now()
     alert.save(update_fields=("score", "reasons", "message_text", "score_ready", "score_updated_at"))
     return True
+
+
+def refresh_pending_telegram_scores(limit: int = 40) -> int:
+    """Retry Telegram edits that failed after an alert was initially sent."""
+    alerts = (TelegramListingAlert.objects
+              .filter(score_ready=False, message_id__isnull=False)
+              .exclude(message_text="")
+              .select_related("listing")
+              .order_by("sent_at")[:limit])
+    refreshed = 0
+    for alert in alerts:
+        if refresh_telegram_listing_score(alert.listing_id):
+            refreshed += 1
+    return refreshed
 
 
 def _listing_score(listing):
@@ -258,7 +275,7 @@ def notify_new_listing(listing_id: int) -> bool:
         TelegramListingAlert.objects.create(
             listing=listing, score=None, is_deal=is_deal, reasons=reasons,
             chat_id=str(settings.TG_CHANNEL_ID), message_id=result.get("message_id"),
-            message_kind="photo" if listing.image_url else "text", message_text=text,
+            message_kind=result.get("_home_hunter_message_kind", "text"), message_text=text,
         )
     except IntegrityError:
         logger.info("Telegram listing alert was already recorded for listing=%s", listing_id)

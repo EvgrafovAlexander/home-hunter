@@ -46,4 +46,7 @@ class Command(BaseCommand):
             from listings.services.deal_alerts import refresh_telegram_listing_score
             refresh_telegram_listing_score(listing.pk)
             self.stdout.write(f"{listing.pk}: {listing.geocode_status}")
+        from listings.services.deal_alerts import refresh_pending_telegram_scores
+        refreshed = refresh_pending_telegram_scores()
         self.stdout.write(f"Processed {len(listings)} listing(s)")
+        self.stdout.write(f"Refreshed {refreshed} pending Telegram score(s)")
