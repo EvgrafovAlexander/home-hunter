@@ -2,11 +2,25 @@ from unittest.mock import patch
 
 import pytest
 
-from listings.models import DealAlert, Listing
-from listings.services.deal_alerts import notify_new_deal
+from listings.models import DealAlert, Listing, TelegramListingAlert
+from listings.services.deal_alerts import notify_new_deal, notify_new_listing
 
 
 pytestmark = pytest.mark.django_db
+
+
+def test_new_listing_alert_excludes_sub_55_square_meters(settings):
+    settings.TG_LISTING_ALERTS_ENABLED = True
+    settings.TG_CHANNEL_ID = "-100123"
+    listing = Listing.objects.create(
+        source="avito", external_id="small-new", url="https://example.test/small-new",
+        title="2-к. квартира", price=10_500_000, price_per_sqm=233_333,
+        rooms=2, area="45.00", district="Ленинский", is_visible=True,
+    )
+    with patch("listings.services.deal_alerts._send_reviewable_listing") as send:
+        assert not notify_new_listing(listing.pk)
+    send.assert_not_called()
+    assert not TelegramListingAlert.objects.filter(listing=listing).exists()
 
 
 def test_notifies_once_for_a_new_listing_below_local_market(settings):

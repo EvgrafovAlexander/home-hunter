@@ -1,6 +1,7 @@
 import html
 import logging
 import re
+from decimal import Decimal
 from statistics import median
 
 from django.conf import settings
@@ -15,6 +16,8 @@ from listings.services.scan_health import (edit_telegram_message, edit_telegram_
 
 logger = logging.getLogger(__name__)
 MIN_SIMILAR, MIN_ROOM_GROUP, MIN_LOCATION_GROUP = 5, 8, 12
+# Keep Telegram's new-listing feed aligned with the purchase-candidate feed.
+MIN_TARGET_AREA = Decimal("55")
 
 
 def _review_keyboard(listing, channel_message_id):
@@ -180,7 +183,8 @@ def notify_new_listing(listing_id: int) -> bool:
     if not settings.TG_LISTING_ALERTS_ENABLED or not getattr(settings, "TG_CHANNEL_ID", ""):
         return False
     listing = Listing.objects.get(pk=listing_id)
-    if not listing.is_visible or TelegramListingAlert.objects.filter(listing=listing).exists():
+    if (not listing.is_visible or listing.area is None or listing.area < MIN_TARGET_AREA
+            or TelegramListingAlert.objects.filter(listing=listing).exists()):
         return False
     score, discount, reasons = _listing_score(listing)
     market = market_position_details(listing)
