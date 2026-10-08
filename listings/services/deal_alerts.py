@@ -108,7 +108,8 @@ def refresh_telegram_listing_score(listing_id: int) -> bool:
         personal_block = "\n".join(blocks)
         text = text.replace("\nИсточник:", f"\n\n{personal_block}\n\nИсточник:", 1)
     if not edit_telegram_message(chat_id=alert.chat_id or settings.TG_CHANNEL_ID, message_id=alert.message_id,
-                                 text=text, message_kind=alert.message_kind or "text", parse_mode="HTML"):
+                                 text=text, message_kind=alert.message_kind or "text", parse_mode="HTML",
+                                 reply_markup=_review_keyboard(alert.listing, alert.message_id)):
         return False
     alert.score = score
     alert.reasons = reasons

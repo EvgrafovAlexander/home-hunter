@@ -154,14 +154,16 @@ def edit_telegram_reply_markup(*, chat_id, message_id, reply_markup) -> bool:
         return False
 
 
-def edit_telegram_message(*, chat_id, message_id, text, message_kind="text", parse_mode=None) -> bool:
-    """Replace the text/caption of a previously published Telegram message."""
+def edit_telegram_message(*, chat_id, message_id, text, message_kind="text", parse_mode=None, reply_markup=None) -> bool:
+    """Replace a message's text/caption while keeping its inline keyboard."""
     if not settings.TG_BOT_TOKEN or not chat_id or not message_id:
         return False
     method = "editMessageCaption" if message_kind == "photo" else "editMessageText"
     data = {"chat_id": chat_id, "message_id": message_id, "caption" if message_kind == "photo" else "text": text}
     if parse_mode:
         data["parse_mode"] = parse_mode
+    if reply_markup:
+        data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} if settings.TELEGRAM_PROXY_URL else None
     try:
         response = requests.post(f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/{method}", data=data, proxies=proxies, timeout=20)
@@ -174,6 +176,8 @@ def edit_telegram_message(*, chat_id, message_id, text, message_kind="text", par
             text_data = {"chat_id": chat_id, "message_id": message_id, "text": text}
             if parse_mode:
                 text_data["parse_mode"] = parse_mode
+            if reply_markup:
+                text_data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
             fallback = requests.post(
                 f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/editMessageText",
                 data=text_data, proxies=proxies, timeout=20,
