@@ -123,6 +123,7 @@ TG_POLLING_TIMEOUT = int(os.getenv("TG_POLLING_TIMEOUT", "25"))
 TG_LISTING_ALERTS_ENABLED = os.getenv("TG_LISTING_ALERTS_ENABLED", "false").lower() == "true"
 TG_PRICE_ALERTS_ENABLED = os.getenv("TG_PRICE_ALERTS_ENABLED", "false").lower() == "true"
 TG_PRICE_ALERT_MIN_PERCENT = float(os.getenv("TG_PRICE_ALERT_MIN_PERCENT", "3"))
+TG_PRICE_ALERT_MIN_AREA = float(os.getenv("TG_PRICE_ALERT_MIN_AREA", "55"))
 TELEGRAM_PROXY_URL = os.getenv("TELEGRAM_PROXY_URL", "")
 TG_DEAL_ALERTS_ENABLED = os.getenv("TG_DEAL_ALERTS_ENABLED", "false").lower() == "true"
 TG_DEAL_MIN_DISCOUNT_PERCENT = int(os.getenv("TG_DEAL_MIN_DISCOUNT_PERCENT", "7"))
