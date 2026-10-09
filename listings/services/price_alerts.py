@@ -60,7 +60,8 @@ def notify_price_change(listing_id: int, old_price: int | None, new_price: int |
     change_percent = (new_price - old_price) / old_price * 100
     if abs(change_percent) < settings.TG_PRICE_ALERT_MIN_PERCENT:
         return False
-    target = settings.TG_CHANNEL_ID if change_percent < 0 else settings.TG_CHAT_ID
+    # Keep all price events in the public feed and link them to the original post.
+    target = settings.TG_CHANNEL_ID
     if not target or TelegramPriceAlert.objects.filter(
         listing=listing, old_price=old_price, new_price=new_price,
     ).exists():
