@@ -30,8 +30,16 @@ def _review_keyboard(listing, channel_message_id):
 
 
 def _send_reviewable_listing(listing, text):
-    """Publish first, then add a deep link containing its message id."""
+    """Publish with useful links immediately, then add the Telegram deep link.
+
+    The message id is only known after sending, so the Telegram review link
+    is added in a second API call.  Keep the web review link in the initial
+    keyboard as well: a failed markup edit must never leave the notification
+    without links.
+    """
     initial_keyboard = {"inline_keyboard": [[
+        {"text": "📝 Оценить в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/reviews/?listing={listing.pk}"},
+    ], [
         {"text": "Открыть объявление", "url": listing.url},
         {"text": "Открыть в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/listings/{listing.pk}/"},
     ]]}
