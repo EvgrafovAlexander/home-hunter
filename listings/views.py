@@ -8,11 +8,12 @@ from statistics import median
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth.decorators import login_required
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Avg, Count, F, Max, Q
 from django.db.models.functions import TruncDate
-from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
+from django.http import FileResponse, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
@@ -30,6 +31,7 @@ from .services.polling import default_polling_enabled
 from .services.scan_health import cian_detail_health
 from .services.telegram_reviews import handle_update
 from .services.personal_filters import apply_scalar_hard_filters, annotate_personal_filter
+from .services.database_backup import BackupError, create_database_backup
 
 
 SCAN_STALE_AFTER = timedelta(hours=6)
@@ -828,6 +830,24 @@ def market_export_xlsx(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response["Content-Disposition"] = 'attachment; filename="home-hunter-market-export.xlsx"'
+    return response
+
+
+@staff_member_required
+def database_backup(request):
+    if request.method == "GET":
+        return render(request, "listings/database_backup.html")
+    if request.method != "POST":
+        return HttpResponse(status=405)
+    try:
+        file_obj, filename, size = create_database_backup()
+    except BackupError as exc:
+        return render(request, "listings/database_backup.html", {"error": str(exc)}, status=503)
+    response = FileResponse(
+        file_obj, as_attachment=True, filename=filename,
+        content_type="application/octet-stream",
+    )
+    response["Content-Length"] = str(size)
     return response
 
 

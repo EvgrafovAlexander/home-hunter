@@ -165,6 +165,16 @@ image, выполните migrate и `docker compose up -d`. Не использ
 docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > home_hunter.sql
 ```
 
+Для ручной выгрузки через интерфейс используйте SSH-туннель (домен не нужен):
+```bash
+ssh -L 8080:127.0.0.1:80 root@SERVER_IP
+```
+Добавьте `127.0.0.1,localhost` в `DJANGO_ALLOWED_HOSTS` production `.env`, затем
+перезапустите web. После этого откройте `http://127.0.0.1:8080/admin/backups/`, войдите staff-пользователем
+и нажмите «Создать и скачать backup». Файл `.dump` скачивается на ноутбук и удаляется
+из временной директории сервера после передачи. Не открывайте этот раздел через обычный
+публичный HTTP: backup содержит всю базу HomeHunter.
+
 Когда появится домен, замените deploy/Caddyfile:
 ```caddy
 homehunter.example.com {

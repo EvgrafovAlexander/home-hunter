@@ -13,6 +13,9 @@ COPY manage.py .
 RUN DJANGO_SECRET_KEY=build-only-static-key python manage.py collectstatic --noinput
 
 FROM base AS web
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 USER app
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "2", "--timeout", "60"]
 
