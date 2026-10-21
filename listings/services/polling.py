@@ -1,4 +1,12 @@
+from django.conf import settings
+from django.utils import timezone
 from listings.models import Scan, SearchQuery, SourcePollingControl
+
+
+def cian_polling_allowed(moment=None) -> bool:
+    """Hard daytime guard for CIAN, including long-running batches."""
+    hour = timezone.localtime(moment or timezone.now()).hour
+    return settings.CIAN_POLL_START_HOUR <= hour < settings.CIAN_POLL_END_HOUR
 
 
 def default_polling_enabled(source: str, mode: str) -> bool:

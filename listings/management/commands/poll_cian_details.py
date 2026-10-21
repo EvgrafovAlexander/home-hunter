@@ -14,6 +14,7 @@ from collectors.routing import resolve_profile
 from listings.models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, Listing,
                              ListingSnapshot, PriceHistory)
 from listings.services.persistence import snapshot_data_from_listing
+from listings.services.polling import cian_polling_allowed
 from listings.services.enrichment import calculate_price_per_sqm, location_is_visible, parse_address
 from listings.services.location_directory import location_is_excluded, resolve_location
 from listings.services.microdistrict_polygons import enrich_listing_from_coordinates
@@ -186,6 +187,9 @@ class Command(BaseCommand):
         limit = options["limit"]
         if limit < 1 or limit > 20:
             raise CommandError("--limit must be between 1 and 20")
+        if not cian_polling_allowed():
+            self.stdout.write("CIAN detail polling is outside the daytime window")
+            return
         with connection.cursor() as cursor:
             cursor.execute("SELECT pg_try_advisory_lock(%s)", [LOCK_ID])
             if not cursor.fetchone()[0]:
@@ -208,6 +212,9 @@ class Command(BaseCommand):
     async def poll(self, candidates, progress_id, headless, profile):
         async with CianCollector(headless=headless, route=profile.route, session_mode=profile.session_mode) as collector:
             for listing in candidates:
+                if not cian_polling_allowed():
+                    self.stdout.write("CIAN daytime window ended; stopping detail batch")
+                    break
                 try:
                     await sync_to_async(set_current)(progress_id, listing.pk)
                     detail = await collector.poll_detail(listing)

@@ -8,7 +8,7 @@ from django.conf import settings
 from collectors.registry import get_collector
 from collectors.routing import resolve_profile
 from listings.models import Scan, SearchQuery
-from listings.services.polling import polling_enabled
+from listings.services.polling import cian_polling_allowed, polling_enabled
 from listings.services.scans import run_scan
 
 LOCK_ID = 724198501
@@ -32,6 +32,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if not polling_enabled(options["source"], options["mode"]):
             self.stdout.write(f"{options['mode'].title()} polling disabled for {options['source']}")
+            return
+        if options["source"] == "cian" and not cian_polling_allowed():
+            self.stdout.write("CIAN polling is outside the daytime window")
             return
         if options["headless"] is None:
             options["headless"] = options["source"] not in {"cian", "domclick"}
@@ -86,6 +89,9 @@ class Command(BaseCommand):
             collector.session_mode = profile.session_mode
         async with collector:
             for search in searches:
+                if options["source"] == "cian" and not cian_polling_allowed():
+                    self.stdout.write("CIAN daytime window ended; stopping scan batch")
+                    break
                 scan = await sync_to_async(run_scan)(search, collector, mode=options["mode"], profile=profile)
                 self.stdout.write(f"Scan {scan.pk}: {scan.status}, new={scan.new_items}, price_changes={scan.price_changes}")
                 failed += scan.status == Scan.Status.FAILED
