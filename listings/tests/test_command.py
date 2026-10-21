@@ -21,7 +21,10 @@ def test_command_one_collector_sequential_searches(search, item):
     collector.collect.return_value = CollectionResult([item], 1, 1, True)
     with patch("listings.management.commands.collect_listings.get_collector", return_value=collector) as factory:
         call_command("collect_listings", source="avito", mode="fast", headless=False, stdout=StringIO())
-    factory.assert_called_once_with("avito", headless=False, manual_wait_seconds=0)
+    assert factory.call_args.args == ("avito",)
+    assert factory.call_args.kwargs["headless"] is False
+    assert factory.call_args.kwargs["manual_wait_seconds"] == 0
+    assert factory.call_args.kwargs["profile"].code == "avito_default"
     assert collector.collect.await_count == 2
     assert collector.__aexit__.await_count == 1
     assert Scan.objects.filter(status="success").count() == 2
@@ -143,4 +146,7 @@ def test_polling_diagnostic_worker_processes_queued_job(search, item, tmp_path):
     assert "scan start" in job.log
     assert collector.browser_profile_dir == production_dir / "chromium"
     assert "постоянный профиль браузера" in job.log
-    factory.assert_called_once_with("avito", headless=False, manual_wait_seconds=0)
+    assert factory.call_args.args == ("avito",)
+    assert factory.call_args.kwargs["headless"] is False
+    assert factory.call_args.kwargs["manual_wait_seconds"] == 0
+    assert factory.call_args.kwargs["profile"].code == profile.code

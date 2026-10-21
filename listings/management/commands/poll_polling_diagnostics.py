@@ -124,9 +124,13 @@ class Command(BaseCommand):
     async def collect(self, job, profile):
         # Scheduled collector services run headed under Xvfb.  Use the same
         # browser mode here so anti-bot checks see the same runtime shape.
-        collector = get_collector(job.source, headless=False, manual_wait_seconds=0)
-        collector.route = profile.route
-        collector.session_mode = profile.session_mode
+        factory_kwargs = {"headless": False, "manual_wait_seconds": 0}
+        if job.source == "avito":
+            factory_kwargs["profile"] = profile
+        collector = get_collector(job.source, **factory_kwargs)
+        if job.source != "avito":
+            collector.route = profile.route
+            collector.session_mode = profile.session_mode
         production_state = getattr(collector, "state", None)
         # A button-initiated diagnostic must not inherit a production cooldown,
         # nor write a test block back into the state used by scheduled polling.

@@ -1,6 +1,7 @@
 """Persistent request timing shared by successive collector runs."""
 import json
 import math
+import re
 import time
 from datetime import timezone
 from email.utils import parsedate_to_datetime
@@ -21,6 +22,16 @@ def retry_after_seconds(value: str | None, now: float) -> float:
         except (ValueError, TypeError, OverflowError):
             return 0
     return max(0, seconds) if math.isfinite(seconds) else 0
+
+
+def profile_state_directory(directory: str | Path, profile_code: str | None) -> Path:
+    """Return a safe state directory scoped to one polling profile."""
+    root = Path(directory)
+    if not profile_code:
+        return root
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", profile_code):
+        raise ValueError("Invalid Avito polling profile code")
+    return root / "profiles" / profile_code
 
 
 class SessionState:

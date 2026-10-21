@@ -38,8 +38,8 @@ class NetworkRouteAdmin(admin.ModelAdmin):
 
 @admin.register(PollingProfile)
 class PollingProfileAdmin(admin.ModelAdmin):
-    list_display = ("name", "code", "source", "mode", "route", "session_mode", "block_policy", "enabled", "is_default")
-    list_filter = ("source", "mode", "route__kind", "enabled", "is_default")
+    list_display = ("name", "code", "source", "mode", "transport", "cookie_strategy", "route", "session_mode", "block_policy", "enabled", "is_default")
+    list_filter = ("source", "mode", "transport", "cookie_strategy", "route__kind", "enabled", "is_default")
     search_fields = ("name", "code")
 
 

@@ -6,7 +6,7 @@ Description=Home Hunter CIAN daytime hourly fast scan
 # detail batch, rather than relying on timer jitter to avoid it.
 OnCalendar=*-*-* 08..22:02:00
 RandomizedDelaySec=0
-Persistent=true
+Persistent=false
 Unit=home-hunter-cian-fast.service
 
 [Install]

@@ -143,6 +143,30 @@ def test_browser_uses_selected_profile_route(settings):
     }
 
 
+def test_polling_profile_isolates_browser_and_request_state(settings):
+    from unittest.mock import patch
+    driver = AsyncMock()
+    start = AsyncMock(return_value=driver)
+
+    async def check():
+        async with AvitoCollector(profile_code="avito-server-persistent") as collector:
+            assert collector.state.directory == (
+                settings.AVITO_STATE_DIR / "profiles" / "avito-server-persistent"
+            )
+            await collector._start()
+
+    with patch("collectors.avito.collector.async_playwright", return_value=SimpleNamespace(start=start)):
+        asyncio.run(check())
+    assert driver.chromium.launch_persistent_context.call_args.args[0] == str(
+        settings.AVITO_STATE_DIR / "profiles" / "avito-server-persistent" / "chromium"
+    )
+
+
+def test_invalid_polling_profile_code_is_rejected(settings):
+    with pytest.raises(ValueError, match="Invalid Avito polling profile code"):
+        AvitoCollector(profile_code="../shared")
+
+
 def test_server_proxy_credentials_are_read_from_generic_env(monkeypatch):
     from unittest.mock import patch
     driver = AsyncMock()

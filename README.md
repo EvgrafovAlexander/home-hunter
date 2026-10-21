@@ -8,6 +8,7 @@ Avito через Playwright Chromium. Python 3.12. Redis, Celery и API не н�
 - [Видимость объявлений и географические зоны](docs/LISTING_VISIBILITY_AND_GEO_ZONES.md)
 - [Avito: вторичка, первичка и состояние отделки](docs/AVITO_SECONDARY_FILTER.md)
 - [Авторизация и сетевой доступ CIAN/Avito](docs/AUTHORIZATION_CIAN_AVITO.md)
+- [Методы опроса, Avito Detail и расписания](docs/POLLING_METHODS.md)
 
 ## Локальный запуск
 
@@ -48,7 +49,11 @@ AVITO_FULL_SCAN_ENABLED=true python manage.py collect_listings --source avito --
 Без `--headed` используется headless; также есть явный `--headless`.
 Один command открывает один browser и обходит enabled-поиски последовательно.
 PostgreSQL advisory lock защищает и ручные одновременные запуски.
-После завершения Chromium закрывается, профиль сохраняется в `AVITO_STATE_DIR/chromium`.
+После завершения Chromium закрывается. Для запуска через назначенный polling
+профиль Chromium-профиль и состояние запросов сохраняются в
+`AVITO_STATE_DIR/profiles/<profile-code>/`; это не смешивает cookies разных
+маршрутов. При ручном создании collector без профиля сохраняется legacy-путь
+`AVITO_STATE_DIR/chromium`.
 По умолчанию это `.avito-state/` в каталоге проекта; каталог исключён из Git.
 
 ### Сессия, ручная капча и паузы

@@ -73,6 +73,10 @@ AVITO_PAGE_DELAY_SECONDS = float(os.getenv("AVITO_PAGE_DELAY_SECONDS", "120"))
 AVITO_BLOCK_COOLDOWN_SECONDS = float(os.getenv("AVITO_BLOCK_COOLDOWN_SECONDS", "3600"))
 AVITO_STATE_DIR = Path(os.getenv("AVITO_STATE_DIR", str(BASE_DIR / ".avito-state")))
 AVITO_FULL_SCAN_ENABLED = os.getenv("AVITO_FULL_SCAN_ENABLED", "false").lower() == "true"
+AVITO_SPFA_API_KEY = os.getenv("AVITO_SPFA_API_KEY", "")
+AVITO_URL_CONVERTER_ENDPOINT = os.getenv(
+    "AVITO_URL_CONVERTER_ENDPOINT", "https://spfa.pro/api/avito-url/",
+)
 LOGGING = {
     "version": 1, "disable_existing_loggers": False,
     "handlers": {"console": {"class": "logging.StreamHandler"}},
@@ -92,6 +96,7 @@ CIAN_FULL_BATCH_PAGES = int(os.getenv("CIAN_FULL_BATCH_PAGES", "2"))
 CIAN_BLOCK_COOLDOWN_SECONDS = float(os.getenv("CIAN_BLOCK_COOLDOWN_SECONDS", "3600"))
 CIAN_FULL_SCAN_ENABLED = os.getenv("CIAN_FULL_SCAN_ENABLED", "false").lower() == "true"
 CIAN_DETAIL_POLL_BATCH_SIZE = int(os.getenv("CIAN_DETAIL_POLL_BATCH_SIZE", "7"))
+AVITO_DETAIL_POLL_BATCH_SIZE = int(os.getenv("AVITO_DETAIL_POLL_BATCH_SIZE", "5"))
 CIAN_DETAIL_POLL_DELAY_MIN_SECONDS = float(os.getenv("CIAN_DETAIL_POLL_DELAY_MIN_SECONDS", "90"))
 CIAN_DETAIL_POLL_DELAY_MAX_SECONDS = float(os.getenv("CIAN_DETAIL_POLL_DELAY_MAX_SECONDS", "120"))
 

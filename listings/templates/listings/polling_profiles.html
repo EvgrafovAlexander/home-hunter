@@ -15,7 +15,9 @@
       <span class="badge">{{ group.source_label }}</span>
       <h2>{{ group.selected.name }}</h2>
       <p>Маршрут: {{ group.selected.route.name }}</p>
+      <p>Метод: {{ group.selected.get_transport_display }} · cookies: {{ group.selected.get_cookie_strategy_display }}</p>
       <p>Сессия: {{ group.selected.get_session_mode_display }} · блокировка: {{ group.selected.get_block_policy_display }}</p>
+      {% if group.source == 'avito' %}<p>Cookies/состояние: <code>profiles/{{ group.selected.code }}/chromium</code>{% if group.selected.session_mode == 'temporary' %} (временный каталог){% endif %}</p>{% endif %}
       <form method="post">
         {% csrf_token %}<input type="hidden" name="source" value="{{ group.source }}">
         <select name="profile_id" aria-label="Профиль {{ group.source_label }}">{% for profile in group.profiles %}<option value="{{ profile.pk }}"{% if profile.pk == group.selected.pk %} selected{% endif %}>{{ profile.name }} · {{ profile.route.name }}</option>{% endfor %}</select>

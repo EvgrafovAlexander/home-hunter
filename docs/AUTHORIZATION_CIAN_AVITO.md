@@ -107,9 +107,13 @@ SERVER_PROXY_HEALTHCHECK_URL=https://api.ipify.org
 
 ### Запуск браузера
 
-Avito использует Playwright и Chromium. В плановом Docker-запуске используется
-временный профиль Chromium, а состояние запросов сохраняется отдельно в
-`AVITO_STATE_DIR` (`/app/.avito-state` в контейнере).
+Avito использует Playwright и Chromium. Состояние теперь привязано к коду
+выбранного `PollingProfile`: для production-профиля оно хранится в
+`AVITO_STATE_DIR/profiles/<profile-code>/` (`/app/.avito-state` в контейнере).
+Это изолирует cookies и cooldown при переключении между разными маршрутами.
+
+При прямом создании `AvitoCollector` без кода профиля сохраняется старый путь
+`AVITO_STATE_DIR` для совместимости с ручными запусками и тестами.
 
 В состоянии хранятся:
 
@@ -119,12 +123,22 @@ Avito использует Playwright и Chromium. В плановом Docker-з
 
 Временный профиль удаляется после запуска. Это предотвращает перенос
 повреждённых Chromium lock-файлов и старых browser-сессий между контейнерами.
+Постоянный профиль сохраняется только внутри каталога назначенного polling
+профиля; один и тот же Chromium-профиль не должен использоваться с разными
+выходными IP.
 
 ### Cookies и аккаунт
 
 Avito не получает логин, пароль или API-токен. Cookies создаются внутри
 браузерного профиля самим сайтом. Профиль по умолчанию не является постоянным,
 поэтому cookies не считаются долговременной авторизацией.
+
+Для экспериментального Avito Mobile API в профиле можно выбрать отдельный
+транспорт и стратегию cookies. По умолчанию остаются `Chromium / HTML` и
+`Профиль Chromium`; CIAN и Домклик эти настройки не используют. Для стратегии
+`Собственные cookies` API collector читает файл
+`AVITO_STATE_DIR/profiles/<profile-code>/cookies.json`. Для `SPFA` требуется
+секрет `AVITO_SPFA_API_KEY` и настроенный endpoint конвертации URL поиска.
 
 Для ручной диагностики можно использовать headed-запуск и ожидание captcha.
 После истечения таймера автоматический обход блокировки не выполняется.
@@ -193,6 +207,17 @@ python manage.py collect_listings \
 ```text
 python manage.py poll_cian_details --profile cian_detail_default
 ```
+
+Для Avito detail используется отдельный второй этап и профиль с `mode=detail`,
+`transport=mobile_api` и `cookie_strategy=own_cookies` или `spfa`:
+
+```bash
+python manage.py poll_avito_details --profile avito_mobile_detail
+```
+
+Он сохраняет состояние доступности и полный последний JSON так же, как CIAN,
+а затем дополняет карточку координатами и полной галереей. Основной Avito
+polling при этом не переключается на detail автоматически.
 
 Без `--profile` используется профиль, назначенный площадке. Если назначения нет,
 система проверяет старое назначение source/mode, затем профиль по умолчанию и

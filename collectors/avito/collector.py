@@ -16,7 +16,7 @@ from collectors.routing import RouteSpec, build_proxy_options
 from collectors.proxy_pool import select_working_proxy
 from . import selectors as sel
 from .parser import parse_page
-from .session import SessionState
+from .session import SessionState, profile_state_directory
 
 if TYPE_CHECKING:
     from listings.models import SearchQuery
@@ -41,7 +41,8 @@ class AvitoBlocked(RuntimeError):
 
 class AvitoCollector(BaseCollector):
     def __init__(self, *, headless: bool = True, manual_wait_seconds: float = 0,
-                 route: RouteSpec | None = None, session_mode: str = "settings"):
+                 route: RouteSpec | None = None, session_mode: str = "settings",
+                 profile_code: str | None = None):
         if manual_wait_seconds < 0 or not math.isfinite(manual_wait_seconds):
             raise ValueError("Invalid manual captcha timeout")
         if headless and manual_wait_seconds:
@@ -49,8 +50,9 @@ class AvitoCollector(BaseCollector):
         self.manual_wait_seconds = manual_wait_seconds
         self.route = route
         self.session_mode = session_mode
+        self.profile_code = profile_code
         self.stop_requested = False
-        self.state = SessionState(settings.AVITO_STATE_DIR)
+        self.state = SessionState(self._state_directory())
         # Diagnostics can isolate request state without changing the selected
         # persistent browser profile.
         self.browser_profile_dir = None
@@ -61,6 +63,16 @@ class AvitoCollector(BaseCollector):
         self.context = None
         self.page = None
         self.start_error: Exception | None = None
+
+    def _state_directory(self):
+        """Return isolated browser/request state for the selected profile.
+
+        Direct construction without a profile code keeps the legacy location
+        used by tests and backwards-compatible manual runs.  Production
+        polling passes the database profile code, so each proxy/session pair
+        gets its own cookies and cooldown state.
+        """
+        return profile_state_directory(settings.AVITO_STATE_DIR, self.profile_code)
 
     async def __aenter__(self):
         return self

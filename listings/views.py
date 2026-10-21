@@ -18,7 +18,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
-from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, District, GlobalListingHide,
+from .models import (AvitoDetailPayload, AvitoDetailPollState, CianDetailPayload, CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, District, GlobalListingHide,
                      Listing, ListingReview, ListingReviewRevision, ListingSearchQuery, ListingSnapshot, ManualDomclickJob,
                      Microdistrict, NetworkRoute, PollingProfile, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
                      StreetAssignment, UserListingHide, MicrodistrictBoundary, GeoZone, SourcePollingProfile, PollingDiagnosticJob)
@@ -889,26 +889,33 @@ def listing_detail(request, listing_id: int):
     own_review = ListingReview.objects.filter(listing=listing, author=request.user).first()
     peer_reviews = (ListingReview.objects.filter(listing=listing).exclude(author=request.user)
                     .select_related("author").prefetch_related("tags")) if own_review else []
-    try:
-        detail_photos = listing.cian_detail_state.detail_data.get("photos", [])
-        detail_state = listing.cian_detail_state
-    except CianDetailPollState.DoesNotExist:
-        detail_photos = []
-        detail_state = None
+    if listing.source == SearchQuery.Source.AVITO:
+        try:
+            detail_photos = listing.avito_detail_state.detail_data.get("photos", [])
+            detail_state = listing.avito_detail_state
+        except AvitoDetailPollState.DoesNotExist:
+            detail_photos, detail_state = [], None
+    else:
+        try:
+            detail_photos = listing.cian_detail_state.detail_data.get("photos", [])
+            detail_state = listing.cian_detail_state
+        except CianDetailPollState.DoesNotExist:
+            detail_photos, detail_state = [], None
     # A deactivated CIAN offer clears the poll state's live photo list, but
     # the last successful detail payload still contains the complete gallery.
     # Keep those archived photos available on the listing detail page.
     if not detail_photos:
-        try:
-            archived_photos = (listing.cian_detail_payload.payload
-                               .get("offer", {}).get("photos", []))
-        except CianDetailPayload.DoesNotExist:
-            archived_photos = []
-        detail_photos = [
-            {"full_url": photo.get("fullUrl") or photo.get("full_url")}
-            for photo in archived_photos
-            if photo.get("fullUrl") or photo.get("full_url")
-        ]
+        if listing.source == SearchQuery.Source.CIAN:
+            try:
+                archived_photos = (listing.cian_detail_payload.payload.get("offer", {}).get("photos", []))
+            except CianDetailPayload.DoesNotExist:
+                archived_photos = []
+            detail_photos = [{"full_url": photo.get("fullUrl") or photo.get("full_url")} for photo in archived_photos if photo.get("fullUrl") or photo.get("full_url")]
+        elif listing.source == SearchQuery.Source.AVITO:
+            try:
+                detail_photos = listing.avito_detail_payload.payload.get("photos", [])
+            except AvitoDetailPayload.DoesNotExist:
+                detail_photos = []
     add_market_position([listing])
     add_listing_score([listing], scoring_preference_for(request.user))
     price_history = list(listing.price_history.exclude(price__isnull=True).order_by("observed_at", "id"))

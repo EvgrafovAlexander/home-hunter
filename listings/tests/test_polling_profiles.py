@@ -48,6 +48,8 @@ def test_staff_ui_assigns_one_profile_to_the_source(admin_client):
 
     response = admin_client.get("/polling-profiles/")
     assert response.status_code == 200
+    assert "Chromium / HTML" in response.content.decode()
+    assert "Профиль Chromium" in response.content.decode()
     response = admin_client.post("/polling-profiles/", {
         "action": "assign_source_profile", "source": "domclick", "profile_id": profile.pk,
     })

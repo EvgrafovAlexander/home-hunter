@@ -69,12 +69,21 @@ class Command(BaseCommand):
 
     async def collect_searches(self, searches, options, profile) -> int:
         failed = 0
-        # Keep the factory call compatible with local/custom collectors while
-        # applying the resolved profile before the browser is started.
-        collector = get_collector(options["source"], headless=options["headless"],
-                                  manual_wait_seconds=options.get("wait_for_captcha", 0))
-        collector.route = profile.route
-        collector.session_mode = profile.session_mode
+        # Pass the resolved profile into the factory so source-specific
+        # collectors can isolate cookies and request state by profile code.
+        # Avito uses the profile code to isolate its browser cookies and
+        # request state. Keep the legacy route/session assignment for the
+        # other collectors and custom factories.
+        factory_kwargs = {
+            "headless": options["headless"],
+            "manual_wait_seconds": options.get("wait_for_captcha", 0),
+        }
+        if options["source"] == "avito":
+            factory_kwargs["profile"] = profile
+        collector = get_collector(options["source"], **factory_kwargs)
+        if options["source"] != "avito":
+            collector.route = profile.route
+            collector.session_mode = profile.session_mode
         async with collector:
             for search in searches:
                 scan = await sync_to_async(run_scan)(search, collector, mode=options["mode"], profile=profile)

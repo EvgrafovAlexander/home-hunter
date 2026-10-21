@@ -59,6 +59,15 @@ class NetworkRoute(models.Model):
 class PollingProfile(models.Model):
     """How a source/mode is polled, including its network route."""
 
+    class Transport(models.TextChoices):
+        BROWSER_HTML = "browser_html", "Chromium / HTML"
+        MOBILE_API = "mobile_api", "Mobile API"
+
+    class CookieStrategy(models.TextChoices):
+        BROWSER_PROFILE = "browser_profile", "Профиль Chromium"
+        OWN_COOKIES = "own_cookies", "Собственные cookies"
+        SPFA = "spfa", "SPFA"
+
     class SessionMode(models.TextChoices):
         SETTINGS = "settings", "Из настроек площадки"
         TEMPORARY = "temporary", "Временный профиль браузера"
@@ -77,6 +86,10 @@ class PollingProfile(models.Model):
         ("all", "Все режимы"), ("fast", "Fast"), ("full", "Full"), ("detail", "Detail"),
     ), default="all")
     route = models.ForeignKey(NetworkRoute, on_delete=models.PROTECT, related_name="polling_profiles")
+    transport = models.CharField(max_length=20, choices=Transport.choices, default=Transport.BROWSER_HTML)
+    cookie_strategy = models.CharField(
+        max_length=20, choices=CookieStrategy.choices, default=CookieStrategy.BROWSER_PROFILE,
+    )
     session_mode = models.CharField(max_length=20, choices=SessionMode.choices, default=SessionMode.SETTINGS)
     block_policy = models.CharField(max_length=20, choices=BlockPolicy.choices, default=BlockPolicy.SETTINGS)
     enabled = models.BooleanField(default=True)
@@ -516,6 +529,43 @@ class CianDetailPollProgress(models.Model):
     current_listing = models.ForeignKey(
         Listing, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
     )
+    current_started_at = models.DateTimeField(null=True, blank=True)
+    last_completed_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class AvitoDetailPollState(models.Model):
+    """Live state of the optional second-stage Avito item API poll."""
+    class Status(models.TextChoices):
+        UNKNOWN = "unknown", "Не проверено"
+        PUBLISHED = "published", "Активно"
+        UNAVAILABLE = "unavailable", "Недоступно"
+
+    listing = models.OneToOneField(Listing, on_delete=models.CASCADE, related_name="avito_detail_state")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.UNKNOWN)
+    last_checked_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_available_at = models.DateTimeField(null=True, blank=True)
+    first_unavailable_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    detail_data = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class AvitoDetailPayload(models.Model):
+    """Latest complete JSON returned by Avito's item endpoint."""
+    listing = models.OneToOneField(Listing, on_delete=models.CASCADE, related_name="avito_detail_payload")
+    payload = models.JSONField()
+    sha256 = models.CharField(max_length=64)
+    first_received_at = models.DateTimeField(default=timezone.now)
+    last_received_at = models.DateTimeField(default=timezone.now)
+
+
+class AvitoDetailPollProgress(models.Model):
+    source = models.CharField(max_length=20, unique=True, default=SearchQuery.Source.AVITO)
+    cycle_started_at = models.DateTimeField(default=timezone.now)
+    cycle_total = models.PositiveIntegerField(default=0)
+    completed_listing_ids = models.JSONField(default=list, blank=True)
+    current_listing = models.ForeignKey(Listing, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     current_started_at = models.DateTimeField(null=True, blank=True)
     last_completed_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)

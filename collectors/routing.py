@@ -93,6 +93,8 @@ class PollingProfileSpec:
     source: str
     mode: str
     route: RouteSpec
+    transport: str = "browser_html"
+    cookie_strategy: str = "browser_profile"
     session_mode: str = "settings"
     block_policy: str = "settings"
     settings: dict[str, Any] = field(default_factory=dict)
@@ -180,5 +182,7 @@ def resolve_profile(source: str, mode: str, code: str | None = None) -> PollingP
         ),
         session_mode=profile.session_mode,
         block_policy=profile.block_policy,
+        transport=profile.transport,
+        cookie_strategy=profile.cookie_strategy,
         settings=profile.settings,
     )
