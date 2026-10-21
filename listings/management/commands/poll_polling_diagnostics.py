@@ -2,6 +2,7 @@
 
 import logging
 import time
+from tempfile import TemporaryDirectory
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.core.management.base import BaseCommand
@@ -10,6 +11,7 @@ from django.utils import timezone
 
 from collectors.registry import get_collector
 from collectors.routing import resolve_profile
+from collectors.avito.session import SessionState
 from listings.models import PollingDiagnosticJob, Scan
 from listings.services.scans import run_scan
 
@@ -101,8 +103,14 @@ class Command(BaseCommand):
         collector = get_collector(job.source, headless=True, manual_wait_seconds=0)
         collector.route = profile.route
         collector.session_mode = profile.session_mode
-        async with collector:
-            scan = await sync_to_async(run_scan)(job.search_query, collector, mode=job.mode, profile=profile)
+        # A button-initiated diagnostic must not inherit a production cooldown,
+        # nor write a test block back into the state used by scheduled polling.
+        with TemporaryDirectory(prefix=f"polling-diagnostic-{job.source}-") as state_dir:
+            if hasattr(collector, "state"):
+                collector.state = SessionState(state_dir)
+            await sync_to_async(self.append_log)(job.pk, "Изолированное состояние теста: cooldown планового опроса не используется")
+            async with collector:
+                scan = await sync_to_async(run_scan)(job.search_query, collector, mode=job.mode, profile=profile)
         status = (PollingDiagnosticJob.Status.SUCCESS
                   if scan.status == Scan.Status.SUCCESS else PollingDiagnosticJob.Status.FAILED)
         await sync_to_async(self.finish)(job.pk, status, scan=scan, error=scan.error)

@@ -22,7 +22,7 @@
         <button type="submit" name="action" value="assign_source_profile">Сохранить</button>
         <button type="submit" name="action" value="test_profile" class="secondary">Тест</button>
       </form>
-      {% if group.diagnostic %}<div class="diagnostic"><strong>Последний тест: {{ group.diagnostic.get_status_display }}</strong><br><small>{{ group.diagnostic.created_at }} · профиль {{ group.diagnostic.profile.name }}{% if group.diagnostic.scan %} · Scan #{{ group.diagnostic.scan.pk }}{% endif %}</small>{% if group.diagnostic.error %}<p>{{ group.diagnostic.error }}</p>{% endif %}<details{% if group.diagnostic.status == 'running' or group.diagnostic.status == 'failed' %} open{% endif %}><summary>Логи</summary><pre>{{ group.diagnostic.log }}</pre></details></div>{% endif %}
+      {% if group.diagnostic %}<div class="diagnostic"><strong>Последний тест: {{ group.diagnostic.get_status_display }}</strong><br><small>{{ group.diagnostic.created_at }} · профиль {{ group.diagnostic.profile.name }}{% if group.diagnostic.scan %} · Scan #{{ group.diagnostic.scan.pk }}{% endif %}</small>{% if group.diagnostic.error %}<p>{{ group.diagnostic.error }}</p>{% endif %}<details open><summary>Логи</summary><pre>{% if group.diagnostic.log %}{{ group.diagnostic.log }}{% else %}Лог пока пуст — worker ещё не начал запуск.{% endif %}</pre></details></div>{% endif %}
     </article>
     {% empty %}<p class="notice">Профили ещё не созданы. Добавьте маршрут и профиль в админке.</p>{% endfor %}
   </div>
