@@ -73,8 +73,8 @@ class PollingProfile(models.Model):
     name = models.CharField(max_length=120)
     source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
     mode = models.CharField(max_length=10, choices=(
-        ("fast", "Fast"), ("full", "Full"), ("detail", "Detail"),
-    ))
+        ("all", "Все режимы"), ("fast", "Fast"), ("full", "Full"), ("detail", "Detail"),
+    ), default="all")
     route = models.ForeignKey(NetworkRoute, on_delete=models.PROTECT, related_name="polling_profiles")
     session_mode = models.CharField(max_length=20, choices=SessionMode.choices, default=SessionMode.SETTINGS)
     block_policy = models.CharField(max_length=20, choices=BlockPolicy.choices, default=BlockPolicy.SETTINGS)
@@ -90,6 +90,20 @@ class PollingProfile(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_source_display()} / {self.mode})"
+
+
+class SourcePollingProfile(models.Model):
+    """The active polling profile inherited by all modes of one source."""
+
+    source = models.CharField(max_length=20, choices=SearchQuery.Source.choices, unique=True)
+    profile = models.ForeignKey(
+        PollingProfile, on_delete=models.PROTECT, related_name="source_assignments",
+    )
+    enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.get_source_display()}: {self.profile.name}"
 
 
 class District(models.Model):

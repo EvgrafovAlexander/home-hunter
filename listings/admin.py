@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (Consideration, District, GlobalListingHide, Listing, ListingReview, ListingReviewRevision,
                      ListingSearchQuery, ListingSnapshot, Microdistrict, PriceHistory, ReviewTag, Scan, SearchQuery,
                      StreetAssignment, UserListingHide, MicrodistrictDistrict, GeoZone, NetworkRoute, PollingProfile,
-                     SourcePollingControl)
+                     SourcePollingControl, SourcePollingProfile)
 
 
 class PriceHistoryInline(admin.TabularInline):
@@ -56,6 +56,12 @@ class ScanAdmin(admin.ModelAdmin):
 class SourcePollingControlAdmin(admin.ModelAdmin):
     list_display = ("source", "mode", "profile", "enabled", "updated_at")
     list_filter = ("source", "mode", "enabled")
+
+
+@admin.register(SourcePollingProfile)
+class SourcePollingProfileAdmin(admin.ModelAdmin):
+    list_display = ("source", "profile", "enabled", "updated_at")
+    list_filter = ("source", "enabled")
 
 
 @admin.register(ListingSearchQuery)

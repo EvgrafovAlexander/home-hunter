@@ -86,17 +86,23 @@ def _legacy_profile(source: str, mode: str) -> PollingProfileSpec:
 
 def resolve_profile(source: str, mode: str, code: str | None = None) -> PollingProfileSpec:
     """Resolve a DB profile or safely fall back to the legacy environment setup."""
-    from listings.models import PollingProfile, SourcePollingControl
+    from listings.models import PollingProfile, SourcePollingControl, SourcePollingProfile
 
     query = PollingProfile.objects.select_related("route").filter(
-        source=source, mode=mode, enabled=True, route__enabled=True,
+        source=source, mode__in=(mode, "all"), enabled=True, route__enabled=True,
     )
     profile = query.filter(code=code).first() if code else None
     if profile is None and not code:
-        control = SourcePollingControl.objects.select_related("profile", "profile__route").filter(
-            source=source, mode=mode, enabled=True, profile__enabled=True, profile__route__enabled=True,
+        source_assignment = SourcePollingProfile.objects.select_related("profile", "profile__route").filter(
+            source=source, enabled=True, profile__mode__in=(mode, "all"),
+            profile__enabled=True, profile__route__enabled=True,
         ).first()
-        profile = control.profile if control else query.filter(is_default=True).first()
+        profile = source_assignment.profile if source_assignment else None
+        if profile is None:
+            control = SourcePollingControl.objects.select_related("profile", "profile__route").filter(
+                source=source, mode=mode, enabled=True, profile__enabled=True, profile__route__enabled=True,
+            ).first()
+            profile = control.profile if control else query.filter(is_default=True).first()
     if profile is None and code:
         raise ValueError(f"Enabled polling profile not found: {code}")
     if profile is None:
@@ -108,7 +114,7 @@ def resolve_profile(source: str, mode: str, code: str | None = None) -> PollingP
         code=profile.code,
         name=profile.name,
         source=profile.source,
-        mode=profile.mode,
+        mode=mode,
         route=RouteSpec(
             code=route.code,
             name=route.name,

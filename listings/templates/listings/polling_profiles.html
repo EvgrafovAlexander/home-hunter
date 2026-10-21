@@ -6,18 +6,18 @@
 </style>
 <section class="profiles-page">
   <h1>Профили опросов</h1>
-  <p class="lead">Назначение маршрута и режима сессии для каждой площадки. Секреты прокси и SSH-ключи здесь не показываются.</p>
+  <p class="lead">Один активный профиль назначается на площадку и используется всеми её режимами. Секреты прокси и SSH-ключи здесь не показываются.</p>
   {% if messages %}{% for message in messages %}<p class="notice">{{ message }}</p>{% endfor %}{% endif %}
   <div class="profile-grid">
     {% for group in profile_groups %}
     <article class="profile-card">
-      <span class="badge">{{ group.source_label }} · {{ group.mode_label }}</span>
+      <span class="badge">{{ group.source_label }}</span>
       <h2>{{ group.selected.name }}</h2>
       <p>Маршрут: {{ group.selected.route.name }}</p>
       <p>Сессия: {{ group.selected.get_session_mode_display }} · блокировка: {{ group.selected.get_block_policy_display }}</p>
       <form method="post">
-        {% csrf_token %}<input type="hidden" name="action" value="assign_profile"><input type="hidden" name="source" value="{{ group.source }}"><input type="hidden" name="mode" value="{{ group.mode }}">
-        <select name="profile_id" aria-label="Профиль {{ group.source_label }} {{ group.mode_label }}">{% for profile in group.profiles %}<option value="{{ profile.pk }}"{% if profile.is_default %} selected{% endif %}>{{ profile.name }} · {{ profile.route.name }}</option>{% endfor %}</select>
+        {% csrf_token %}<input type="hidden" name="action" value="assign_source_profile"><input type="hidden" name="source" value="{{ group.source }}">
+        <select name="profile_id" aria-label="Профиль {{ group.source_label }}">{% for profile in group.profiles %}<option value="{{ profile.pk }}"{% if profile.pk == group.selected.pk %} selected{% endif %}>{{ profile.name }} · {{ profile.route.name }}</option>{% endfor %}</select>
         <button type="submit">Сохранить</button>
       </form>
     </article>

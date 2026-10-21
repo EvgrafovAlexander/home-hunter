@@ -21,7 +21,7 @@ from django.utils import timezone
 from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, District, GlobalListingHide,
                      Listing, ListingReview, ListingReviewRevision, ListingSearchQuery, ListingSnapshot, ManualDomclickJob,
                      Microdistrict, NetworkRoute, PollingProfile, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
-                     StreetAssignment, UserListingHide, MicrodistrictBoundary, GeoZone)
+                     StreetAssignment, UserListingHide, MicrodistrictBoundary, GeoZone, SourcePollingProfile)
 from .services.enrichment import location_is_visible, parse_address
 from .services.location_directory import apply_location_rules_for_assignments, location_is_visible_with_rules
 from .services.microdistrict_polygons import (canonical_microdistrict_name, load_polygons,
@@ -983,37 +983,41 @@ def listing_detail(request, listing_id: int):
 @staff_member_required
 def polling_profiles(request):
     """Assign reusable network profiles without exposing proxy secrets."""
-    if request.method == "POST" and request.POST.get("action") == "assign_profile":
+    if request.method == "POST" and request.POST.get("action") in {"assign_profile", "assign_source_profile"}:
         source = request.POST.get("source", "")
-        mode = request.POST.get("mode", "")
         profile_id = request.POST.get("profile_id", "")
         profile = PollingProfile.objects.filter(
-            pk=profile_id, source=source, mode=mode, enabled=True, route__enabled=True,
+            pk=profile_id, source=source, mode="all", enabled=True, route__enabled=True,
         ).first()
         if profile is None:
             messages.error(request, "Профиль не найден или отключён.")
         else:
-            PollingProfile.objects.filter(source=source, mode=mode).update(is_default=False)
+            SourcePollingProfile.objects.update_or_create(
+                source=source, defaults={"profile": profile, "enabled": True},
+            )
+            PollingProfile.objects.filter(source=source, mode="all").update(is_default=False)
             profile.is_default = True
             profile.save(update_fields=("is_default", "updated_at"))
-            if mode in {Scan.Mode.FAST, Scan.Mode.FULL}:
-                SourcePollingControl.objects.update_or_create(
-                    source=source, mode=mode, defaults={"profile": profile},
-                )
-            messages.success(request, f"Профиль «{profile.name}» назначен для {source} / {mode}.")
+            messages.success(request, f"Профиль «{profile.name}» назначен для площадки {source}.")
         return redirect("polling_profiles")
 
     profiles = list(PollingProfile.objects.select_related("route").filter(enabled=True).order_by("source", "mode", "name"))
+    assignments = {
+        assignment.source: assignment
+        for assignment in SourcePollingProfile.objects.select_related("profile", "profile__route").filter(enabled=True)
+    }
     grouped = []
     for source, source_label in SearchQuery.Source.choices:
-        for mode, mode_label in (("fast", "Fast"), ("full", "Full"), ("detail", "Detail")):
-            options = [item for item in profiles if item.source == source and item.mode == mode]
-            if options:
-                grouped.append({
-                    "source": source, "source_label": source_label, "mode": mode,
-                    "mode_label": mode_label, "profiles": options,
-                    "selected": next((item for item in options if item.is_default), options[0]),
-                })
+        options = [item for item in profiles if item.source == source and item.mode == "all"]
+        if options:
+            assignment = assignments.get(source)
+            selected = assignment.profile if assignment and assignment.profile in options else None
+            grouped.append({
+                "source": source, "source_label": source_label,
+                "profiles": options, "selected": selected or next(
+                    (item for item in options if item.is_default), options[0],
+                ),
+            })
     return render(request, "listings/polling_profiles.html", {
         "routes": NetworkRoute.objects.prefetch_related("polling_profiles").order_by("name"),
         "profile_groups": grouped,
