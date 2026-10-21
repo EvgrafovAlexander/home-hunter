@@ -14,6 +14,7 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 
 from collectors.avito.session import SessionState
 from collectors.base import BaseCollector, CollectionError, CollectionResult
+from collectors.proxy_pool import select_working_proxy
 from collectors.routing import RouteSpec, build_proxy_options
 from .parser import CianDetail, cian_url, parse_detail_page, parse_page
 
@@ -75,7 +76,7 @@ class CianCollector(BaseCollector):
             if self.route is not None
             else build_proxy_options(settings.CIAN_PROXY_URL)
         )
-        if not proxy_options:
+        if not proxy_options and not (self.route is not None and self.route.kind == "free_proxy_pool"):
             raise ValueError("CIAN requires an explicit proxy; direct fallback is disabled")
         for value in (settings.CIAN_PAGE_DELAY_MIN_SECONDS, settings.CIAN_PAGE_DELAY_MAX_SECONDS,
                       settings.CIAN_BLOCK_COOLDOWN_SECONDS):
@@ -101,15 +102,19 @@ class CianCollector(BaseCollector):
             self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
             profile = self.temporary_profile.name
         self.playwright = await async_playwright().start()
-        proxy_options = (
-            self.route.resolved_proxy_options
-            if self.route is not None
-            else build_proxy_options(settings.CIAN_PROXY_URL)
-        )
+        if self.route is not None and self.route.kind == "free_proxy_pool":
+            proxy_options = {"proxy": await select_working_proxy(self.playwright, self.route)}
+        else:
+            selected_proxy = (
+                self.route.resolved_proxy_options
+                if self.route is not None
+                else build_proxy_options(settings.CIAN_PROXY_URL)
+            )
+            proxy_options = {"proxy": selected_proxy}
         self.context = await self.playwright.chromium.launch_persistent_context(
             str(profile), headless=self.headless, channel="chromium",
             viewport={"width": 1440, "height": 1000}, locale="ru-RU",
-            proxy=proxy_options,
+            **proxy_options,
         )
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
 

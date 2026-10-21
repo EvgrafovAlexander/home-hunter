@@ -12,6 +12,7 @@ from playwright.async_api import Error as PlaywrightError, TimeoutError as Playw
 
 from collectors.avito.session import SessionState
 from collectors.base import BaseCollector, CollectionError, CollectionResult
+from collectors.proxy_pool import select_working_proxy
 from collectors.routing import RouteSpec, build_proxy_options
 from .parser import parse_page
 
@@ -80,7 +81,7 @@ class DomclickCollector(BaseCollector):
             if self.route is not None
             else build_proxy_options(settings.DOMCLICK_PROXY_URL)
         )
-        if not proxy_options:
+        if not proxy_options and not (self.route is not None and self.route.kind == "free_proxy_pool"):
             raise ValueError("Domclick requires an explicit proxy; direct fallback is disabled")
         for value in (settings.DOMCLICK_PAGE_DELAY_SECONDS, settings.DOMCLICK_BLOCK_COOLDOWN_SECONDS):
             if not math.isfinite(value) or value < 0:
@@ -117,6 +118,8 @@ class DomclickCollector(BaseCollector):
                 self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
                 profile = self.temporary_profile.name
             self.playwright = await async_playwright().start()
+            if self.route is not None and self.route.kind == "free_proxy_pool":
+                proxy_options = await select_working_proxy(self.playwright, self.route)
             self.context = await self.playwright.chromium.launch_persistent_context(
                 str(profile), headless=self.headless, channel="chromium",
                 viewport={"width": 1440, "height": 1000}, locale="ru-RU",
