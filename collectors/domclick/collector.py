@@ -12,6 +12,7 @@ from playwright.async_api import Error as PlaywrightError, TimeoutError as Playw
 
 from collectors.avito.session import SessionState
 from collectors.base import BaseCollector, CollectionError, CollectionResult
+from collectors.routing import RouteSpec
 from .parser import parse_page
 
 logger = logging.getLogger(__name__)
@@ -37,13 +38,16 @@ class DomclickBlocked(RuntimeError):
 
 
 class DomclickCollector(BaseCollector):
-    def __init__(self, *, headless=True, manual_wait_seconds=0):
+    def __init__(self, *, headless=True, manual_wait_seconds=0,
+                 route: RouteSpec | None = None, session_mode: str = "settings"):
         if manual_wait_seconds < 0 or not math.isfinite(manual_wait_seconds):
             raise ValueError("Invalid manual captcha timeout")
         if headless and manual_wait_seconds:
             raise ValueError("Manual captcha waiting requires --headed")
         self.headless = headless
         self.manual_wait_seconds = manual_wait_seconds
+        self.route = route
+        self.session_mode = session_mode
         self.state = SessionState(settings.DOMCLICK_STATE_DIR)
         self.playwright = self.context = self.page = None
         self.temporary_profile = None
@@ -71,7 +75,8 @@ class DomclickCollector(BaseCollector):
         if (parts.scheme != "https" or not (parts.hostname or "").endswith("domclick.ru")
                 or not (parts.path == "/search" or is_public_listing)):
             raise ValueError("Expected an HTTPS Domclick search or public listing URL")
-        proxy = urlsplit(settings.DOMCLICK_PROXY_URL)
+        proxy_url = self.route.resolved_proxy_url if self.route is not None else settings.DOMCLICK_PROXY_URL
+        proxy = urlsplit(proxy_url)
         if (proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname
                 or proxy.username or proxy.password or not proxy.port
                 or proxy.path not in {"", "/"} or proxy.query or proxy.fragment):
@@ -96,15 +101,21 @@ class DomclickCollector(BaseCollector):
             return
         try:
             self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+            proxy_url = self.route.resolved_proxy_url if self.route is not None else settings.DOMCLICK_PROXY_URL
             profile = self.state.directory / "chromium"
-            if not settings.DOMCLICK_PERSISTENT_PROFILE:
+            persistent_profile = settings.DOMCLICK_PERSISTENT_PROFILE
+            if self.session_mode == "persistent":
+                persistent_profile = True
+            elif self.session_mode == "temporary":
+                persistent_profile = False
+            if not persistent_profile:
                 self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
                 profile = self.temporary_profile.name
             self.playwright = await async_playwright().start()
             self.context = await self.playwright.chromium.launch_persistent_context(
                 str(profile), headless=self.headless, channel="chromium",
                 viewport={"width": 1440, "height": 1000}, locale="ru-RU",
-                proxy={"server": settings.DOMCLICK_PROXY_URL},
+                proxy={"server": proxy_url},
             )
             self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
         except Exception as exc:

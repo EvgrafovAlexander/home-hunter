@@ -10,6 +10,7 @@ from django.db.models import F
 from django.utils import timezone
 
 from collectors.cian.collector import CianCollector
+from collectors.routing import resolve_profile
 from listings.models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, Listing,
                              ListingSnapshot, PriceHistory)
 from listings.services.persistence import snapshot_data_from_listing
@@ -179,6 +180,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--limit", type=int, default=settings.CIAN_DETAIL_POLL_BATCH_SIZE)
         parser.add_argument("--headless", action="store_true")
+        parser.add_argument("--profile", help="Polling profile code; otherwise the enabled CIAN detail profile is used")
 
     def handle(self, *args, **options):
         limit = options["limit"]
@@ -194,13 +196,17 @@ class Command(BaseCommand):
             if not candidates:
                 self.stdout.write("No active CIAN listings")
                 return
-            async_to_sync(self.poll)(candidates, progress_id, options["headless"])
+            try:
+                profile = resolve_profile("cian", "detail", options.get("profile"))
+            except ValueError as exc:
+                raise CommandError(str(exc)) from exc
+            async_to_sync(self.poll)(candidates, progress_id, options["headless"], profile)
         finally:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT pg_advisory_unlock(%s)", [LOCK_ID])
 
-    async def poll(self, candidates, progress_id, headless):
-        async with CianCollector(headless=headless) as collector:
+    async def poll(self, candidates, progress_id, headless, profile):
+        async with CianCollector(headless=headless, route=profile.route, session_mode=profile.session_mode) as collector:
             for listing in candidates:
                 try:
                     await sync_to_async(set_current)(progress_id, listing.pk)

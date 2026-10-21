@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 from collectors.avito.collector import AvitoCollector, set_page
 from collectors.base import CollectionError
+from collectors.routing import RouteSpec
 
 HTML = (Path(__file__).parent / "fixtures/search.html").read_text().split('<div data-marker="item" data-item-id="broken">')[0]
 SEARCH = SimpleNamespace(name="Test", url="https://www.avito.ru/ufa/kvartiry?s=104")
@@ -121,6 +122,25 @@ def test_browser_uses_configured_proxy(settings, proxy):
         assert kwargs['proxy'] == {'server': proxy}
     else:
         assert 'proxy' not in kwargs
+
+
+def test_browser_uses_selected_profile_route(settings):
+    from unittest.mock import patch
+    settings.AVITO_PROXY_URL = 'socks5://legacy:1080'
+    driver = AsyncMock()
+    start = AsyncMock(return_value=driver)
+    route = RouteSpec(code="server_proxy", name="Server proxy", kind="server_proxy",
+                      proxy_url="socks5://selected:1080")
+
+    async def check():
+        async with AvitoCollector(route=route) as collector:
+            await collector._start()
+
+    with patch('collectors.avito.collector.async_playwright', return_value=SimpleNamespace(start=start)):
+        asyncio.run(check())
+    assert driver.chromium.launch_persistent_context.call_args.kwargs["proxy"] == {
+        "server": "socks5://selected:1080",
+    }
 
 
 @pytest.mark.parametrize('proxy', ['localhost:1080', 'socks5://host', 'socks5://user:secret@host:1080',

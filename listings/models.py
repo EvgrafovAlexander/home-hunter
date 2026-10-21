@@ -20,6 +20,78 @@ class SearchQuery(models.Model):
         return self.name
 
 
+class NetworkRoute(models.Model):
+    """A reusable network path used by one or more polling profiles.
+
+    Credentials stay outside the database.  ``secret_ref`` identifies the
+    server-side secret or mounted key that supplies them at runtime.
+    """
+
+    class Kind(models.TextChoices):
+        DIRECT = "direct", "Прямое подключение"
+        SSH_SOCKS5 = "ssh_socks5", "SSH/SOCKS5"
+        SERVER_PROXY = "server_proxy", "Серверный прокси"
+        MOBILE_PROXY = "mobile_proxy", "Мобильный прокси"
+
+    code = models.SlugField(max_length=80, unique=True)
+    name = models.CharField(max_length=120)
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    proxy_url = models.CharField(
+        max_length=255, blank=True,
+        help_text="Proxy URL without credentials, for example socks5://shared-socks-tunnel:1080",
+    )
+    endpoint = models.CharField(max_length=255, blank=True, help_text="Remote endpoint or provider name")
+    secret_ref = models.CharField(max_length=120, blank=True, help_text="Reference to a server-side secret")
+    healthcheck_url = models.URLField(blank=True)
+    settings = models.JSONField(default=dict, blank=True)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("name", "pk")
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class PollingProfile(models.Model):
+    """How a source/mode is polled, including its network route."""
+
+    class SessionMode(models.TextChoices):
+        SETTINGS = "settings", "Из настроек площадки"
+        TEMPORARY = "temporary", "Временный профиль браузера"
+        PERSISTENT = "persistent", "Постоянный профиль браузера"
+
+    class BlockPolicy(models.TextChoices):
+        SETTINGS = "settings", "Из настроек площадки"
+        COOLDOWN = "cooldown", "Остановить и включить cooldown"
+        ROTATE_IP = "rotate_ip", "Сменить IP и повторить"
+        STOP = "stop", "Остановить запуск"
+
+    code = models.SlugField(max_length=80, unique=True)
+    name = models.CharField(max_length=120)
+    source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
+    mode = models.CharField(max_length=10, choices=(
+        ("fast", "Fast"), ("full", "Full"), ("detail", "Detail"),
+    ))
+    route = models.ForeignKey(NetworkRoute, on_delete=models.PROTECT, related_name="polling_profiles")
+    session_mode = models.CharField(max_length=20, choices=SessionMode.choices, default=SessionMode.SETTINGS)
+    block_policy = models.CharField(max_length=20, choices=BlockPolicy.choices, default=BlockPolicy.SETTINGS)
+    enabled = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
+    settings = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("source", "mode", "name", "pk")
+        indexes = [models.Index(fields=("source", "mode", "enabled"))]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.get_source_display()} / {self.mode})"
+
+
 class District(models.Model):
     name = models.CharField(max_length=100, unique=True)
     aliases = models.JSONField(default=list, blank=True)
@@ -462,6 +534,8 @@ class Scan(models.Model):
     search_query = models.ForeignKey(SearchQuery, on_delete=models.CASCADE, related_name="scans")
     source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
     mode = models.CharField(max_length=10, choices=Mode.choices)
+    profile_code = models.CharField(max_length=80, blank=True)
+    route_code = models.CharField(max_length=80, blank=True)
     started_at = models.DateTimeField(default=timezone.now)
     finished_at = models.DateTimeField(null=True, blank=True)
     pages_scanned = models.PositiveIntegerField(default=0)
@@ -490,6 +564,9 @@ class SourcePollingControl(models.Model):
 
     source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
     mode = models.CharField(max_length=10, choices=Scan.Mode.choices, default=Scan.Mode.FAST)
+    profile = models.ForeignKey(
+        "PollingProfile", on_delete=models.PROTECT, null=True, blank=True, related_name="polling_controls",
+    )
     enabled = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 

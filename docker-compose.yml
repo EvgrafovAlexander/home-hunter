@@ -27,7 +27,7 @@ services:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       DJANGO_DEBUG: "false"
-      TELEGRAM_PROXY_URL: socks5h://cian-tunnel:1080
+      TELEGRAM_PROXY_URL: socks5h://shared-socks-tunnel:1080
     depends_on:
       db:
         condition: service_healthy
@@ -57,7 +57,7 @@ services:
       POSTGRES_PORT: 5432
       DJANGO_DEBUG: "false"
       AVITO_STATE_DIR: /app/.avito-state
-      AVITO_PROXY_URL: socks5://cian-tunnel:1080
+      AVITO_PROXY_URL: socks5://shared-socks-tunnel:1080
       AVITO_PERSISTENT_PROFILE: "false"
       AVITO_FAST_SCAN_PAGES: "1"
       AVITO_FULL_SCAN_ENABLED: "false"
@@ -65,7 +65,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      cian-tunnel:
+      shared-socks-tunnel:
         condition: service_healthy
   telegram-poll:
     build:
@@ -77,12 +77,12 @@ services:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       DJANGO_DEBUG: "false"
-      TELEGRAM_PROXY_URL: socks5h://cian-tunnel:1080
+      TELEGRAM_PROXY_URL: socks5h://shared-socks-tunnel:1080
     command: ["python", "manage.py", "telegram_poll"]
     depends_on:
       db:
         condition: service_healthy
-  cian-tunnel:
+  shared-socks-tunnel:
     profiles: ["cian", "collector", "domclick"]
     build:
       context: .
@@ -114,9 +114,9 @@ services:
       - ServerAliveCountMax=3
       - -o
       - ConnectTimeout=15
-      - ${CIAN_SSH_DESTINATION:-cian-tunnel@185.161.251.49}
+      - ${SHARED_SSH_DESTINATION:-cian-tunnel@185.161.251.49}
     volumes:
-      - ${CIAN_SSH_DIR:-/etc/home-hunter/cian-ssh}:/run/cian-ssh:ro
+      - ${SHARED_SSH_DIR:-/etc/home-hunter/cian-ssh}:/run/cian-ssh:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',1080),3); s.sendall(bytes([5,1,0])); assert s.recv(2)==bytes([5,0]); s.close()"]
       interval: 30s
@@ -137,14 +137,14 @@ services:
       POSTGRES_PORT: 5432
       DJANGO_DEBUG: "false"
       CIAN_STATE_DIR: /app/.cian-state
-      CIAN_PROXY_URL: socks5://cian-tunnel:1080
+      CIAN_PROXY_URL: socks5://shared-socks-tunnel:1080
     volumes:
       - cian_state:/app/.cian-state
     command: ["xvfb-run", "-a", "-s", "-screen 0 1440x1000x24 -nolisten tcp", "python", "manage.py", "collect_listings", "--source", "cian", "--mode", "fast", "--headed"]
     depends_on:
       db:
         condition: service_healthy
-      cian-tunnel:
+      shared-socks-tunnel:
         condition: service_healthy
   domclick-collector:
     profiles: ["domclick"]
@@ -159,7 +159,7 @@ services:
       POSTGRES_PORT: 5432
       DJANGO_DEBUG: "false"
       DOMCLICK_STATE_DIR: /app/.domclick-state
-      DOMCLICK_PROXY_URL: socks5://cian-tunnel:1080
+      DOMCLICK_PROXY_URL: socks5://shared-socks-tunnel:1080
       DOMCLICK_PERSISTENT_PROFILE: "false"
       DOMCLICK_FAST_SCAN_PAGES: "1"
       DOMCLICK_FULL_SCAN_ENABLED: "false"
@@ -169,7 +169,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      cian-tunnel:
+      shared-socks-tunnel:
         condition: service_healthy
 
 volumes:

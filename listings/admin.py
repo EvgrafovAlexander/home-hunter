@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (Consideration, District, GlobalListingHide, Listing, ListingReview, ListingReviewRevision,
                      ListingSearchQuery, ListingSnapshot, Microdistrict, PriceHistory, ReviewTag, Scan, SearchQuery,
-                     StreetAssignment, UserListingHide, MicrodistrictDistrict, GeoZone)
+                     StreetAssignment, UserListingHide, MicrodistrictDistrict, GeoZone, NetworkRoute, PollingProfile,
+                     SourcePollingControl)
 
 
 class PriceHistoryInline(admin.TabularInline):
@@ -28,13 +29,33 @@ class SearchQueryAdmin(admin.ModelAdmin):
     list_filter = ("source", "enabled")
 
 
+@admin.register(NetworkRoute)
+class NetworkRouteAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "kind", "proxy_url", "secret_ref", "enabled", "updated_at")
+    list_filter = ("kind", "enabled")
+    search_fields = ("name", "code", "endpoint", "secret_ref")
+
+
+@admin.register(PollingProfile)
+class PollingProfileAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "source", "mode", "route", "session_mode", "block_policy", "enabled", "is_default")
+    list_filter = ("source", "mode", "route__kind", "enabled", "is_default")
+    search_fields = ("name", "code")
+
+
 @admin.register(Scan)
 class ScanAdmin(admin.ModelAdmin):
-    list_display = ("search_query", "status", "mode", "source", "started_at", "finished_at",
+    list_display = ("search_query", "status", "mode", "source", "profile_code", "route_code", "started_at", "finished_at",
                     "pages_scanned", "items_seen", "unique_items_seen", "new_items",
                     "updated_items", "price_changes")
     list_filter = ("status", "mode", "source")
     readonly_fields = tuple(field.name for field in Scan._meta.fields)
+
+
+@admin.register(SourcePollingControl)
+class SourcePollingControlAdmin(admin.ModelAdmin):
+    list_display = ("source", "mode", "profile", "enabled", "updated_at")
+    list_filter = ("source", "mode", "enabled")
 
 
 @admin.register(ListingSearchQuery)

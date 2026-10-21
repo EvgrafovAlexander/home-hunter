@@ -136,7 +136,7 @@ docker compose exec web python manage.py check
 docker compose ps
 ```
 
-Постоянно работают db, web, caddy и общий SSH SOCKS `cian-tunnel`. Caddy публикует порт 80,
+Постоянно работают db, web, caddy и общий SSH SOCKS `shared-socks-tunnel`. Caddy публикует порт 80,
 web:8000 и PostgreSQL:5432 наружу не опубликованы.
 Разрешите firewall только 80/tcp и 22/tcp для SSH.
 Откройте http://SERVER_IP/admin/. Данные защищены стандартным Django login.
@@ -252,8 +252,8 @@ python manage.py resolve_microdistricts --source avito --only-missing --dry-run
 с кратким описанием, оценкой и причинами; выгодные варианты получат отдельную
 пометку. В сообщении адрес и оценка выделяются, а причины разделяются на плюсы,
 минусы и информационные факторы. Сообщения Telegram отправляются через внутренний
-SOCKS-туннель `cian-tunnel`; для этого укажите
-`TELEGRAM_PROXY_URL=socks5h://cian-tunnel:1080`. Таймер проверяет устаревание
+SOCKS-туннель `shared-socks-tunnel`; для этого укажите
+`TELEGRAM_PROXY_URL=socks5h://shared-socks-tunnel:1080`. Таймер проверяет устаревание
 данных раз в час, а после каждого scan состояние оценивается сразу.
 
 Изменения цены при включённом `TG_PRICE_ALERTS_ENABLED=true` отправляются только
@@ -307,7 +307,7 @@ docker compose run --rm -T collector python manage.py shell < collectors/tests/d
 ## ЦИАН
 
 Сборщик ЦИАН использует Chromium с Xvfb, постоянный профиль и обязательный SOCKS/HTTP proxy.
-Docker-сервисы `cian-tunnel` и `cian-collector` находятся в профиле `cian`.
+Docker-сервисы `shared-socks-tunnel` и `cian-collector` находятся в профиле `cian`.
 Fast читает новые объявления раз в час; полный обход запускается явно.
 [Подробная документация, схема туннеля и команды](docs/CIAN.md).
 
@@ -318,7 +318,7 @@ Docker `collector` запускает Chromium с окном под Xvfb и но
 завершении; все поиски одного запуска используют одну сессию. Отдельный том
 `avito_proxy_state` хранит общие паузы и диагностику. Старый `avito_state` не используется
 и сохранён для отката. `AVITO_PROXY_URL` в Compose закреплён на
-`socks5://cian-tunnel:1080`; туннель доступен в профилях `collector` и `cian`.
+`socks5://shared-socks-tunnel:1080`; туннель доступен в профилях `collector` и `cian`.
 Его SSH-ключ и настройка второго VPS описаны в [docs/CIAN.md](docs/CIAN.md).
 До первого запуска на новом сервере необходимо настроить этот туннель.
 Ноутбук в маршруте не участвует. SOCKS наружу не публикуется.

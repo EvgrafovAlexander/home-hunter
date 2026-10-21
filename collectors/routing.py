@@ -1,0 +1,125 @@
+"""Runtime resolution of reusable network and polling profiles.
+
+The database profiles are optional during the transition.  When no profile is
+configured, this module returns a legacy profile backed by the existing
+source-specific environment variables, so production keeps its current route.
+"""
+
+from dataclasses import dataclass, field
+import os
+from typing import Any
+
+from django.conf import settings
+
+
+@dataclass(frozen=True)
+class RouteSpec:
+    code: str
+    name: str
+    kind: str
+    proxy_url: str
+    endpoint: str = ""
+    secret_ref: str = ""
+    healthcheck_url: str = ""
+    settings: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def resolved_proxy_url(self) -> str:
+        """Return a mounted secret value when the route uses one.
+
+        A secret may contain a complete authenticated proxy URL.  Plain
+        ``proxy_url`` remains suitable for non-secret SSH/SOCKS endpoints.
+        """
+        return (os.getenv(self.secret_ref, "") if self.secret_ref else "") or self.proxy_url
+
+
+@dataclass(frozen=True)
+class PollingProfileSpec:
+    code: str
+    name: str
+    source: str
+    mode: str
+    route: RouteSpec
+    session_mode: str = "settings"
+    block_policy: str = "settings"
+    settings: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def persistent_profile(self) -> bool | None:
+        if self.session_mode == "persistent":
+            return True
+        if self.session_mode == "temporary":
+            return False
+        return None
+
+
+def _legacy_profile(source: str, mode: str) -> PollingProfileSpec:
+    defaults = {
+        "avito": (
+            "avito_default", "Avito: общий маршрут", "ssh_socks5", settings.AVITO_PROXY_URL,
+            "avito", "settings", "cooldown",
+        ),
+        "cian": (
+            "cian_default", "CIAN: общий маршрут", "ssh_socks5", settings.CIAN_PROXY_URL,
+            "cian", "persistent", "cooldown",
+        ),
+        "domclick": (
+            "domclick_default", "Домклик: общий маршрут", "ssh_socks5", settings.DOMCLICK_PROXY_URL,
+            "domclick", "settings", "cooldown",
+        ),
+    }
+    try:
+        code, name, kind, proxy_url, source_code, session_mode, block_policy = defaults[source]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported polling source: {source}") from exc
+    if not proxy_url:
+        kind = "direct"
+    return PollingProfileSpec(
+        code=code, name=name, source=source_code, mode=mode,
+        route=RouteSpec(
+            code=f"legacy_{source}", name="Общий SSH/SOCKS-маршрут" if proxy_url else "Прямое подключение",
+            kind=kind, proxy_url=proxy_url,
+        ),
+        session_mode=session_mode, block_policy=block_policy,
+    )
+
+
+def resolve_profile(source: str, mode: str, code: str | None = None) -> PollingProfileSpec:
+    """Resolve a DB profile or safely fall back to the legacy environment setup."""
+    from listings.models import PollingProfile, SourcePollingControl
+
+    query = PollingProfile.objects.select_related("route").filter(
+        source=source, mode=mode, enabled=True, route__enabled=True,
+    )
+    profile = query.filter(code=code).first() if code else None
+    if profile is None and not code:
+        control = SourcePollingControl.objects.select_related("profile", "profile__route").filter(
+            source=source, mode=mode, enabled=True, profile__enabled=True, profile__route__enabled=True,
+        ).first()
+        profile = control.profile if control else query.filter(is_default=True).first()
+    if profile is None and code:
+        raise ValueError(f"Enabled polling profile not found: {code}")
+    if profile is None:
+        profile = query.order_by("pk").first()
+    if profile is None:
+        return _legacy_profile(source, mode)
+    route = profile.route
+    return PollingProfileSpec(
+        code=profile.code,
+        name=profile.name,
+        source=profile.source,
+        mode=profile.mode,
+        route=RouteSpec(
+            code=route.code,
+            name=route.name,
+            kind=route.kind,
+            proxy_url=route.proxy_url,
+            endpoint=route.endpoint,
+            secret_ref=route.secret_ref,
+            healthcheck_url=route.healthcheck_url,
+            settings=route.settings,
+        ),
+        session_mode=profile.session_mode,
+        block_policy=profile.block_policy,
+        settings=profile.settings,
+    )

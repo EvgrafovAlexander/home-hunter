@@ -42,9 +42,9 @@ Full отключён по умолчанию и не стоит в распис
 ```text
 VPS приложения 188.120.244.43
   cian-collector: Chromium + Xvfb + Django
-       │ SOCKS5, cian-tunnel:1080 (внутренняя сеть Docker)
+       │ SOCKS5, shared-socks-tunnel:1080 (внутренняя сеть Docker)
        ▼
-  cian-tunnel: OpenSSH client
+  shared-socks-tunnel: OpenSSH client
        │ зашифрованное SSH-соединение TCP/22, отдельный ключ
        ▼
   VPS выхода 185.161.251.49
@@ -68,7 +68,7 @@ SSH дополнительно шифрует участок между серв
 Порт 1080 не публикуется на хост: SOCKS доступен контейнерам общей Docker-сети,
 а не всему интернету. В production не используются --network host и root SSH.
 Ключ находится на первом VPS в /etc/home-hunter/cian-ssh, монтируется только
-в cian-tunnel read-only. Контейнерный пользователь app (UID 10001) должен иметь
+в shared-socks-tunnel read-only. Контейнерный пользователь app (UID 10001) должен иметь
 право читать ключ. Приватный ключ и пароли не входят в image, Git или .env.
 Ключ хоста второго VPS закреплён в known_hosts, StrictHostKeyChecking=yes.
 
@@ -108,7 +108,7 @@ Retry-After может увеличить её. До конца паузы но�
 
 | Переменная | По умолчанию | Назначение |
 |---|---|---|
-| CIAN_PROXY_URL | обязательно; Compose задаёт socks5://cian-tunnel:1080 | Явный прокси |
+| CIAN_PROXY_URL | обязательно; Compose задаёт socks5://shared-socks-tunnel:1080 | Явный прокси |
 | CIAN_STATE_DIR | .cian-state | Профиль, паузы, диагностика |
 | CIAN_FAST_SCAN_PAGES | 1 | Бюджет fast |
 | CIAN_MAX_PAGES | 50 | Максимум full |
@@ -117,8 +117,8 @@ Retry-After может увеличить её. До конца паузы но�
 | CIAN_FULL_BATCH_PAGES | 2 | Число страниц full scan за один запуск; продолжение хранится в checkpoint. CIAN full scan только добавляет и обновляет объявления, но не деактивирует их. |
 | CIAN_BLOCK_COOLDOWN_SECONDS | 3600 | Пауза после блокировки |
 | CIAN_FULL_SCAN_ENABLED | false | Разрешение full |
-| CIAN_SSH_DESTINATION | cian-tunnel@185.161.251.49 | Адрес SSH |
-| CIAN_SSH_DIR | /etc/home-hunter/cian-ssh | Каталог ключа и known_hosts |
+| SHARED_SSH_DESTINATION | cian-tunnel@185.161.251.49 | Адрес SSH общего маршрута |
+| SHARED_SSH_DIR | /etc/home-hunter/cian-ssh | Каталог ключа и known_hosts |
 
 Профиль в Docker volume cian_state, путь /app/.cian-state. Копировать его можно
 только при закрытых браузерах. Один профиль нельзя открывать двумя Chromium.
@@ -129,9 +129,9 @@ Retry-After может увеличить её. До конца паузы но�
 Из /opt/home_hunter:
 
 ```sh
-docker compose --profile cian up -d cian-tunnel
-docker compose --profile cian ps cian-tunnel
-docker compose logs --tail 50 cian-tunnel
+docker compose --profile cian up -d shared-socks-tunnel
+docker compose --profile cian ps shared-socks-tunnel
+docker compose logs --tail 50 shared-socks-tunnel
 # Один fast scan, с Xvfb и всеми настроенными зависимостями:
 docker compose --profile cian run --rm cian-collector
 # Полный проход только явно:
@@ -152,7 +152,7 @@ journalctl -u home-hunter-cian-fast.service --since today
 # Пауза новых запусков:
 systemctl disable --now home-hunter-cian-fast.timer
 # Остановить туннель после завершения текущего scan:
-docker compose stop cian-tunnel
+docker compose stop shared-socks-tunnel
 ```
 
 В Admin создать/редактировать SearchQuery с source=CIAN, enabled и URL фильтра.
@@ -166,9 +166,9 @@ docker compose stop cian-tunnel
 
 ```sh
 docker compose --profile cian config --quiet
-docker compose --profile cian build web collector cian-collector cian-tunnel
+docker compose --profile cian build web collector cian-collector shared-socks-tunnel
 docker compose up -d web
-docker compose --profile cian up -d cian-tunnel
+docker compose --profile cian up -d shared-socks-tunnel
 docker compose exec web python manage.py check
 ```
 
@@ -205,7 +205,7 @@ chown 10001:10001 /etc/home-hunter/cian-ssh/id_ed25519*
 ## Подтверждённое развёртывание 7 сентября 2026
 
 Код развёрнут на 188.120.244.43. Постоянный SSH-туннель идёт к
-cian-tunnel@185.161.251.49. Контейнер home_hunter-cian-tunnel-1 healthy,
+cian-tunnel@185.161.251.49. Контейнер home_hunter-shared-socks-tunnel-1 healthy,
 опубликованных портов нет. На втором VPS проверена эффективная конфигурация sshd;
 ранее работавшие telemt, amnezia-dns, amnezia-awg2 и rss_bot продолжают работать.
 

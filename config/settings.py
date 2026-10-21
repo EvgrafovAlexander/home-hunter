@@ -62,6 +62,7 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
 }
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+SHARED_PROXY_URL = os.getenv("SHARED_PROXY_URL", "socks5://shared-socks-tunnel:1080")
 AVITO_PROXY_URL = os.getenv("AVITO_PROXY_URL", "")
 AVITO_PERSISTENT_PROFILE = os.getenv("AVITO_PERSISTENT_PROFILE", "true").lower() == "true"
 AVITO_FAST_SCAN_PAGES = int(os.getenv("AVITO_FAST_SCAN_PAGES", "1"))

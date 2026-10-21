@@ -5,6 +5,7 @@ import math
 import random
 import time
 from datetime import datetime, timezone
+from tempfile import TemporaryDirectory
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
@@ -13,6 +14,7 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 
 from collectors.avito.session import SessionState
 from collectors.base import BaseCollector, CollectionError, CollectionResult
+from collectors.routing import RouteSpec
 from .parser import CianDetail, cian_url, parse_detail_page, parse_page
 
 logger = logging.getLogger(__name__)
@@ -42,12 +44,16 @@ def blocked(html, final_url):
 
 
 class CianCollector(BaseCollector):
-    def __init__(self, *, headless=False, manual_wait_seconds=0):
+    def __init__(self, *, headless=False, manual_wait_seconds=0,
+                 route: RouteSpec | None = None, session_mode: str = "settings"):
         if manual_wait_seconds:
             raise ValueError("CIAN manual captcha waiting is not implemented")
         self.headless = headless
+        self.route = route
+        self.session_mode = session_mode
         self.state = SessionState(settings.CIAN_STATE_DIR)
         self.context = self.page = self.playwright = None
+        self.temporary_profile = None
         self.stop_requested = False
 
     async def __aenter__(self):
@@ -60,9 +66,12 @@ class CianCollector(BaseCollector):
         finally:
             if self.playwright:
                 await self.playwright.stop()
+            if self.temporary_profile:
+                self.temporary_profile.cleanup()
 
     def _validate(self):
-        proxy = urlsplit(settings.CIAN_PROXY_URL)
+        proxy_url = self.route.resolved_proxy_url if self.route is not None else settings.CIAN_PROXY_URL
+        proxy = urlsplit(proxy_url)
         if proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname or proxy.username or proxy.password:
             raise ValueError("CIAN_PROXY_URL must be an explicit proxy URL without credentials; direct fallback is disabled")
         for value in (settings.CIAN_PAGE_DELAY_MIN_SECONDS, settings.CIAN_PAGE_DELAY_MAX_SECONDS,
@@ -84,11 +93,15 @@ class CianCollector(BaseCollector):
         if self.page is not None:
             return
         self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        profile = self.state.directory / "chromium"
+        if self.session_mode == "temporary":
+            self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
+            profile = self.temporary_profile.name
         self.playwright = await async_playwright().start()
         self.context = await self.playwright.chromium.launch_persistent_context(
-            str(self.state.directory / "chromium"), headless=self.headless, channel="chromium",
+            str(profile), headless=self.headless, channel="chromium",
             viewport={"width": 1440, "height": 1000}, locale="ru-RU",
-            proxy={"server": settings.CIAN_PROXY_URL},
+            proxy={"server": self.route.resolved_proxy_url if self.route is not None else settings.CIAN_PROXY_URL},
         )
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
 

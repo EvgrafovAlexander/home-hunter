@@ -72,8 +72,12 @@ def finalize_cian_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
     Listing.objects.filter(pk__in=[listing.pk for listing in deactivated]).update(is_active=False)
 
 
-def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str) -> Scan:
-    scan = Scan.objects.create(search_query=search, source=search.source, mode=mode)
+def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str, profile=None) -> Scan:
+    scan = Scan.objects.create(
+        search_query=search, source=search.source, mode=mode,
+        profile_code=getattr(profile, "code", ""),
+        route_code=getattr(getattr(profile, "route", None), "code", ""),
+    )
     logger.info("scan start id=%s search=%s mode=%s", scan.pk, search.name, mode)
     try:
         checkpoint = None

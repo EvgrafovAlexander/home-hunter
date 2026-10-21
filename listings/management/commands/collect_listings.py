@@ -6,6 +6,7 @@ from django.db import connection
 from django.conf import settings
 
 from collectors.registry import get_collector
+from collectors.routing import resolve_profile
 from listings.models import Scan, SearchQuery
 from listings.services.polling import polling_enabled
 from listings.services.scans import run_scan
@@ -20,6 +21,7 @@ class Command(BaseCommand):
         parser.add_argument("--source", required=True, choices=["avito", "cian", "domclick"])
         parser.add_argument("--mode", required=True, choices=["fast", "full"])
         parser.add_argument("--search-id", type=int)
+        parser.add_argument("--profile", help="Polling profile code; otherwise the enabled default is used")
         group = parser.add_mutually_exclusive_group()
         group.add_argument("--headed", dest="headless", action="store_false")
         group.add_argument("--headless", dest="headless", action="store_true")
@@ -48,25 +50,34 @@ class Command(BaseCommand):
                 raise CommandError("Enabled search not found for the selected source")
             self.stdout.write("No enabled searches")
             return
+        try:
+            profile = resolve_profile(options["source"], options["mode"], options.get("profile"))
+        except ValueError as exc:
+            raise CommandError(str(exc)) from exc
         # Also protect manual invocations; host timers additionally share flock.
         with connection.cursor() as cursor:
             cursor.execute("SELECT pg_try_advisory_lock(%s)", [LOCK_ID])
             if not cursor.fetchone()[0]:
                 raise CommandError("Another collector is already running")
         try:
-            failed = async_to_sync(self.collect_searches)(searches, options)
+            failed = async_to_sync(self.collect_searches)(searches, options, profile)
         finally:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT pg_advisory_unlock(%s)", [LOCK_ID])
         if failed:
             raise CommandError(f"{failed} scan(s) failed; inspect Scan in Admin")
 
-    async def collect_searches(self, searches, options) -> int:
+    async def collect_searches(self, searches, options, profile) -> int:
         failed = 0
-        async with get_collector(options["source"], headless=options["headless"],
-                                 manual_wait_seconds=options.get("wait_for_captcha", 0)) as collector:
+        # Keep the factory call compatible with local/custom collectors while
+        # applying the resolved profile before the browser is started.
+        collector = get_collector(options["source"], headless=options["headless"],
+                                  manual_wait_seconds=options.get("wait_for_captcha", 0))
+        collector.route = profile.route
+        collector.session_mode = profile.session_mode
+        async with collector:
             for search in searches:
-                scan = await sync_to_async(run_scan)(search, collector, mode=options["mode"])
+                scan = await sync_to_async(run_scan)(search, collector, mode=options["mode"], profile=profile)
                 self.stdout.write(f"Scan {scan.pk}: {scan.status}, new={scan.new_items}, price_changes={scan.price_changes}")
                 failed += scan.status == Scan.Status.FAILED
                 if getattr(collector, "stop_requested", False):

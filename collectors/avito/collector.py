@@ -12,6 +12,7 @@ from django.conf import settings
 from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeout, async_playwright
 
 from collectors.base import BaseCollector, CollectionError, CollectionResult
+from collectors.routing import RouteSpec
 from . import selectors as sel
 from .parser import parse_page
 from .session import SessionState
@@ -38,12 +39,15 @@ class AvitoBlocked(RuntimeError):
 
 
 class AvitoCollector(BaseCollector):
-    def __init__(self, *, headless: bool = True, manual_wait_seconds: float = 0):
+    def __init__(self, *, headless: bool = True, manual_wait_seconds: float = 0,
+                 route: RouteSpec | None = None, session_mode: str = "settings"):
         if manual_wait_seconds < 0 or not math.isfinite(manual_wait_seconds):
             raise ValueError("Invalid manual captcha timeout")
         if headless and manual_wait_seconds:
             raise ValueError("Manual captcha waiting requires --headed")
         self.manual_wait_seconds = manual_wait_seconds
+        self.route = route
+        self.session_mode = session_mode
         self.stop_requested = False
         self.state = SessionState(settings.AVITO_STATE_DIR)
         self.headless = headless
@@ -76,16 +80,22 @@ class AvitoCollector(BaseCollector):
             return
         try:
             proxy_options = {}
-            if settings.AVITO_PROXY_URL:
-                proxy = urlsplit(settings.AVITO_PROXY_URL)
+            proxy_url = self.route.resolved_proxy_url if self.route is not None else settings.AVITO_PROXY_URL
+            if proxy_url:
+                proxy = urlsplit(proxy_url)
                 if (proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname
                         or proxy.username or proxy.password or not proxy.port
                         or proxy.path not in {"", "/"} or proxy.query or proxy.fragment):
                     raise ValueError("AVITO_PROXY_URL must be a proxy URL with port and without credentials")
-                proxy_options["proxy"] = {"server": settings.AVITO_PROXY_URL}
+                proxy_options["proxy"] = {"server": proxy_url}
             self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
             profile = self.state.directory / "chromium"
-            if not settings.AVITO_PERSISTENT_PROFILE:
+            persistent_profile = settings.AVITO_PERSISTENT_PROFILE
+            if self.session_mode == "persistent":
+                persistent_profile = True
+            elif self.session_mode == "temporary":
+                persistent_profile = False
+            if not persistent_profile:
                 self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
                 profile = self.temporary_profile.name
             self.playwright = await async_playwright().start()
