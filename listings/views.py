@@ -69,15 +69,16 @@ def _next_hourly_at(now, minute: int):
 
 
 def _next_avito_fast_at(now):
-    """Return the next 90-minute Avito fast-scan systemd calendar slot."""
+    """Return the next daytime 90-minute Avito fast-scan calendar slot."""
     candidates = []
     for day_offset in range(2):
         day = now.date() + timedelta(days=day_offset)
-        for hour in range(0, 24, 3):
+        for hour in range(8, 23):
             candidates.append(now.replace(year=day.year, month=day.month, day=day.day,
                                           hour=hour, minute=15, second=0, microsecond=0))
+        for hour in range(9, 23):
             candidates.append(now.replace(year=day.year, month=day.month, day=day.day,
-                                          hour=hour + 1, minute=45, second=0, microsecond=0))
+                                          hour=hour, minute=45, second=0, microsecond=0))
     return next(candidate for candidate in candidates if candidate > now)
 
 

@@ -1,11 +1,13 @@
 [Unit]
-Description=Home Hunter fast scan every 90 minutes
+Description=Home Hunter Avito fast scan every 90 minutes during daytime
 
 [Timer]
-OnCalendar=*-*-* 00/3:15:00
-OnCalendar=*-*-* 01/3:45:00
+# Keep the 90-minute cadence, but limit scheduled starts to 08:15–22:45.
+OnCalendar=*-*-* 08..22:15:00
+OnCalendar=*-*-* 09..22:45:00
 Persistent=true
 RandomizedDelaySec=10min
+Unit=home-hunter-avito-fast.service
 
 [Install]
 WantedBy=timers.target
