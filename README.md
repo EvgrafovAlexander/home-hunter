@@ -142,8 +142,13 @@ docker compose exec web python manage.py check
 docker compose ps
 ```
 
-Постоянно работают db, web, caddy и общий SSH SOCKS `shared-socks-tunnel`. Caddy публикует порт 80,
-web:8000 и PostgreSQL:5432 наружу не опубликованы.
+Полное описание контейнеров, Compose profiles и systemd-процессов находится в
+[docs/DOCKER_ARCHITECTURE.md](docs/DOCKER_ARCHITECTURE.md).
+
+Постоянно работают `db`, `web`, `caddy` и `telegram-poll`. Для опросов CIAN,
+Avito и DomClick отдельно запускаются профильные сервисы; общий SSH SOCKS
+`shared-socks-tunnel` включается профилем `collector`, `cian` или `domclick`.
+Caddy публикует порт 80, `web:8000` и PostgreSQL:5432 наружу не опубликованы.
 Разрешите firewall только 80/tcp и 22/tcp для SSH.
 Откройте http://SERVER_IP/admin/. Данные защищены стандартным Django login.
 Admin static files собираются при build и раздаются WhiteNoise через web.
