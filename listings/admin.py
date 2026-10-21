@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (Consideration, District, GlobalListingHide, Listing, ListingReview, ListingReviewRevision,
                      ListingSearchQuery, ListingSnapshot, Microdistrict, PriceHistory, ReviewTag, Scan, SearchQuery,
                      StreetAssignment, UserListingHide, MicrodistrictDistrict, GeoZone, NetworkRoute, PollingProfile,
-                     SourcePollingControl, SourcePollingProfile, PollingDiagnosticJob)
+                     SourcePollingControl, SourcePollingProfile, PollingDiagnosticJob, TelegramListingAlert)
 
 
 class PriceHistoryInline(admin.TabularInline):
@@ -58,6 +58,14 @@ class PollingDiagnosticJobAdmin(admin.ModelAdmin):
     list_filter = ("source", "status", "profile__route__kind")
     search_fields = ("profile__name", "profile__code", "error", "log")
     readonly_fields = tuple(field.name for field in PollingDiagnosticJob._meta.fields)
+
+
+@admin.register(TelegramListingAlert)
+class TelegramListingAlertAdmin(admin.ModelAdmin):
+    list_display = ("listing", "delivery_status", "delivery_attempts", "sent_at", "next_attempt_at", "filter_reason")
+    list_filter = ("delivery_status", "listing__source")
+    search_fields = ("listing__title", "listing__external_id", "last_delivery_error")
+    readonly_fields = tuple(field.name for field in TelegramListingAlert._meta.fields)
 
 
 @admin.register(SourcePollingControl)

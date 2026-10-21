@@ -75,6 +75,10 @@ def notify_price_change(listing_id: int, old_price: int | None, new_price: int |
         f"{listing.floor}/{listing.floors_total} этаж" if listing.floor and listing.floors_total else None,
     ]))
     listing_alert = TelegramListingAlert.objects.filter(listing=listing).first()
+    # A price event must reference an already published listing post. This
+    # prevents a synchronous scan callback from bypassing the listing queue.
+    if not listing_alert or listing_alert.delivery_status != TelegramListingAlert.DeliveryStatus.SENT:
+        return False
     updated_original = _update_listing_message(listing_alert, listing, old_price, new_price, change_percent)
     source_url = _channel_message_url(
         listing_alert.chat_id if listing_alert else settings.TG_CHANNEL_ID,

@@ -626,6 +626,14 @@ class DealAlert(models.Model):
 class TelegramListingAlert(models.Model):
     """One Telegram feed publication per listing."""
 
+    class DeliveryStatus(models.TextChoices):
+        AWAITING_GEOCODE = "awaiting_geocode", "Ожидает геокодирование"
+        PENDING = "pending", "Ожидает отправки"
+        SENDING = "sending", "Отправляется"
+        SENT = "sent", "Отправлено"
+        FAILED = "failed", "Ошибка отправки"
+        SKIPPED = "skipped", "Пропущено фильтром"
+
     listing = models.OneToOneField(Listing, on_delete=models.CASCADE, related_name="telegram_alert")
     score = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
     is_deal = models.BooleanField(default=False)
@@ -636,7 +644,16 @@ class TelegramListingAlert(models.Model):
     message_text = models.TextField(blank=True)
     score_ready = models.BooleanField(default=False)
     score_updated_at = models.DateTimeField(null=True, blank=True)
-    sent_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    delivery_status = models.CharField(
+        max_length=20, choices=DeliveryStatus.choices, default=DeliveryStatus.SENT, db_index=True,
+    )
+    delivery_attempts = models.PositiveSmallIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    last_delivery_error = models.TextField(blank=True)
+    filter_reason = models.CharField(max_length=255, blank=True)
+    filter_checked_at = models.DateTimeField(null=True, blank=True)
 
 
 class TelegramPriceAlert(models.Model):

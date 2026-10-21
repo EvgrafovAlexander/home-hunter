@@ -1,6 +1,7 @@
 import html
 import logging
 import re
+from datetime import timedelta
 from decimal import Decimal
 from statistics import median
 
@@ -13,6 +14,9 @@ from listings.models import DealAlert, Listing, SearchQuery, TelegramListingAler
 from listings.services.scan_health import (edit_telegram_message, edit_telegram_reply_markup, send_telegram_message,
                                            send_telegram_message_result, send_telegram_photo,
                                            send_telegram_photo_result)
+from listings.services.telegram_delivery import (
+    enqueue_new_listing_alert, mark_listing_alert_failed, mark_listing_alert_sent,
+)
 
 logger = logging.getLogger(__name__)
 MIN_SIMILAR, MIN_ROOM_GROUP, MIN_LOCATION_GROUP = 5, 8, 12
@@ -204,13 +208,24 @@ def _brief_description(title):
     return html.escape(value[:180]) if len(value) >= 4 else None
 
 
-def notify_new_listing(listing_id: int) -> bool:
+def notify_new_listing(listing_id: int, *, alert_id: int | None = None) -> bool:
     """Publish one visible new listing to the channel with an explainable score."""
+    if alert_id:
+        alert = TelegramListingAlert.objects.select_related("listing").filter(pk=alert_id).first()
+        if not alert or alert.delivery_status != TelegramListingAlert.DeliveryStatus.SENDING:
+            return False
+        listing = alert.listing
+    else:
+        alert = enqueue_new_listing_alert(listing_id)
+        if alert.delivery_status != TelegramListingAlert.DeliveryStatus.PENDING:
+            return False
+        alert.delivery_status = TelegramListingAlert.DeliveryStatus.SENDING
+        alert.delivery_attempts += 1
+        alert.locked_until = timezone.now() + timedelta(minutes=2)
+        alert.next_attempt_at = None
+        alert.save(update_fields=("delivery_status", "delivery_attempts", "locked_until", "next_attempt_at"))
+        listing = alert.listing
     if not settings.TG_LISTING_ALERTS_ENABLED or not getattr(settings, "TG_CHANNEL_ID", ""):
-        return False
-    listing = Listing.objects.get(pk=listing_id)
-    if (not listing.is_visible or listing.area is None or listing.area < MIN_TARGET_AREA
-            or TelegramListingAlert.objects.filter(listing=listing).exists()):
         return False
     score, discount, reasons = _listing_score(listing)
     market = market_position_details(listing)
@@ -279,16 +294,15 @@ def notify_new_listing(listing_id: int) -> bool:
     text = "\n".join(line for line in lines if line is not None)
     result = _send_reviewable_listing(listing, text)
     if not result:
+        mark_listing_alert_failed(alert.pk, "Telegram send returned no result")
         return False
-    try:
-        TelegramListingAlert.objects.create(
-            listing=listing, score=None, is_deal=is_deal, reasons=reasons,
-            chat_id=str(settings.TG_CHANNEL_ID), message_id=result.get("message_id"),
-            message_kind=result.get("_home_hunter_message_kind", "text"), message_text=text,
-        )
-    except IntegrityError:
-        logger.info("Telegram listing alert was already recorded for listing=%s", listing_id)
-        return False
+    alert.score = None
+    alert.is_deal = is_deal
+    alert.reasons = reasons
+    alert.filter_reason = ""
+    alert.filter_checked_at = timezone.now()
+    alert.save(update_fields=("score", "is_deal", "reasons", "filter_reason", "filter_checked_at"))
+    mark_listing_alert_sent(alert.pk, result=result, message_text=text)
     refresh_telegram_listing_score(listing.pk)
     return True
 

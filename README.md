@@ -3,6 +3,12 @@
 Личный мониторинг квартир: Django Admin, PostgreSQL, обычные HTML-страницы
 Avito через Playwright Chromium. Python 3.12. Redis, Celery и API не нужны.
 
+Основные проектные документы:
+
+- [Видимость объявлений и географические зоны](docs/LISTING_VISIBILITY_AND_GEO_ZONES.md)
+- [Avito: вторичка, первичка и состояние отделки](docs/AVITO_SECONDARY_FILTER.md)
+- [Авторизация и сетевой доступ CIAN/Avito](docs/AUTHORIZATION_CIAN_AVITO.md)
+
 ## Локальный запуск
 
 Нужны Python 3.12 и Docker Compose v2 (или собственный PostgreSQL).
@@ -259,6 +265,22 @@ SOCKS-туннель `shared-socks-tunnel`; для этого укажите
 Изменения цены при включённом `TG_PRICE_ALERTS_ENABLED=true` отправляются только
 при изменении от `TG_PRICE_ALERT_MIN_PERCENT` процентов (по умолчанию 3%):
 снижения — в канал, повышения — только в `TG_CHAT_ID`.
+
+Публикация новых объявлений выполняется отдельным постоянным Telegram-воркером.
+Он проверяет очередь раз в 10 минут, отправляет до 10 объявлений за проход и
+повторяет неудачные отправки с увеличивающейся задержкой. Объявление сначала
+проходит тот же фильтр, что и обычная лента; при отсутствии координат оно ждёт
+первой попытки геокодирования. Для включения на стенде установите сервис:
+
+```bash
+sudo cp deploy/systemd/home-hunter-telegram-send.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now home-hunter-telegram-send.service
+sudo systemctl status home-hunter-telegram-send.service
+```
+
+Состояние каждой публикации и последняя ошибка доступны в Django Admin в разделе
+`Telegram listing alerts`.
 
 ```bash
 sudo cp deploy/systemd/home-hunter-scan-health.* /etc/systemd/system/

@@ -20,7 +20,9 @@ def test_new_listing_alert_excludes_sub_55_square_meters(settings):
     with patch("listings.services.deal_alerts._send_reviewable_listing") as send:
         assert not notify_new_listing(listing.pk)
     send.assert_not_called()
-    assert not TelegramListingAlert.objects.filter(listing=listing).exists()
+    alert = TelegramListingAlert.objects.get(listing=listing)
+    assert alert.delivery_status == TelegramListingAlert.DeliveryStatus.SKIPPED
+    assert alert.filter_reason == "area below 55 m²"
 
 
 def test_notifies_once_for_a_new_listing_below_local_market(settings):

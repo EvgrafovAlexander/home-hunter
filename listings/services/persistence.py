@@ -176,8 +176,8 @@ def process_listing(
                          "missed_full_scans": 0},
     )
     if created:
-        from listings.services.deal_alerts import notify_new_listing
-        transaction.on_commit(lambda listing_id=listing.pk: notify_new_listing(listing_id))
+        from listings.services.telegram_delivery import enqueue_new_listing_alert
+        transaction.on_commit(lambda listing_id=listing.pk: enqueue_new_listing_alert(listing_id))
     elif price_changed:
         from listings.services.price_alerts import notify_price_change
         transaction.on_commit(lambda listing_id=listing.pk, old=old_price, new=values["price"]:

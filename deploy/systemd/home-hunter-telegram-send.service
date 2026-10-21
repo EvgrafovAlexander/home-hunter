@@ -1,0 +1,13 @@
+[Unit]
+Description=Home Hunter Telegram listing delivery worker
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/home_hunter
+ExecStart=/usr/bin/docker compose exec -T web python manage.py telegram_send --interval 600 --batch-size 10
+Restart=always
+RestartSec=30
+TimeoutStopSec=30
