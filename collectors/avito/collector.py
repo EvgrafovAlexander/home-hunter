@@ -51,6 +51,9 @@ class AvitoCollector(BaseCollector):
         self.session_mode = session_mode
         self.stop_requested = False
         self.state = SessionState(settings.AVITO_STATE_DIR)
+        # Diagnostics can isolate request state without changing the selected
+        # persistent browser profile.
+        self.browser_profile_dir = None
         self.headless = headless
         self.temporary_profile = None
         self.playwright = None
@@ -90,12 +93,8 @@ class AvitoCollector(BaseCollector):
                 )
                 proxy_options = {"proxy": selected_proxy} if selected_proxy else {}
             self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-            profile = self.state.directory / "chromium"
-            persistent_profile = settings.AVITO_PERSISTENT_PROFILE
-            if self.session_mode == "persistent":
-                persistent_profile = True
-            elif self.session_mode == "temporary":
-                persistent_profile = False
+            profile = self.browser_profile_dir or self.state.directory / "chromium"
+            persistent_profile = self._persistent_profile_enabled()
             if not persistent_profile:
                 self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
                 profile = self.temporary_profile.name
@@ -112,6 +111,13 @@ class AvitoCollector(BaseCollector):
             self.stop_requested = True
             self.start_error = exc
             raise
+
+    def _persistent_profile_enabled(self):
+        if self.session_mode == "persistent":
+            return True
+        if self.session_mode == "temporary":
+            return False
+        return settings.AVITO_PERSISTENT_PROFILE
 
     @staticmethod
     def _page_state(html: str) -> str:

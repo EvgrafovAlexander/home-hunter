@@ -5,6 +5,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from collectors.base import CollectionResult
+from collectors.avito.session import SessionState
 from listings.models import NetworkRoute, PollingDiagnosticJob, PollingProfile, Scan, SearchQuery, SourcePollingControl
 from .test_persistence import search, item
 
@@ -111,7 +112,7 @@ def test_manual_captcha_requires_visible_browser(search):
     assert not Scan.objects.exists()
 
 
-def test_polling_diagnostic_worker_processes_queued_job(search, item):
+def test_polling_diagnostic_worker_processes_queued_job(search, item, tmp_path):
     route = NetworkRoute.objects.create(
         code="worker_test", name="Worker route", kind="direct",
     )
@@ -123,13 +124,16 @@ def test_polling_diagnostic_worker_processes_queued_job(search, item):
     )
     collector = AsyncMock()
     collector.stop_requested = False
+    production_dir = tmp_path / "production-state"
+    collector.state = SessionState(production_dir)
+    collector._persistent_profile_enabled = lambda: True
     collector.__aenter__.return_value = collector
     collector.collect.return_value = CollectionResult([item], 1, 1, True)
     resolved = SimpleNamespace(
         code=profile.code, route=SimpleNamespace(code=route.code, name=route.name, endpoint=""),
         session_mode="settings",
     )
-    with patch("listings.management.commands.poll_polling_diagnostics.get_collector", return_value=collector), \
+    with patch("listings.management.commands.poll_polling_diagnostics.get_collector", return_value=collector) as factory, \
          patch("listings.management.commands.poll_polling_diagnostics.resolve_profile", return_value=resolved):
         call_command("poll_polling_diagnostics", once=True)
     job.refresh_from_db()
@@ -137,3 +141,6 @@ def test_polling_diagnostic_worker_processes_queued_job(search, item):
     assert job.scan_id and job.scan.status == Scan.Status.SUCCESS
     assert "Диагностика: avito" in job.log
     assert "scan start" in job.log
+    assert collector.browser_profile_dir == production_dir / "chromium"
+    assert "постоянный профиль браузера" in job.log
+    factory.assert_called_once_with("avito", headless=False, manual_wait_seconds=0)

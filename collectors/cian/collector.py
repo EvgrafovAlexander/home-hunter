@@ -53,6 +53,9 @@ class CianCollector(BaseCollector):
         self.route = route
         self.session_mode = session_mode
         self.state = SessionState(settings.CIAN_STATE_DIR)
+        # Diagnostics may replace ``state`` to isolate cooldown files while
+        # keeping the browser profile used by the normal collector.
+        self.browser_profile_dir = None
         self.context = self.page = self.playwright = None
         self.temporary_profile = None
         self.stop_requested = False
@@ -87,6 +90,12 @@ class CianCollector(BaseCollector):
                 or settings.CIAN_PAGE_DELAY_MIN_SECONDS > settings.CIAN_PAGE_DELAY_MAX_SECONDS):
             raise ValueError("CIAN page limits must be positive")
 
+    def _persistent_profile_enabled(self):
+        # CIAN has no separate legacy persistent-profile setting: the normal
+        # mode is persistent unless the selected polling profile says
+        # ``temporary``.
+        return self.session_mode != "temporary"
+
     def _check_cooldown(self):
         until = self.state.read()["blocked_until"]
         if until > time.time():
@@ -97,7 +106,7 @@ class CianCollector(BaseCollector):
         if self.page is not None:
             return
         self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        profile = self.state.directory / "chromium"
+        profile = self.browser_profile_dir or self.state.directory / "chromium"
         if self.session_mode == "temporary":
             self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
             profile = self.temporary_profile.name

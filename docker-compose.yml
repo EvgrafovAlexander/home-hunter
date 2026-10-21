@@ -90,7 +90,7 @@ services:
       AVITO_PROXY_URL: socks5://shared-socks-tunnel:1080
       CIAN_PROXY_URL: socks5://shared-socks-tunnel:1080
       DOMCLICK_PROXY_URL: socks5://shared-socks-tunnel:1080
-    command: ["python", "manage.py", "poll_polling_diagnostics"]
+    command: ["xvfb-run", "-a", "-s", "-screen 0 1440x1000x24 -nolisten tcp", "python", "manage.py", "poll_polling_diagnostics"]
     depends_on:
       db:
         condition: service_healthy

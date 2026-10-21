@@ -122,15 +122,33 @@ class Command(BaseCommand):
             handler.close()
 
     async def collect(self, job, profile):
-        collector = get_collector(job.source, headless=True, manual_wait_seconds=0)
+        # Scheduled collector services run headed under Xvfb.  Use the same
+        # browser mode here so anti-bot checks see the same runtime shape.
+        collector = get_collector(job.source, headless=False, manual_wait_seconds=0)
         collector.route = profile.route
         collector.session_mode = profile.session_mode
+        production_state = getattr(collector, "state", None)
         # A button-initiated diagnostic must not inherit a production cooldown,
         # nor write a test block back into the state used by scheduled polling.
+        # The browser session itself remains identical to a classic run: a
+        # persistent profile keeps its cookies, while a temporary profile is
+        # still recreated for the test.
         with TemporaryDirectory(prefix=f"polling-diagnostic-{job.source}-") as state_dir:
             if hasattr(collector, "state"):
                 collector.state = SessionState(state_dir)
-            await sync_to_async(self.append_log)(job.pk, "Изолированное состояние теста: cooldown планового опроса не используется")
+            uses_persistent_profile = getattr(collector, "_persistent_profile_enabled", lambda: False)()
+            if uses_persistent_profile and production_state is not None:
+                collector.browser_profile_dir = production_state.directory / "chromium"
+                message = (
+                    "Изолировано только состояние cooldown; постоянный профиль браузера "
+                    "и cookies используются как в обычном запуске"
+                )
+            else:
+                message = (
+                    "Изолировано состояние cooldown; профиль браузера создаётся по настройке "
+                    "обычного запуска"
+                )
+            await sync_to_async(self.append_log)(job.pk, message)
             async with collector:
                 scan = await sync_to_async(run_scan)(job.search_query, collector, mode=job.mode, profile=profile)
         status = (PollingDiagnosticJob.Status.SUCCESS

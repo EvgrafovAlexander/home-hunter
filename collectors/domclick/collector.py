@@ -50,6 +50,9 @@ class DomclickCollector(BaseCollector):
         self.route = route
         self.session_mode = session_mode
         self.state = SessionState(settings.DOMCLICK_STATE_DIR)
+        # Diagnostics can isolate request state without changing the selected
+        # persistent browser profile.
+        self.browser_profile_dir = None
         self.playwright = self.context = self.page = None
         self.temporary_profile = None
         self.start_error: Exception | None = None
@@ -108,12 +111,8 @@ class DomclickCollector(BaseCollector):
                 if self.route is not None
                 else build_proxy_options(settings.DOMCLICK_PROXY_URL)
             )
-            profile = self.state.directory / "chromium"
-            persistent_profile = settings.DOMCLICK_PERSISTENT_PROFILE
-            if self.session_mode == "persistent":
-                persistent_profile = True
-            elif self.session_mode == "temporary":
-                persistent_profile = False
+            profile = self.browser_profile_dir or self.state.directory / "chromium"
+            persistent_profile = self._persistent_profile_enabled()
             if not persistent_profile:
                 self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
                 profile = self.temporary_profile.name
@@ -130,6 +129,13 @@ class DomclickCollector(BaseCollector):
             self.stop_requested = True
             self.start_error = exc
             raise
+
+    def _persistent_profile_enabled(self):
+        if self.session_mode == "persistent":
+            return True
+        if self.session_mode == "temporary":
+            return False
+        return settings.DOMCLICK_PERSISTENT_PROFILE
 
     @staticmethod
     def _page_state(html: str) -> str:
