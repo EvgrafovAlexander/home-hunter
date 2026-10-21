@@ -20,6 +20,13 @@ def test_parse_proxy_list_keeps_high_anonymity_candidates_only():
     ]
 
 
+def test_parse_proxy_list_supports_geonix_json_payload():
+    payload = '[{"ip":"1.2.3.4:80"},{"ip":"5.6.7.8:1080"},{"ip":"1.2.3.4:80"}]'
+    assert [candidate.url for candidate in parse_proxy_list(
+        payload, scheme_by_port={"1080": "socks5"},
+    )] == ["http://1.2.3.4:80", "socks5://5.6.7.8:1080"]
+
+
 def test_select_working_proxy_tries_a_bounded_number(monkeypatch):
     html = """
     <table>
