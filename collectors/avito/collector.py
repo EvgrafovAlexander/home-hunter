@@ -13,6 +13,7 @@ from playwright.async_api import Error as PlaywrightError, TimeoutError as Playw
 
 from collectors.base import BaseCollector, CollectionError, CollectionResult
 from collectors.routing import RouteSpec, build_proxy_options
+from collectors.proxy_pool import select_working_proxy
 from . import selectors as sel
 from .parser import parse_page
 from .session import SessionState
@@ -79,13 +80,15 @@ class AvitoCollector(BaseCollector):
         if self.page is not None:
             return
         try:
-            proxy_options = {
-                "proxy": self.route.resolved_proxy_options
-                if self.route is not None
-                else build_proxy_options(settings.AVITO_PROXY_URL)
-            }
-            if not proxy_options["proxy"]:
-                proxy_options.pop("proxy")
+            if self.route is not None and self.route.kind == "free_proxy_pool":
+                proxy_options = {}
+            else:
+                selected_proxy = (
+                    self.route.resolved_proxy_options
+                    if self.route is not None
+                    else build_proxy_options(settings.AVITO_PROXY_URL)
+                )
+                proxy_options = {"proxy": selected_proxy} if selected_proxy else {}
             self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
             profile = self.state.directory / "chromium"
             persistent_profile = settings.AVITO_PERSISTENT_PROFILE
@@ -97,6 +100,8 @@ class AvitoCollector(BaseCollector):
                 self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
                 profile = self.temporary_profile.name
             self.playwright = await async_playwright().start()
+            if self.route is not None and self.route.kind == "free_proxy_pool":
+                proxy_options["proxy"] = await select_working_proxy(self.playwright, self.route)
             self.context = await self.playwright.chromium.launch_persistent_context(
                 str(profile), headless=self.headless, channel="chromium",
                 viewport={"width": 1440, "height": 1000}, locale="ru-RU", **proxy_options,

@@ -32,6 +32,7 @@ class NetworkRoute(models.Model):
         SSH_SOCKS5 = "ssh_socks5", "SSH/SOCKS5"
         SERVER_PROXY = "server_proxy", "Серверный прокси"
         MOBILE_PROXY = "mobile_proxy", "Мобильный прокси"
+        FREE_PROXY_POOL = "free_proxy_pool", "Бесплатный пул прокси"
 
     code = models.SlugField(max_length=80, unique=True)
     name = models.CharField(max_length=120)

@@ -7,6 +7,7 @@
 <section class="profiles-page">
   <h1>Профили опросов</h1>
   <p class="lead">Один активный профиль назначается на площадку и используется всеми её режимами. Секреты прокси и SSH-ключи здесь не показываются.</p>
+  <p class="notice">Профиль «Бесплатный пул прокси» экспериментальный: он проверяет ограниченное число публичных адресов и выбирает один рабочий прокси на запуск.</p>
   {% if messages %}{% for message in messages %}<p class="notice">{{ message }}</p>{% endfor %}{% endif %}
   <div class="profile-grid">
     {% for group in profile_groups %}
@@ -25,6 +26,6 @@
   </div>
   <h2 style="margin:30px 0 8px">Сетевые маршруты</h2>
   <p class="lead">Для создания или изменения маршрута откройте <a href="{% url 'admin:listings_networkroute_changelist' %}">управление маршрутами</a>. Поля секретов содержат только ссылки на секреты сервера.</p>
-  <div class="routes">{% for route in routes %}<article class="route-card"><h2>{{ route.name }}</h2><p><code>{{ route.code }}</code> · {{ route.get_kind_display }}</p><p>Прокси: <code>{{ route.proxy_url|default:'не задан' }}</code></p><small>{% if route.enabled %}Включён{% else %}Отключён{% endif %} · профилей: {{ route.polling_profiles.count }}</small></article>{% endfor %}</div>
+  <div class="routes">{% for route in routes %}<article class="route-card"><h2>{{ route.name }}</h2><p><code>{{ route.code }}</code> · {{ route.get_kind_display }}</p>{% if route.proxy_url %}<p>Прокси: <code>{{ route.proxy_url }}</code></p>{% endif %}{% if route.endpoint %}<p>Источник: <code>{{ route.endpoint }}</code></p>{% endif %}<small>{% if route.enabled %}Включён{% else %}Отключён{% endif %} · профилей: {{ route.polling_profiles.count }}</small></article>{% endfor %}</div>
 </section>
 {% endblock %}
