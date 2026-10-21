@@ -198,6 +198,24 @@ class AvitoCollector(BaseCollector):
         await self._pace_request()
         try:
             response = await self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        except PlaywrightTimeout as exc:
+            # Avito may keep loading secondary resources after the rendered
+            # search results are already usable. Preserve a ready page instead
+            # of treating that navigation timeout as a failed scan.
+            try:
+                await self.page.wait_for_timeout(5000)
+                html = await self.page.content()
+            except PlaywrightError:
+                self.stop_requested = True
+                raise exc
+            state = self._page_state(html)
+            if state == "ready":
+                self._diagnose(url, html, None, {}, "navigation_timeout_recovered")
+                return html
+            if state == "blocked":
+                self.stop_requested = True
+                self.state.block(settings.AVITO_BLOCK_COOLDOWN_SECONDS, None)
+            raise exc
         except PlaywrightError:
             self.stop_requested = True
             raise  # No retry or direct fallback when the configured route fails.
