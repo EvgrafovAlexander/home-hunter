@@ -1,12 +1,14 @@
 """Run one-off polling diagnostics requested from the profiles page."""
 
 import logging
+from queue import Queue
 import time
 from tempfile import TemporaryDirectory
+from threading import Thread
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.core.management.base import BaseCommand
-from django.db import connection, transaction
+from django.db import close_old_connections, connection, transaction
 from django.utils import timezone
 
 from collectors.registry import get_collector
@@ -26,18 +28,37 @@ class JobLogHandler(logging.Handler):
     def __init__(self, job_id):
         super().__init__(level=logging.INFO)
         self.job_id = job_id
+        self._queue = Queue()
+        self._writer = Thread(target=self._write_loop, name=f"diagnostic-log-{job_id}", daemon=True)
         self.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        self._writer.start()
 
     def emit(self, record):
-        try:
-            line = self.format(record)
-            job = PollingDiagnosticJob.objects.filter(pk=self.job_id).only("log").first()
-            if job is None:
+        # Collector log records can be emitted from an asyncio thread.  ORM
+        # writes are deliberately moved to a regular worker thread.
+        self._queue.put(self.format(record))
+
+    def _write_loop(self):
+        while True:
+            line = self._queue.get()
+            if line is None:
                 return
-            job.log = (job.log + line + "\n")[-MAX_LOG_LENGTH:]
-            job.save(update_fields=("log",))
-        except Exception:  # logging must never stop a diagnostic run
-            self.handleError(record)
+            try:
+                close_old_connections()
+                job = PollingDiagnosticJob.objects.filter(pk=self.job_id).only("log").first()
+                if job is not None:
+                    job.log = (job.log + line + "\n")[-MAX_LOG_LENGTH:]
+                    job.save(update_fields=("log",))
+            except Exception:
+                # A diagnostic must still finish if its log sink is briefly unavailable.
+                close_old_connections()
+
+    def close(self):
+        if getattr(self, "_writer", None) is not None:
+            self._queue.put(None)
+            self._writer.join(timeout=10)
+            self._writer = None
+        super().close()
 
 
 class Command(BaseCommand):
@@ -98,6 +119,7 @@ class Command(BaseCommand):
             self.finish(job.pk, PollingDiagnosticJob.Status.FAILED, error=f"{type(exc).__name__}: {exc}")
         finally:
             root_logger.removeHandler(handler)
+            handler.close()
 
     async def collect(self, job, profile):
         collector = get_collector(job.source, headless=True, manual_wait_seconds=0)
