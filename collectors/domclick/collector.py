@@ -12,7 +12,7 @@ from playwright.async_api import Error as PlaywrightError, TimeoutError as Playw
 
 from collectors.avito.session import SessionState
 from collectors.base import BaseCollector, CollectionError, CollectionResult
-from collectors.routing import RouteSpec
+from collectors.routing import RouteSpec, build_proxy_options
 from .parser import parse_page
 
 logger = logging.getLogger(__name__)
@@ -75,12 +75,13 @@ class DomclickCollector(BaseCollector):
         if (parts.scheme != "https" or not (parts.hostname or "").endswith("domclick.ru")
                 or not (parts.path == "/search" or is_public_listing)):
             raise ValueError("Expected an HTTPS Domclick search or public listing URL")
-        proxy_url = self.route.resolved_proxy_url if self.route is not None else settings.DOMCLICK_PROXY_URL
-        proxy = urlsplit(proxy_url)
-        if (proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname
-                or proxy.username or proxy.password or not proxy.port
-                or proxy.path not in {"", "/"} or proxy.query or proxy.fragment):
-            raise ValueError("DOMCLICK_PROXY_URL must be an explicit proxy URL without credentials; direct fallback is disabled")
+        proxy_options = (
+            self.route.resolved_proxy_options
+            if self.route is not None
+            else build_proxy_options(settings.DOMCLICK_PROXY_URL)
+        )
+        if not proxy_options:
+            raise ValueError("Domclick requires an explicit proxy; direct fallback is disabled")
         for value in (settings.DOMCLICK_PAGE_DELAY_SECONDS, settings.DOMCLICK_BLOCK_COOLDOWN_SECONDS):
             if not math.isfinite(value) or value < 0:
                 raise ValueError("Invalid Domclick timing settings")
@@ -101,7 +102,11 @@ class DomclickCollector(BaseCollector):
             return
         try:
             self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-            proxy_url = self.route.resolved_proxy_url if self.route is not None else settings.DOMCLICK_PROXY_URL
+            proxy_options = (
+                self.route.resolved_proxy_options
+                if self.route is not None
+                else build_proxy_options(settings.DOMCLICK_PROXY_URL)
+            )
             profile = self.state.directory / "chromium"
             persistent_profile = settings.DOMCLICK_PERSISTENT_PROFILE
             if self.session_mode == "persistent":
@@ -115,7 +120,7 @@ class DomclickCollector(BaseCollector):
             self.context = await self.playwright.chromium.launch_persistent_context(
                 str(profile), headless=self.headless, channel="chromium",
                 viewport={"width": 1440, "height": 1000}, locale="ru-RU",
-                proxy={"server": proxy_url},
+                proxy=proxy_options,
             )
             self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
         except Exception as exc:

@@ -14,7 +14,7 @@ from playwright.async_api import async_playwright, TimeoutError as PlaywrightTim
 
 from collectors.avito.session import SessionState
 from collectors.base import BaseCollector, CollectionError, CollectionResult
-from collectors.routing import RouteSpec
+from collectors.routing import RouteSpec, build_proxy_options
 from .parser import CianDetail, cian_url, parse_detail_page, parse_page
 
 logger = logging.getLogger(__name__)
@@ -70,10 +70,13 @@ class CianCollector(BaseCollector):
                 self.temporary_profile.cleanup()
 
     def _validate(self):
-        proxy_url = self.route.resolved_proxy_url if self.route is not None else settings.CIAN_PROXY_URL
-        proxy = urlsplit(proxy_url)
-        if proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname or proxy.username or proxy.password:
-            raise ValueError("CIAN_PROXY_URL must be an explicit proxy URL without credentials; direct fallback is disabled")
+        proxy_options = (
+            self.route.resolved_proxy_options
+            if self.route is not None
+            else build_proxy_options(settings.CIAN_PROXY_URL)
+        )
+        if not proxy_options:
+            raise ValueError("CIAN requires an explicit proxy; direct fallback is disabled")
         for value in (settings.CIAN_PAGE_DELAY_MIN_SECONDS, settings.CIAN_PAGE_DELAY_MAX_SECONDS,
                       settings.CIAN_BLOCK_COOLDOWN_SECONDS):
             if not math.isfinite(value) or value <= 0:
@@ -98,10 +101,15 @@ class CianCollector(BaseCollector):
             self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
             profile = self.temporary_profile.name
         self.playwright = await async_playwright().start()
+        proxy_options = (
+            self.route.resolved_proxy_options
+            if self.route is not None
+            else build_proxy_options(settings.CIAN_PROXY_URL)
+        )
         self.context = await self.playwright.chromium.launch_persistent_context(
             str(profile), headless=self.headless, channel="chromium",
             viewport={"width": 1440, "height": 1000}, locale="ru-RU",
-            proxy={"server": self.route.resolved_proxy_url if self.route is not None else settings.CIAN_PROXY_URL},
+            proxy=proxy_options,
         )
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
 

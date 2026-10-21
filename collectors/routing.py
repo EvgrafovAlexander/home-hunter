@@ -8,6 +8,7 @@ source-specific environment variables, so production keeps its current route.
 from dataclasses import dataclass, field
 import os
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from django.conf import settings
 
@@ -25,12 +26,64 @@ class RouteSpec:
 
     @property
     def resolved_proxy_url(self) -> str:
-        """Return a mounted secret value when the route uses one.
+        """Return the proxy server URL without credentials."""
+        return self.resolved_proxy_options.get("server", "")
 
-        A secret may contain a complete authenticated proxy URL.  Plain
-        ``proxy_url`` remains suitable for non-secret SSH/SOCKS endpoints.
+    @property
+    def resolved_proxy_options(self) -> dict[str, str]:
+        """Return Playwright proxy options with credentials kept separate.
+
+        ``secret_ref=SERVER_PROXY`` reads ``SERVER_PROXY_URL``,
+        ``SERVER_PROXY_USERNAME`` and ``SERVER_PROXY_PASSWORD``.  The old
+        convention of putting a complete URL in the variable named by
+        ``secret_ref`` is retained for existing routes.
         """
-        return (os.getenv(self.secret_ref, "") if self.secret_ref else "") or self.proxy_url
+        url = self.proxy_url
+        username = password = ""
+        if self.secret_ref:
+            prefix = self.secret_ref
+            url = os.getenv(f"{prefix}_URL", "") or os.getenv(prefix, "") or url
+            username = os.getenv(f"{prefix}_USERNAME", "")
+            password = os.getenv(f"{prefix}_PASSWORD", "")
+        return build_proxy_options(url, username=username, password=password)
+
+    @property
+    def resolved_healthcheck_url(self) -> str:
+        """Return a route healthcheck URL, allowing env-only configuration."""
+        if self.secret_ref:
+            return os.getenv(f"{self.secret_ref}_HEALTHCHECK_URL", "") or self.healthcheck_url
+        return self.healthcheck_url
+
+
+def build_proxy_options(proxy_url: str, *, username: str = "", password: str = "") -> dict[str, str]:
+    """Validate a proxy URL and produce Playwright's proxy option mapping.
+
+    Credentials may be supplied in dedicated arguments (the preferred form)
+    or embedded in a legacy URL.  The returned ``server`` never contains
+    credentials, which prevents accidental leakage through diagnostics.
+    """
+    if not proxy_url:
+        return {}
+    proxy = urlsplit(proxy_url)
+    if (proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname
+            or not proxy.port or proxy.path not in {"", "/"}
+            or proxy.query or proxy.fragment):
+        raise ValueError("Proxy URL must include a supported scheme, host and port without a path")
+    embedded_username = proxy.username or ""
+    embedded_password = proxy.password or ""
+    username = username or embedded_username
+    password = password or embedded_password
+    if (username and not password) or (password and not username):
+        raise ValueError("Proxy username and password must be supplied together")
+    host = proxy.hostname
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    netloc = f"{host}:{proxy.port}"
+    options = {"server": urlunsplit((proxy.scheme, netloc, "", "", ""))}
+    if username:
+        options["username"] = username
+        options["password"] = password
+    return options
 
 
 @dataclass(frozen=True)

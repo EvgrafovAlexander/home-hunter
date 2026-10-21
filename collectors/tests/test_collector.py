@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 from collectors.avito.collector import AvitoCollector, set_page
 from collectors.base import CollectionError
-from collectors.routing import RouteSpec
+from collectors.routing import RouteSpec, build_proxy_options
 
 HTML = (Path(__file__).parent / "fixtures/search.html").read_text().split('<div data-marker="item" data-item-id="broken">')[0]
 SEARCH = SimpleNamespace(name="Test", url="https://www.avito.ru/ufa/kvartiry?s=104")
@@ -143,7 +143,40 @@ def test_browser_uses_selected_profile_route(settings):
     }
 
 
-@pytest.mark.parametrize('proxy', ['localhost:1080', 'socks5://host', 'socks5://user:secret@host:1080',
+def test_server_proxy_credentials_are_read_from_generic_env(monkeypatch):
+    from unittest.mock import patch
+    driver = AsyncMock()
+    start = AsyncMock(return_value=driver)
+    monkeypatch.setenv("SERVER_PROXY_URL", "http://proxy.example:8080")
+    monkeypatch.setenv("SERVER_PROXY_USERNAME", "proxy-user")
+    monkeypatch.setenv("SERVER_PROXY_PASSWORD", "proxy-password")
+    monkeypatch.setenv("SERVER_PROXY_HEALTHCHECK_URL", "https://api.ipify.org")
+    route = RouteSpec(code="server_proxy", name="Server proxy", kind="server_proxy",
+                      proxy_url="", secret_ref="SERVER_PROXY")
+
+    async def check():
+        async with AvitoCollector(route=route) as collector:
+            await collector._start()
+
+    with patch('collectors.avito.collector.async_playwright', return_value=SimpleNamespace(start=start)):
+        asyncio.run(check())
+    assert driver.chromium.launch_persistent_context.call_args.kwargs["proxy"] == {
+        "server": "http://proxy.example:8080",
+        "username": "proxy-user",
+        "password": "proxy-password",
+    }
+    assert route.resolved_healthcheck_url == "https://api.ipify.org"
+
+
+def test_proxy_options_strip_embedded_credentials():
+    assert build_proxy_options("socks5://user:secret@proxy.example:1080") == {
+        "server": "socks5://proxy.example:1080",
+        "username": "user",
+        "password": "secret",
+    }
+
+
+@pytest.mark.parametrize('proxy', ['localhost:1080', 'socks5://host',
                                   'http://host:1080/path', 'http://host:99999'])
 def test_invalid_proxy_does_not_start_browser(settings, proxy):
     from unittest.mock import patch

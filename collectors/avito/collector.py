@@ -12,7 +12,7 @@ from django.conf import settings
 from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeout, async_playwright
 
 from collectors.base import BaseCollector, CollectionError, CollectionResult
-from collectors.routing import RouteSpec
+from collectors.routing import RouteSpec, build_proxy_options
 from . import selectors as sel
 from .parser import parse_page
 from .session import SessionState
@@ -79,15 +79,13 @@ class AvitoCollector(BaseCollector):
         if self.page is not None:
             return
         try:
-            proxy_options = {}
-            proxy_url = self.route.resolved_proxy_url if self.route is not None else settings.AVITO_PROXY_URL
-            if proxy_url:
-                proxy = urlsplit(proxy_url)
-                if (proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname
-                        or proxy.username or proxy.password or not proxy.port
-                        or proxy.path not in {"", "/"} or proxy.query or proxy.fragment):
-                    raise ValueError("AVITO_PROXY_URL must be a proxy URL with port and without credentials")
-                proxy_options["proxy"] = {"server": proxy_url}
+            proxy_options = {
+                "proxy": self.route.resolved_proxy_options
+                if self.route is not None
+                else build_proxy_options(settings.AVITO_PROXY_URL)
+            }
+            if not proxy_options["proxy"]:
+                proxy_options.pop("proxy")
             self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
             profile = self.state.directory / "chromium"
             persistent_profile = settings.AVITO_PERSISTENT_PROFILE
