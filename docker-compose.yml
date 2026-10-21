@@ -67,6 +67,35 @@ services:
         condition: service_healthy
       shared-socks-tunnel:
         condition: service_healthy
+  polling-diagnostics:
+    profiles: ["collector"]
+    build:
+      context: .
+      target: collector
+    restart: unless-stopped
+    init: true
+    shm_size: 256mb
+    volumes:
+      - avito_proxy_state:/app/.avito-state
+      - cian_state:/app/.cian-state
+      - domclick_state:/app/.domclick-state
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DJANGO_DEBUG: "false"
+      AVITO_STATE_DIR: /app/.avito-state
+      CIAN_STATE_DIR: /app/.cian-state
+      DOMCLICK_STATE_DIR: /app/.domclick-state
+      AVITO_PROXY_URL: socks5://shared-socks-tunnel:1080
+      CIAN_PROXY_URL: socks5://shared-socks-tunnel:1080
+      DOMCLICK_PROXY_URL: socks5://shared-socks-tunnel:1080
+    command: ["python", "manage.py", "poll_polling_diagnostics"]
+    depends_on:
+      db:
+        condition: service_healthy
+      shared-socks-tunnel:
+        condition: service_healthy
   telegram-poll:
     build:
       context: .

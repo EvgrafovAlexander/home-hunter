@@ -1,10 +1,11 @@
 from io import StringIO
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from collectors.base import CollectionResult
-from listings.models import Scan, SearchQuery, SourcePollingControl
+from listings.models import NetworkRoute, PollingDiagnosticJob, PollingProfile, Scan, SearchQuery, SourcePollingControl
 from .test_persistence import search, item
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -108,3 +109,31 @@ def test_manual_captcha_requires_visible_browser(search):
     with pytest.raises(CommandError, match="requires --headed"):
         call_command("collect_listings", source="avito", mode="fast", wait_for_captcha=300)
     assert not Scan.objects.exists()
+
+
+def test_polling_diagnostic_worker_processes_queued_job(search, item):
+    route = NetworkRoute.objects.create(
+        code="worker_test", name="Worker route", kind="direct",
+    )
+    profile = PollingProfile.objects.create(
+        code="avito_worker", name="Avito worker", source="avito", mode="all", route=route,
+    )
+    job = PollingDiagnosticJob.objects.create(
+        source="avito", search_query=search, profile=profile, mode="fast",
+    )
+    collector = AsyncMock()
+    collector.stop_requested = False
+    collector.__aenter__.return_value = collector
+    collector.collect.return_value = CollectionResult([item], 1, 1, True)
+    resolved = SimpleNamespace(
+        code=profile.code, route=SimpleNamespace(code=route.code, name=route.name, endpoint=""),
+        session_mode="settings",
+    )
+    with patch("listings.management.commands.poll_polling_diagnostics.get_collector", return_value=collector), \
+         patch("listings.management.commands.poll_polling_diagnostics.resolve_profile", return_value=resolved):
+        call_command("poll_polling_diagnostics", once=True)
+    job.refresh_from_db()
+    assert job.status == PollingDiagnosticJob.Status.SUCCESS, job.error
+    assert job.scan_id and job.scan.status == Scan.Status.SUCCESS
+    assert "Диагностика: avito" in job.log
+    assert "scan start" in job.log

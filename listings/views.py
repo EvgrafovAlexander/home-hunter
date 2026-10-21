@@ -21,7 +21,7 @@ from django.utils import timezone
 from .models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, District, GlobalListingHide,
                      Listing, ListingReview, ListingReviewRevision, ListingSearchQuery, ListingSnapshot, ManualDomclickJob,
                      Microdistrict, NetworkRoute, PollingProfile, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
-                     StreetAssignment, UserListingHide, MicrodistrictBoundary, GeoZone, SourcePollingProfile)
+                     StreetAssignment, UserListingHide, MicrodistrictBoundary, GeoZone, SourcePollingProfile, PollingDiagnosticJob)
 from .services.enrichment import location_is_visible, parse_address
 from .services.location_directory import apply_location_rules_for_assignments, location_is_visible_with_rules
 from .services.microdistrict_polygons import (canonical_microdistrict_name, load_polygons,
@@ -983,7 +983,31 @@ def listing_detail(request, listing_id: int):
 @staff_member_required
 def polling_profiles(request):
     """Assign reusable network profiles without exposing proxy secrets."""
-    if request.method == "POST" and request.POST.get("action") in {"assign_profile", "assign_source_profile"}:
+    action = request.POST.get("action") if request.method == "POST" else ""
+    if request.method == "POST" and action == "test_profile":
+        source = request.POST.get("source", "")
+        profile_id = request.POST.get("profile_id", "")
+        profile = PollingProfile.objects.filter(
+            pk=profile_id, source=source, mode="all", enabled=True, route__enabled=True,
+        ).first()
+        search = SearchQuery.objects.filter(source=source, enabled=True).order_by("pk").first()
+        active_job = PollingDiagnosticJob.objects.filter(
+            source=source, status__in=[PollingDiagnosticJob.Status.QUEUED, PollingDiagnosticJob.Status.RUNNING],
+        ).first()
+        if profile is None:
+            messages.error(request, "Профиль не найден или отключён.")
+        elif search is None:
+            messages.error(request, "Для площадки нет включённого поискового запроса.")
+        elif active_job:
+            messages.warning(request, "Для этой площадки уже выполняется диагностический запуск.")
+        else:
+            PollingDiagnosticJob.objects.create(
+                source=source, search_query=search, profile=profile, mode=Scan.Mode.FAST,
+            )
+            messages.success(request, f"Тест профиля «{profile.name}» поставлен в очередь.")
+        return redirect("polling_profiles")
+
+    if request.method == "POST" and action in {"assign_profile", "assign_source_profile"}:
         source = request.POST.get("source", "")
         profile_id = request.POST.get("profile_id", "")
         profile = PollingProfile.objects.filter(
@@ -1007,6 +1031,11 @@ def polling_profiles(request):
         for assignment in SourcePollingProfile.objects.select_related("profile", "profile__route").filter(enabled=True)
     }
     grouped = []
+    diagnostics = {}
+    for job in PollingDiagnosticJob.objects.select_related("profile", "scan").filter(
+        source__in=[source for source, _ in SearchQuery.Source.choices],
+    )[:100]:
+        diagnostics.setdefault(job.source, job)
     for source, source_label in SearchQuery.Source.choices:
         options = [item for item in profiles if item.source == source and item.mode == "all"]
         if options:
@@ -1016,11 +1045,15 @@ def polling_profiles(request):
                 "source": source, "source_label": source_label,
                 "profiles": options, "selected": selected or next(
                     (item for item in options if item.is_default), options[0],
-                ),
+                ), "diagnostic": diagnostics.get(source),
             })
     return render(request, "listings/polling_profiles.html", {
         "routes": NetworkRoute.objects.prefetch_related("polling_profiles").order_by("name"),
         "profile_groups": grouped,
+        "has_active_diagnostic_jobs": any(
+            job.status in {PollingDiagnosticJob.Status.QUEUED, PollingDiagnosticJob.Status.RUNNING}
+            for job in diagnostics.values()
+        ),
     })
 
 

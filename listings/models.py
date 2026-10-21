@@ -563,6 +563,32 @@ class Scan(models.Model):
     error = models.TextField(blank=True)
 
 
+class PollingDiagnosticJob(models.Model):
+    """One user-requested, one-off polling run for a selected profile."""
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "В очереди"
+        RUNNING = "running", "Выполняется"
+        SUCCESS = "success", "Успешно"
+        FAILED = "failed", "Ошибка"
+
+    source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
+    search_query = models.ForeignKey(SearchQuery, on_delete=models.PROTECT, related_name="polling_diagnostic_jobs")
+    profile = models.ForeignKey("PollingProfile", on_delete=models.PROTECT, related_name="diagnostic_jobs")
+    mode = models.CharField(max_length=10, choices=Scan.Mode.choices, default=Scan.Mode.FAST)
+    scan = models.OneToOneField(Scan, on_delete=models.SET_NULL, null=True, blank=True, related_name="diagnostic_job")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    log = models.TextField(blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-pk")
+        indexes = [models.Index(fields=("source", "status", "created_at"))]
+
+
 class SourceHealthAlert(models.Model):
     source = models.CharField(max_length=20, choices=SearchQuery.Source.choices, unique=True)
     state = models.CharField(max_length=30)

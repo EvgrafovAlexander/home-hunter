@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (Consideration, District, GlobalListingHide, Listing, ListingReview, ListingReviewRevision,
                      ListingSearchQuery, ListingSnapshot, Microdistrict, PriceHistory, ReviewTag, Scan, SearchQuery,
                      StreetAssignment, UserListingHide, MicrodistrictDistrict, GeoZone, NetworkRoute, PollingProfile,
-                     SourcePollingControl, SourcePollingProfile)
+                     SourcePollingControl, SourcePollingProfile, PollingDiagnosticJob)
 
 
 class PriceHistoryInline(admin.TabularInline):
@@ -50,6 +50,14 @@ class ScanAdmin(admin.ModelAdmin):
                     "updated_items", "price_changes")
     list_filter = ("status", "mode", "source")
     readonly_fields = tuple(field.name for field in Scan._meta.fields)
+
+
+@admin.register(PollingDiagnosticJob)
+class PollingDiagnosticJobAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "source", "profile", "status", "scan", "started_at", "finished_at")
+    list_filter = ("source", "status", "profile__route__kind")
+    search_fields = ("profile__name", "profile__code", "error", "log")
+    readonly_fields = tuple(field.name for field in PollingDiagnosticJob._meta.fields)
 
 
 @admin.register(SourcePollingControl)

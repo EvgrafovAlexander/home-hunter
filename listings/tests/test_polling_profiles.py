@@ -1,7 +1,7 @@
 import pytest
 
 from collectors.routing import resolve_profile
-from listings.models import NetworkRoute, PollingProfile, SourcePollingProfile
+from listings.models import NetworkRoute, PollingDiagnosticJob, PollingProfile, SearchQuery, SourcePollingProfile
 
 
 @pytest.mark.django_db
@@ -53,3 +53,26 @@ def test_staff_ui_assigns_one_profile_to_the_source(admin_client):
     })
     assert response.status_code == 302
     assert SourcePollingProfile.objects.get(source="domclick").profile_id == profile.pk
+
+
+@pytest.mark.django_db
+def test_staff_ui_queues_one_off_diagnostic_without_changing_assignment(admin_client):
+    route = NetworkRoute.objects.create(
+        code="diag_test", name="Diagnostic route", kind="free_proxy_pool", endpoint="https://proxy.test/list",
+    )
+    profile = PollingProfile.objects.create(
+        code="avito_diag", name="Avito diagnostic", source="avito", mode="all", route=route,
+    )
+    search = SearchQuery.objects.create(name="Avito test search", source="avito", url="https://avito.test/search")
+    previous_assignment = SourcePollingProfile.objects.filter(source="avito").values_list("profile_id", flat=True).first()
+
+    response = admin_client.post("/polling-profiles/", {
+        "action": "test_profile", "source": "avito", "profile_id": profile.pk,
+    })
+
+    assert response.status_code == 302
+    job = PollingDiagnosticJob.objects.get()
+    assert job.profile_id == profile.pk
+    assert job.search_query_id == search.pk
+    assert job.status == PollingDiagnosticJob.Status.QUEUED
+    assert SourcePollingProfile.objects.filter(source="avito").values_list("profile_id", flat=True).first() == previous_assignment
