@@ -7,6 +7,6 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/home_hunter
-ExecStart=/usr/bin/flock -n -E 75 /tmp/home-hunter-collector.lock /usr/bin/docker compose --profile domclick run --rm domclick-collector
+ExecStart=/usr/bin/flock -n -E 75 /tmp/home-hunter-collector.lock /usr/bin/docker compose --profile domclick run --no-deps --rm domclick-collector
 SuccessExitStatus=75
 TimeoutStartSec=30min
