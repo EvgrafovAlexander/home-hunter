@@ -1,4 +1,4 @@
-"""Small, defensive parser for Avito's item-detail JSON."""
+"""Небольшой устойчивый парсер JSON детальной карточки Avito."""
 from dataclasses import dataclass, field
 from decimal import Decimal
 

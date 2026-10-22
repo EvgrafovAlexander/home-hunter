@@ -50,8 +50,8 @@ class DomclickCollector(BaseCollector):
         self.route = route
         self.session_mode = session_mode
         self.state = SessionState(settings.DOMCLICK_STATE_DIR)
-        # Diagnostics can isolate request state without changing the selected
-        # persistent browser profile.
+        # Диагностика может изолировать состояние запросов, не меняя
+        # выбранный постоянный профиль браузера.
         self.browser_profile_dir = None
         self.playwright = self.context = self.page = None
         self.temporary_profile = None

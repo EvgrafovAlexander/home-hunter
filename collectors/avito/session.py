@@ -1,4 +1,4 @@
-"""Persistent request timing shared by successive collector runs."""
+"""Постоянное состояние интервалов запросов между запусками сборщика."""
 import json
 import math
 import re
@@ -25,7 +25,7 @@ def retry_after_seconds(value: str | None, now: float) -> float:
 
 
 def profile_state_directory(directory: str | Path, profile_code: str | None) -> Path:
-    """Return a safe state directory scoped to one polling profile."""
+    """Возвращает безопасный каталог состояния выбранного polling-профиля."""
     root = Path(directory)
     if not profile_code:
         return root
@@ -42,7 +42,7 @@ class SessionState:
     def read(self) -> dict:
         if not self.path.exists():
             return {"next_request_at": 0, "blocked_until": 0}
-        # Fail closed if state is corrupt rather than accidentally bypass a pause.
+        # При повреждённом состоянии блокируем запросы, а не обходим паузу случайно.
         data = json.loads(self.path.read_text())
         for key in ("next_request_at", "blocked_until"):
             if not isinstance(data.get(key), (int, float)) or not math.isfinite(data[key]):

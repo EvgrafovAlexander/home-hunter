@@ -31,7 +31,7 @@ def _money(value: str) -> int | None:
 
 
 def _card_for(link: Tag) -> Tag:
-    """Find the smallest enclosing element containing this offer only."""
+    """Находит минимальный контейнер, содержащий только это объявление."""
     card = link.parent
     while isinstance(card, Tag) and card.parent:
         identifiers = {CARD_PATH.search(a.get("href", "")).group(1) for a in card.select("a[href]")
@@ -82,7 +82,7 @@ def parse_page(html: str, page_url: str) -> ParsedPage:
             per_sqm = int(re.sub(r"\D", "", prices[1])) if len(prices) > 1 and "/м" in text else None
             images = card.select("img[src], img[data-src]")
             image_url = next((image.get("src") or image.get("data-src") for image in images), None)
-            # The first text immediately after the title is the address in the current SERP.
+    # В текущей выдаче первый текст после заголовка — это адрес.
             title_parent = link.parent
             address = None
             for sibling in title_parent.find_all_next(string=True, limit=8):

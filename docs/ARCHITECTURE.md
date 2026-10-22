@@ -50,7 +50,7 @@ frontend-сборки и формального API schema layer нет.
 
 ### Persistence и scan orchestration
 
-`listings/services/persistence.py` нормализует адрес, рассчитывает цену за м², применяет location rules и сохраняет историю. `listings/services/scans.py` создаёт Scan, обрабатывает `CollectionResult` и выполняет безопасную деактивацию только для завершённых проходов. Detail polling CIAN и Avito пока частично реализован непосредственно в management-командах.
+`listings/services/persistence.py` нормализует адрес, рассчитывает цену за м², применяет location rules и сохраняет историю. `listings/services/scans.py` создаёт Scan, обрабатывает `CollectionResult` и выполняет безопасную деактивацию только для завершённых проходов. Detail polling использует общий orchestration-слой и source-specific persistence-сервисы; management-команды оставляют за собой получение данных площадки.
 
 ### Модели
 

@@ -1,4 +1,4 @@
-"""Opt-in real Chromium check against a local HTML fixture, never live Avito."""
+"""Опциональная проверка Chromium на локальном HTML-файле, без live Avito."""
 import asyncio
 import os
 from pathlib import Path
@@ -30,7 +30,7 @@ def test_real_browser_captcha_recovery_without_reload():
 
     async def check():
         collector = AvitoCollector(headless=False, manual_wait_seconds=10)
-        # Exercise manual recovery in a headless test browser; production CLI requires --headed.
+    # Проверяем ручное восстановление в headless-браузере; production CLI требует --headed.
         collector.headless = True
         requests = []
         async with collector:

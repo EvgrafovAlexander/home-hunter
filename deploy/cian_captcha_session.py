@@ -1,4 +1,4 @@
-"""Temporary noVNC browser for manually completing a CIAN challenge.
+"""Временный noVNC-браузер для ручного прохождения проверки CIAN.
 
 Run only while CIAN timers are stopped: it opens the production persistent
 profile so cookies accepted by the user remain available to the collector.

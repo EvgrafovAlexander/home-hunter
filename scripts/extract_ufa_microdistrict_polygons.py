@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract Ufa microdistrict polygons embedded in bezposrednikov.ru HTML."""
+"""Извлекает полигоны микрорайонов Уфы из HTML bezposrednikov.ru."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def extract_polygons(html: bytes, source_url: str) -> dict:
                 "title": node.get("data-title", "").strip(),
                 "url": node.get("data-url", "").strip(),
                 "geometry_type": "Polygon",
-                # Yandex Maps 2.1 page data uses [latitude, longitude].
+                # В данных Yandex Maps 2.1 порядок: [широта, долгота].
                 "coordinate_order": "latitude,longitude",
                 "coordinates": geometry,
             }

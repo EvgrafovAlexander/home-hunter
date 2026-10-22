@@ -68,7 +68,7 @@ AVITO_PERSISTENT_PROFILE = os.getenv("AVITO_PERSISTENT_PROFILE", "true").lower()
 AVITO_FAST_SCAN_PAGES = int(os.getenv("AVITO_FAST_SCAN_PAGES", "1"))
 AVITO_MAX_PAGES = int(os.getenv("AVITO_MAX_PAGES", "50"))
 AVITO_NO_NEW_PAGES_LIMIT = int(os.getenv("AVITO_NO_NEW_PAGES_LIMIT", "2"))
-# Navigation spacing also applies between searches and across collector runs.
+# Интервал навигации действует между поисками и последовательными запусками сборщика.
 AVITO_PAGE_DELAY_SECONDS = float(os.getenv("AVITO_PAGE_DELAY_SECONDS", "120"))
 AVITO_BLOCK_COOLDOWN_SECONDS = float(os.getenv("AVITO_BLOCK_COOLDOWN_SECONDS", "3600"))
 AVITO_STATE_DIR = Path(os.getenv("AVITO_STATE_DIR", str(BASE_DIR / ".avito-state")))
@@ -87,7 +87,7 @@ CIAN_STATE_DIR = Path(os.getenv("CIAN_STATE_DIR", str(BASE_DIR / ".cian-state"))
 CIAN_PROXY_URL = os.getenv("CIAN_PROXY_URL", "")
 CIAN_FAST_SCAN_PAGES = int(os.getenv("CIAN_FAST_SCAN_PAGES", "1"))
 CIAN_MAX_PAGES = int(os.getenv("CIAN_MAX_PAGES", "50"))
-# Keep the legacy setting as the lower bound when it is explicitly configured.
+# Явно заданное старое значение сохраняем как нижнюю границу.
 CIAN_PAGE_DELAY_MIN_SECONDS = float(os.getenv(
     "CIAN_PAGE_DELAY_MIN_SECONDS", os.getenv("CIAN_PAGE_DELAY_SECONDS", "90"),
 ))

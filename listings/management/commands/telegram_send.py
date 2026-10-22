@@ -26,7 +26,7 @@ class Command(BaseCommand):
             for alert_id in claimed:
                 try:
                     notify_new_listing(0, alert_id=alert_id)
-                except Exception as exc:  # keep one bad listing from stopping the queue
+                except Exception as exc:  # одна плохая карточка не должна остановить очередь
                     mark_listing_alert_failed(alert_id, f"{type(exc).__name__}: {exc}")
                     self.stderr.write(f"Telegram listing alert {alert_id} failed: {type(exc).__name__}")
             if options["once"]:

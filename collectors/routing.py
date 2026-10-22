@@ -1,8 +1,7 @@
-"""Runtime resolution of reusable network and polling profiles.
+"""Разрешение сетевых и polling-профилей во время запуска.
 
-The database profiles are optional during the transition.  When no profile is
-configured, this module returns a legacy profile backed by the existing
-source-specific environment variables, so production keeps its current route.
+Профили базы данных пока необязательны. Если профиль не задан, модуль
+возвращает совместимый вариант на основе переменных окружения источника.
 """
 
 from dataclasses import dataclass, field
@@ -26,12 +25,12 @@ class RouteSpec:
 
     @property
     def resolved_proxy_url(self) -> str:
-        """Return the proxy server URL without credentials."""
+        """Возвращает URL прокси без учётных данных."""
         return self.resolved_proxy_options.get("server", "")
 
     @property
     def resolved_proxy_options(self) -> dict[str, str]:
-        """Return Playwright proxy options with credentials kept separate.
+        """Возвращает параметры прокси Playwright с отдельными учётными данными.
 
         ``secret_ref=SERVER_PROXY`` reads ``SERVER_PROXY_URL``,
         ``SERVER_PROXY_USERNAME`` and ``SERVER_PROXY_PASSWORD``.  The old
@@ -49,14 +48,14 @@ class RouteSpec:
 
     @property
     def resolved_healthcheck_url(self) -> str:
-        """Return a route healthcheck URL, allowing env-only configuration."""
+        """Возвращает URL проверки маршрута с поддержкой настройки через окружение."""
         if self.secret_ref:
             return os.getenv(f"{self.secret_ref}_HEALTHCHECK_URL", "") or self.healthcheck_url
         return self.healthcheck_url
 
 
 def build_proxy_options(proxy_url: str, *, username: str = "", password: str = "") -> dict[str, str]:
-    """Validate a proxy URL and produce Playwright's proxy option mapping.
+    """Проверяет URL прокси и формирует параметры Playwright.
 
     Credentials may be supplied in dedicated arguments (the preferred form)
     or embedded in a legacy URL.  The returned ``server`` never contains
@@ -140,7 +139,7 @@ def _legacy_profile(source: str, mode: str) -> PollingProfileSpec:
 
 
 def resolve_profile(source: str, mode: str, code: str | None = None) -> PollingProfileSpec:
-    """Resolve a DB profile or safely fall back to the legacy environment setup."""
+    """Читает профиль из базы или безопасно использует старые настройки окружения."""
     from listings.models import PollingProfile, SourcePollingControl, SourcePollingProfile
 
     query = PollingProfile.objects.select_related("route").filter(

@@ -1,4 +1,4 @@
-"""Run via manage.py shell in collector image; real Chromium, intercepted fixture URLs."""
+"""Запускается через manage.py shell в collector image с перехватом URL."""
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 

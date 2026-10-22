@@ -53,8 +53,8 @@ class AvitoCollector(BaseCollector):
         self.profile_code = profile_code
         self.stop_requested = False
         self.state = SessionState(self._state_directory())
-        # Diagnostics can isolate request state without changing the selected
-        # persistent browser profile.
+        # Диагностика может изолировать состояние запросов, не меняя
+        # выбранный постоянный профиль браузера.
         self.browser_profile_dir = None
         self.headless = headless
         self.temporary_profile = None
@@ -65,7 +65,7 @@ class AvitoCollector(BaseCollector):
         self.start_error: Exception | None = None
 
     def _state_directory(self):
-        """Return isolated browser/request state for the selected profile.
+        """Возвращает изолированное состояние браузера и запросов профиля.
 
         Direct construction without a profile code keeps the legacy location
         used by tests and backwards-compatible manual runs.  Production
@@ -177,14 +177,14 @@ class AvitoCollector(BaseCollector):
                        self.manual_wait_seconds)
         deadline = time.monotonic() + self.manual_wait_seconds
         while time.monotonic() < deadline:
-            # Read only the existing tab. No storage_state(), goto() or reload().
+            # Читаем только уже открытую вкладку: без storage_state(), goto() и reload().
             try:
                 html = await self.page.content()
             except PlaywrightError:
                 if self.page.is_closed():
                     raise
                 await asyncio.sleep(1)
-                continue  # The user may be navigating after submitting the captcha.
+                continue  # Пользователь мог перейти на другую страницу после капчи.
             if self.page.url.split("#")[0] == url.split("#")[0] and self._page_state(html) == "ready":
                 self.state.update(blocked_until=0, next_request_at=max(
                     self.state.read()["next_request_at"], time.time() + settings.AVITO_PAGE_DELAY_SECONDS))
@@ -199,9 +199,8 @@ class AvitoCollector(BaseCollector):
         try:
             response = await self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
         except PlaywrightTimeout as exc:
-            # Avito may keep loading secondary resources after the rendered
-            # search results are already usable. Preserve a ready page instead
-            # of treating that navigation timeout as a failed scan.
+            # Avito может догружать вторичные ресурсы после готовности выдачи.
+            # Сохраняем готовую страницу и не считаем таймаут ошибкой скана.
             try:
                 await self.page.wait_for_timeout(5000)
                 html = await self.page.content()
@@ -218,10 +217,10 @@ class AvitoCollector(BaseCollector):
             raise exc
         except PlaywrightError:
             self.stop_requested = True
-            raise  # No retry or direct fallback when the configured route fails.
+            raise  # При сбое маршрута не делаем повтор и не выходим напрямую.
         status = response.status if response else None
         headers = await response.all_headers() if response else {}
-        # HTTP blocks can be handled immediately; successful pages may still be rendering.
+        # HTTP-блокировки обрабатываем сразу; успешная страница ещё может догружаться.
         if status is not None and status < 400:
             try:
                 await self.page.wait_for_function(
@@ -234,7 +233,7 @@ class AvitoCollector(BaseCollector):
                     arg=[sel.ITEM, sel.EMPTY, list(BLOCK_TEXT)], timeout=30000,
                 )
             except PlaywrightTimeout:
-                pass  # Capture diagnostics and classify the actual page below.
+                pass  # Диагностику и классификацию страницы выполним ниже.
         html = await self.page.content()
         state = self._page_state(html)
         blocked = status in {403, 429, 439} or state == "blocked"

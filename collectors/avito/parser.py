@@ -50,7 +50,7 @@ def _srcset_url(value: str | None) -> str | None:
 
 
 def image_url_at(card: Tag) -> str | None:
-    """Read Avito image URLs from semantic and lazy-loaded card markup."""
+    """Извлекает URL изображений Avito из обычной и ленивой разметки карточки."""
     semantic = card.select_one(sel.IMAGE)
     images = ([semantic] if semantic else []) + [node for node in card.select(sel.IMAGES) if node != semantic]
     for image in images:
@@ -83,7 +83,7 @@ def parse_card(card: Tag) -> NormalizedListing:
     image_url = image_url_at(card)
     description = text_at(card, sel.DESCRIPTION)
     if not description:
-        # Relative dates must not cause a new snapshot on each observation.
+    # Относительная дата не должна создавать новый snapshot при каждом опросе.
         stable = BeautifulSoup(str(card), "html.parser")
         for node in stable.select(sel.DATE):
             node.decompose()

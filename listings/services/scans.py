@@ -43,7 +43,7 @@ def finalize_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
 @transaction.atomic
 def finalize_cian_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
     """Завершает полный скан CIAN и безопасно обновляет статусы объявлений."""
-    """Mark CIAN offers inactive only after two complete passes miss them.
+    """Деактивирует объявления CIAN только после двух пропущенных полных проходов.
 
     CIAN's live pagination can shift while a multi-batch pass is in progress.
     Requiring a second completed pass avoids treating that shift as a removal.

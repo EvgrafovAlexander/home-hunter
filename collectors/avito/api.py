@@ -1,4 +1,4 @@
-"""Optional Avito mobile-API collector.
+"""Необязательный коллектор Avito через мобильный API.
 
 The browser/HTML collector remains the default.  This module is deliberately
 selected only by an Avito polling profile with ``transport=mobile_api``.
@@ -98,7 +98,7 @@ def normalize_item(item: dict) -> NormalizedListing:
 
 
 class AvitoApiCollector(BaseCollector):
-    """Read Avito search pages through a configured mobile API URL."""
+    """Читает страницы поиска Avito через настроенный URL мобильного API."""
 
     def __init__(self, *, profile, route: RouteSpec | None = None):
         self.profile = profile
@@ -262,7 +262,7 @@ class AvitoApiCollector(BaseCollector):
             raise CollectionError(f"{type(exc).__name__}: {str(exc)[:500]}", result) from exc
 
     async def poll_detail(self, external_id: str) -> dict:
-        """Fetch the item endpoint used for second-stage detail enrichment."""
+        """Запрашивает endpoint карточки для второго этапа обогащения detail."""
         self._check_cooldown()
         await self._pace()
         item_id = str(external_id).strip()

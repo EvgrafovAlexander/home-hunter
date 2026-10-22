@@ -1,4 +1,4 @@
-"""Read embedded SERP JSON without executing untrusted JavaScript."""
+"""Читает встроенный JSON выдачи без выполнения непроверенного JavaScript."""
 import json
 import re
 from dataclasses import dataclass, field
@@ -168,7 +168,7 @@ def parse_page(html: str, url: str) -> ParsedPage:
                 raise ValueError("Offer URL/id mismatch")
             card = by_id.get(identifier)
             title_node = card.select_one('[data-name="TitleComponent"]') if card else None
-            # Marketing title can change independently of the apartment characteristics.
+            # Маркетинговый заголовок может меняться независимо от характеристик квартиры.
             title = offer.get("formattedFullInfo") or (title_node.get_text(" ", strip=True) if title_node else None)
             if not title:
                 raise ValueError("Missing listing title")
@@ -218,7 +218,7 @@ def parse_page(html: str, url: str) -> ParsedPage:
 
 
 def parse_detail_page(html: str, url: str) -> CianDetail:
-    """Parse the offer-card state; never infer availability from an error page."""
+    """Разбирает состояние карточки и не выводит доступность из страницы ошибки."""
     soup = BeautifulSoup(html, "html.parser")
     for script in soup.select("script:not([src])"):
         text = script.get_text()
@@ -263,9 +263,8 @@ def parse_detail_page(html: str, url: str) -> CianDetail:
                      photos[0].get("fullUrl") if photos else None)
         title = offer_data.get("pageHelmetData", {}).get("title")
         listing = NormalizedListing(
-            # A detail response can legitimately omit pageHelmetData.title.  Do
-            # not manufacture a technical title here: the saved search card is
-            # the authoritative source for this display field.
+            # В detail может не быть pageHelmetData.title. Не создаём
+            # технический заголовок: для интерфейса главным остаётся title из выдачи.
             source="cian", external_id=identifier, url=url, title=(title or "")[:1000],
             price=price, rooms=integer(offer.get("roomsCount")), area=area,
             floor=integer(offer.get("floorNumber")), floors_total=integer(building.get("floorsCount")),

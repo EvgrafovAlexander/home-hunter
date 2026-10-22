@@ -53,8 +53,8 @@ class CianCollector(BaseCollector):
         self.route = route
         self.session_mode = session_mode
         self.state = SessionState(settings.CIAN_STATE_DIR)
-        # Diagnostics may replace ``state`` to isolate cooldown files while
-        # keeping the browser profile used by the normal collector.
+        # Диагностика может заменить ``state`` и изолировать файлы паузы,
+        # сохранив профиль браузера обычного сборщика.
         self.browser_profile_dir = None
         self.context = self.page = self.playwright = None
         self.temporary_profile = None
@@ -91,9 +91,8 @@ class CianCollector(BaseCollector):
             raise ValueError("CIAN page limits must be positive")
 
     def _persistent_profile_enabled(self):
-        # CIAN has no separate legacy persistent-profile setting: the normal
-        # mode is persistent unless the selected polling profile says
-        # ``temporary``.
+            # У CIAN нет отдельного старого флага постоянного профиля:
+            # обычный режим постоянный, если профиль не требует ``temporary``.
         return self.session_mode != "temporary"
 
     def _check_cooldown(self):
@@ -128,7 +127,7 @@ class CianCollector(BaseCollector):
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
 
     async def _restart_browser(self):
-        """Start a fresh browser session before retrying an inconsistent SERP page."""
+        """Запускает новую браузерную сессию перед повтором нестабильной выдачи."""
         try:
             if self.context:
                 await self.context.close()
@@ -196,10 +195,8 @@ class CianCollector(BaseCollector):
                 self.stop_requested = True
                 self.state.block(settings.CIAN_BLOCK_COOLDOWN_SECONDS, headers.get("retry-after"))
                 raise RuntimeError(f"CIAN blocked: HTTP {status}; cooldown saved")
-            # A detail URL returning 404 means that the offer was removed.  It
-            # is a normal terminal state, unlike a failed SERP request.  Let
-            # the detail poller persist it as unavailable and continue with
-            # the rest of its batch.
+            # Ответ 404 для detail означает снятое объявление. Это штатный
+            # конечный статус: detail-poller сохранит unavailable и продолжит batch.
             if status == 404 and expected_path.startswith("/sale/flat/"):
                 return None
             if status is None or status >= 400:
@@ -208,12 +205,12 @@ class CianCollector(BaseCollector):
                 raise RuntimeError("Unexpected CIAN redirect")
             return html
         except Exception:
-            # Proxy/network errors must not trigger requests for remaining searches.
+            # Ошибка прокси или сети не должна запускать запросы к остальным поискам.
             self.stop_requested = True
             raise
 
     async def poll_detail(self, listing):
-        """One cautious detail navigation. WAF/network failures propagate and stop the batch."""
+        """Осторожно открывает detail; ошибки WAF и сети останавливают batch."""
         self._validate()
         url = cian_url(listing.url)
         expected = f"/sale/flat/{listing.external_id}/"
@@ -263,7 +260,8 @@ class CianCollector(BaseCollector):
                     )
                 expected_total = parsed.total
                 result.expected_total = expected_total
-                # Detect servers silently returning another page/filter (unsafe for deactivation).
+            # Проверяем, не вернул ли сервер другую страницу или фильтр;
+            # иначе деактивация объявлений небезопасна.
                 def normalized_query(query):
                     pairs = parse_qsl(query, keep_blank_values=True)
                     if not any(k == "p" for k, _ in pairs):
@@ -286,9 +284,8 @@ class CianCollector(BaseCollector):
                     if inspect.isawaitable(progress):
                         await progress
                 if not parsed.next_url:
-                    # From page one we can immediately detect a truncated
-                    # response.  Later batches rely on their persisted ID set
-                    # for the same check in the scan service.
+                    # Уже на первой странице можно заметить усечённый ответ.
+                    # Для следующих пачек проверку выполнит сервис по сохранённым ID.
                     result.complete = mode == "fast" or start_page > 1 or len(seen) >= expected_total
                     result.stop_reason = "end of results" if result.complete else "missing next link before total reached"
                     return result

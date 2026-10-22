@@ -1,7 +1,7 @@
-"""HTTP handlers for the personal review and consideration workflow.
+"""HTTP-обработчики пользовательских оценок и списка «Готов рассмотреть».
 
-URL compatibility wrappers remain in :mod:`listings.views`; this module keeps
-the workflow-specific response orchestration out of the general listing views.
+Совместимые URL-обёртки остаются в :mod:`listings.views`, а сценарии этого
+модуля не смешиваются с общими обработчиками объявлений.
 """
 
 from django.contrib.auth.decorators import login_required

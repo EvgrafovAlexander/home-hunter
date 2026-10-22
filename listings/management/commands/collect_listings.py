@@ -57,7 +57,7 @@ class Command(BaseCommand):
             profile = resolve_profile(options["source"], options["mode"], options.get("profile"))
         except ValueError as exc:
             raise CommandError(str(exc)) from exc
-        # Also protect manual invocations; host timers additionally share flock.
+        # Защищаем и ручные запуски; host timers дополнительно используют flock.
         with connection.cursor() as cursor:
             cursor.execute("SELECT pg_try_advisory_lock(%s)", [LOCK_ID])
             if not cursor.fetchone()[0]:
@@ -72,11 +72,10 @@ class Command(BaseCommand):
 
     async def collect_searches(self, searches, options, profile) -> int:
         failed = 0
-        # Pass the resolved profile into the factory so source-specific
-        # collectors can isolate cookies and request state by profile code.
-        # Avito uses the profile code to isolate its browser cookies and
-        # request state. Keep the legacy route/session assignment for the
-        # other collectors and custom factories.
+        # Передаём найденный профиль фабрике, чтобы сборщики изолировали
+        # cookies и состояние запросов по коду профиля. Для Avito это также
+        # разделяет браузерные cookies; старое назначение route/session
+        # сохраняем для других сборщиков и пользовательских фабрик.
         factory_kwargs = {
             "headless": options["headless"],
             "manual_wait_seconds": options.get("wait_for_captcha", 0),

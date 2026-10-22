@@ -1,4 +1,4 @@
-"""Small, bounded support for public proxy lists.
+"""Небольшая ограниченная поддержка списков публичных прокси.
 
 This is intentionally an experimental route.  It selects one working proxy
 for a collector run and never falls back to a direct connection.  A public
@@ -59,7 +59,7 @@ def _proxy_candidate(value: str, *, default_scheme: str = "http", scheme_by_port
 
 def parse_proxy_list(html: str, *, require_high_anonymity: bool = True,
                      default_scheme: str = "http", scheme_by_port: dict[str, str] | None = None) -> list[ProxyCandidate]:
-    """Parse address rows from a public HTML or JSON proxy list."""
+    """Извлекает адреса из публичного HTML- или JSON-списка прокси."""
     try:
         payload = json.loads(html)
     except json.JSONDecodeError:
@@ -104,7 +104,7 @@ def parse_proxy_list(html: str, *, require_high_anonymity: bool = True,
 
 
 async def fetch_proxy_list(url: str, timeout: float, *, method: str = "GET", payload: dict | None = None) -> str:
-    """Fetch a public list without exposing it to an Avito browser session."""
+    """Загружает публичный список отдельно от браузерной сессии Avito."""
     def read() -> str:
         data = json.dumps(payload).encode("utf-8") if method.upper() == "POST" else None
         headers = {"User-Agent": "home-hunter/1.0", "Accept": "application/json, text/html"}
@@ -118,7 +118,7 @@ async def fetch_proxy_list(url: str, timeout: float, *, method: str = "GET", pay
 
 
 async def select_working_proxy(playwright, route: RouteSpec) -> dict[str, str]:
-    """Return one validated Playwright proxy mapping for a pool route."""
+    """Возвращает проверенные параметры Playwright для одного маршрута пула."""
     settings = route.settings or {}
     source_url = str(settings.get("source_url") or route.endpoint or DEFAULT_SOURCE_URL)
     source_method = str(settings.get("source_method") or "GET").upper()

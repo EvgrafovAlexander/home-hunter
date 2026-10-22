@@ -114,7 +114,7 @@ Retry-After может увеличить её. До конца паузы но�
 | CIAN_MAX_PAGES | 50 | Максимум full |
 | CIAN_PAGE_DELAY_MIN_SECONDS | 90 | Нижняя граница случайной паузы между переходами |
 | CIAN_PAGE_DELAY_MAX_SECONDS | 210 | Верхняя граница случайной паузы между переходами |
-| CIAN_FULL_BATCH_PAGES | 2 | Число страниц full scan за один запуск; продолжение хранится в checkpoint. CIAN full scan только добавляет и обновляет объявления, но не деактивирует их. |
+| CIAN_FULL_BATCH_PAGES | 2 | Число страниц full scan за один запуск; продолжение хранится в checkpoint. Исчезнувшее объявление деактивируется только после двух завершённых безопасных проходов. |
 | CIAN_BLOCK_COOLDOWN_SECONDS | 3600 | Пауза после блокировки |
 | CIAN_FULL_SCAN_ENABLED | false | Разрешение full |
 | SHARED_SSH_DESTINATION | cian-tunnel@185.161.251.49 | Адрес SSH общего маршрута |

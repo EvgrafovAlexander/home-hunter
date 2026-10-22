@@ -1,4 +1,4 @@
-"""Run one-off polling diagnostics requested from the profiles page."""
+"""Запускает разовую диагностику опроса по запросу со страницы профилей."""
 
 import logging
 from queue import Queue
@@ -23,7 +23,7 @@ MAX_LOG_LENGTH = 100_000
 
 
 class JobLogHandler(logging.Handler):
-    """Persist a bounded copy of collector logs for the UI."""
+    """Сохраняет ограниченную копию логов сборщика для интерфейса."""
 
     def __init__(self, job_id):
         super().__init__(level=logging.INFO)
@@ -34,8 +34,8 @@ class JobLogHandler(logging.Handler):
         self._writer.start()
 
     def emit(self, record):
-        # Collector log records can be emitted from an asyncio thread.  ORM
-        # writes are deliberately moved to a regular worker thread.
+        # Логи сборщика могут приходить из asyncio-потока, поэтому запись ORM
+        # намеренно выполняем в обычном рабочем потоке.
         self._queue.put(self.format(record))
 
     def _write_loop(self):
@@ -78,7 +78,7 @@ class Command(BaseCommand):
                 time.sleep(delay)
 
     def process_one(self):
-        """Claim a queued job only when regular collectors are not running."""
+        """Забирает диагностическую задачу, только если обычные сборщики не работают."""
         with connection.cursor() as cursor:
             cursor.execute("SELECT pg_try_advisory_lock(%s)", [LOCK_ID])
             acquired = cursor.fetchone()[0]
@@ -122,8 +122,8 @@ class Command(BaseCommand):
             handler.close()
 
     async def collect(self, job, profile):
-        # Scheduled collector services run headed under Xvfb.  Use the same
-        # browser mode here so anti-bot checks see the same runtime shape.
+        # Плановые сборщики работают с экраном под Xvfb. Используем тот же режим,
+        # чтобы антибот-проверки видели одинаковую среду запуска.
         factory_kwargs = {"headless": False, "manual_wait_seconds": 0}
         if job.source == "avito":
             factory_kwargs["profile"] = profile
@@ -132,11 +132,9 @@ class Command(BaseCommand):
             collector.route = profile.route
             collector.session_mode = profile.session_mode
         production_state = getattr(collector, "state", None)
-        # A button-initiated diagnostic must not inherit a production cooldown,
-        # nor write a test block back into the state used by scheduled polling.
-        # The browser session itself remains identical to a classic run: a
-        # persistent profile keeps its cookies, while a temporary profile is
-        # still recreated for the test.
+        # Диагностика по кнопке не наследует production-паузу и не записывает
+        # тестовую блокировку в состояние планового опроса. Браузерная сессия
+        # остаётся обычной: постоянный профиль хранит cookies, временный создаётся заново.
         with TemporaryDirectory(prefix=f"polling-diagnostic-{job.source}-") as state_dir:
             if hasattr(collector, "state"):
                 collector.state = SessionState(state_dir)

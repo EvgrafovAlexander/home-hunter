@@ -81,7 +81,7 @@ def test_spacing_between_searches_and_restarts(settings):
     first.page = page_for()
     with patch('time.time', return_value=1000):
         asyncio.run(first._load_page(SEARCH.url))
-    # A different instance and URL still share the same navigation budget.
+    # Другой объект и URL всё равно используют общий бюджет навигации.
     second = AvitoCollector()
     second.page = page_for()
     with patch('collectors.avito.collector.time', SimpleNamespace(time=Mock(side_effect=[1030, 1030, 1120, 1120]))), patch('collectors.avito.collector.asyncio.sleep', new_callable=AsyncMock) as sleep:

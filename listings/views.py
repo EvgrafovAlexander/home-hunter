@@ -48,8 +48,8 @@ def telegram_webhook(request):
         return JsonResponse({"ok": False}, status=400)
     handle_update(payload)
     return JsonResponse({"ok": True})
-# Candidate/review threshold.  Smaller listings remain in the database and in
-# the market-comparison pool, but are not shown as purchase candidates.
+# Порог кандидата для просмотра. Меньшие квартиры остаются в базе и выборке
+# аналогов, но не показываются как варианты для покупки.
 
 
 def _integer(value):
@@ -63,9 +63,9 @@ def _decimal(value):
     try:
         if value in (None, ""):
             return None
-        # Browsers and keyboards in the Russian locale commonly submit a
-        # decimal comma.  Decimal only accepts a dot, so normalise it before
-        # saving a user-entered area filter.
+        # Русская раскладка и браузер часто передают десятичную запятую.
+        # Decimal принимает только точку, поэтому заменяем её до сохранения
+        # введённого пользователем фильтра площади.
         return Decimal(str(value).strip().replace(",", "."))
     except (InvalidOperation, TypeError, ValueError):
         return None
@@ -80,12 +80,12 @@ def scoring_preference_for(user):
 
 
 def add_listing_score(listings, preferences=None):
-    """Backward-compatible view import; scoring lives in the service layer."""
+    """Совместимый импорт view; расчёт оценки находится в сервисном слое."""
     return _service_add_listing_score(listings, preferences)
 
 
 def personal_candidate_queryset(queryset, user):
-    """Backward-compatible view import; candidate filtering lives in a service."""
+    """Совместимый импорт view; фильтрация кандидатов находится в сервисе."""
     return _service_personal_candidate_queryset(queryset, user)
 
 

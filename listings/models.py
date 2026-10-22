@@ -21,7 +21,7 @@ class SearchQuery(models.Model):
 
 
 class NetworkRoute(models.Model):
-    """A reusable network path used by one or more polling profiles.
+    """Переиспользуемый сетевой маршрут для одного или нескольких профилей.
 
     Credentials stay outside the database.  ``secret_ref`` identifies the
     server-side secret or mounted key that supplies them at runtime.
@@ -57,7 +57,7 @@ class NetworkRoute(models.Model):
 
 
 class PollingProfile(models.Model):
-    """How a source/mode is polled, including its network route."""
+    """Настройки опроса источника и режима, включая сетевой маршрут."""
 
     class Transport(models.TextChoices):
         BROWSER_HTML = "browser_html", "Chromium / HTML"
@@ -107,7 +107,7 @@ class PollingProfile(models.Model):
 
 
 class SourcePollingProfile(models.Model):
-    """The active polling profile inherited by all modes of one source."""
+    """Активный профиль опроса, общий для всех режимов источника."""
 
     source = models.CharField(max_length=20, choices=SearchQuery.Source.choices, unique=True)
     profile = models.ForeignKey(
@@ -161,7 +161,7 @@ class MicrodistrictDistrict(models.Model):
 
 
 class MicrodistrictBoundary(models.Model):
-    """Versioned source geometry used for coordinate-based classification."""
+    """Версия геометрии источника для классификации по координатам."""
 
     microdistrict = models.ForeignKey(
         Microdistrict, on_delete=models.SET_NULL, null=True, blank=True,
@@ -214,7 +214,7 @@ class StreetAssignment(models.Model):
 
 
 class ScoringPreference(models.Model):
-    """Personal scoring settings, deliberately separate from shared market data."""
+    """Пользовательские настройки оценки, отделённые от общих рыночных данных."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="scoring_preference")
     min_area = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
     max_area = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
@@ -423,7 +423,7 @@ class Scan(models.Model):
 
 
 class PollingDiagnosticJob(models.Model):
-    """One user-requested, one-off polling run for a selected profile."""
+    """Разовый запуск опроса по выбранному профилю."""
 
     class Status(models.TextChoices):
         QUEUED = "queued", "В очереди"
@@ -460,7 +460,7 @@ class CianDetailHealthAlert(models.Model):
 
 
 class SourcePollingControl(models.Model):
-    """Switch for a particular source and scan mode."""
+    """Переключатель состояния конкретного источника и режима сканирования."""
 
     source = models.CharField(max_length=20, choices=SearchQuery.Source.choices)
     mode = models.CharField(max_length=10, choices=Scan.Mode.choices, default=Scan.Mode.FAST)
@@ -483,7 +483,7 @@ class DealAlert(models.Model):
 
 
 class TelegramListingAlert(models.Model):
-    """One Telegram feed publication per listing."""
+    """Одна публикация объявления в Telegram-ленте."""
 
     class DeliveryStatus(models.TextChoices):
         AWAITING_GEOCODE = "awaiting_geocode", "Ожидает геокодирование"
@@ -516,7 +516,7 @@ class TelegramListingAlert(models.Model):
 
 
 class TelegramPriceAlert(models.Model):
-    """One Telegram notification for a concrete price transition."""
+    """Одно Telegram-уведомление о конкретном изменении цены."""
 
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="telegram_price_alerts")
     old_price = models.BigIntegerField()
