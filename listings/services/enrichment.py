@@ -1,3 +1,5 @@
+"""Нормализация адресов и вычисление производных атрибутов объявления."""
+
 import re
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP

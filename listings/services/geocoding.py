@@ -1,3 +1,5 @@
+"""Интеграция с внешним геокодером и безопасное преобразование координат."""
+
 import json
 from dataclasses import dataclass
 from decimal import Decimal

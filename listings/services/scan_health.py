@@ -1,3 +1,5 @@
+"""Проверка здоровья сканеров и detail workers с Telegram-уведомлениями."""
+
 import json
 import logging
 from dataclasses import dataclass

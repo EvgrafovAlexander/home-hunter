@@ -1,4 +1,4 @@
-"""Domain operations for personal listing reviews and consideration queues."""
+"""Доменные операции пользовательских оценок и очереди рассмотрения."""
 
 from django.db import transaction
 

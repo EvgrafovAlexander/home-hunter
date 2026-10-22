@@ -1,4 +1,4 @@
-"""User hard filters and lightweight GeoJSON zone checks.
+"""Жёсткие фильтры пользователя и лёгкая проверка GeoJSON-зон.
 
 The first implementation intentionally avoids a PostGIS dependency.  Zone
 geometries are stored as GeoJSON and evaluated in a background-friendly,

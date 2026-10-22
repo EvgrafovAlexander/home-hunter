@@ -1,4 +1,4 @@
-"""Interactive, per-Telegram-user listing reviews."""
+"""Интерактивные оценки объявлений для пользователей Telegram."""
 import html
 import json
 import logging

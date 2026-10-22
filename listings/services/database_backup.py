@@ -1,4 +1,4 @@
-"""Create a PostgreSQL backup for download by an authenticated staff user."""
+"""Создаёт PostgreSQL backup для скачивания авторизованным сотрудником."""
 
 import os
 import fcntl

@@ -1,3 +1,5 @@
+"""Правила включения и временные ограничения фоновых опросов."""
+
 from django.conf import settings
 from django.utils import timezone
 from listings.models import Scan, SearchQuery, SourcePollingControl

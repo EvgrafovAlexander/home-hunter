@@ -1,4 +1,4 @@
-"""Classify coordinates using the cached Ufa microdistrict polygons."""
+"""Определяет микрорайон по кэшированным полигонам Уфы."""
 
 from __future__ import annotations
 

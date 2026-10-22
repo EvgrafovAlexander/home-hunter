@@ -1,4 +1,4 @@
-"""Build the current market workbook without requiring a desktop spreadsheet package."""
+"""Формирует актуальную выгрузку рынка без desktop-пакета таблиц."""
 
 from datetime import date, datetime
 from decimal import Decimal

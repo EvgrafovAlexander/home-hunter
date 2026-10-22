@@ -1,4 +1,4 @@
-"""Present stored snapshots as a concise, human-readable change log."""
+"""Преобразует сохранённые snapshots в краткую историю изменений."""
 
 from decimal import Decimal, InvalidOperation
 

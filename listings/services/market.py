@@ -1,4 +1,4 @@
-"""Shared market-comparison calculations used by web and Telegram delivery."""
+"""Общие расчёты сравнения рынка для web-интерфейса и Telegram."""
 
 from statistics import median
 from decimal import Decimal

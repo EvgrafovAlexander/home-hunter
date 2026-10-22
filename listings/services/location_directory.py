@@ -1,4 +1,4 @@
-"""Resolve parsed locations against the editable Ufa location directory."""
+"""Сопоставляет распознанные адреса с редактируемым справочником Уфы."""
 
 from dataclasses import dataclass
 import re

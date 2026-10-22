@@ -1,3 +1,5 @@
+"""Оркестрация сканирования и безопасной деактивации объявлений."""
+
 import logging
 from asgiref.sync import async_to_sync
 from asgiref.sync import sync_to_async

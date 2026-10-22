@@ -1,3 +1,5 @@
+"""Формирование и отправка Telegram-уведомлений о выгодных объявлениях."""
+
 import html
 import logging
 import re

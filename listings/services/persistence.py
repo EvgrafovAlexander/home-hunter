@@ -1,3 +1,5 @@
+"""Транзакционное сохранение нормализованных объявлений и истории изменений."""
+
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from decimal import Decimal

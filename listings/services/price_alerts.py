@@ -1,3 +1,5 @@
+"""Обновление Telegram-сообщений при изменении цены объявления."""
+
 import html
 import re
 from decimal import Decimal

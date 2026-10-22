@@ -1,4 +1,4 @@
-"""Explainable personal Fit scoring shared by web and Telegram delivery."""
+"""Объяснимый персональный scoring для web-интерфейса и Telegram."""
 
 from listings.models import GeoZone, ScoringPreference
 

@@ -1,4 +1,4 @@
-"""Durable queue and eligibility checks for Telegram listing publications."""
+"""Надёжная очередь и проверки доступности Telegram-публикаций."""
 
 import re
 from datetime import timedelta
