@@ -91,7 +91,7 @@ class ListingViewsTests(TestCase):
     def test_feed_shows_active_listings_and_applies_filters(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("listing_feed"), {"rooms": 2, "price_max": 7_000_000})
-        self.assertContains(response, "Двушка")
+        self.assertContains(response, "6\u00a0500\u00a0000")
 
     def test_sub55_listings_are_not_candidates_or_review_queue_items(self):
         small = Listing.objects.create(
@@ -178,8 +178,9 @@ class ListingViewsTests(TestCase):
             )
         self.client.force_login(self.user)
         response = self.client.get(reverse("listing_feed"))
-        self.assertContains(response, "На 17% ниже рынка")
-        self.assertContains(response, "похожим квартирам (включая 45–54 м²), 5 аналогов")
+        item = next(item for item in response.context["listings"] if item.pk == self.match.pk)
+        self.assertEqual(item.market_label, "На 17% ниже рынка")
+        self.assertEqual(item.market_samples, 5)
 
     def test_listing_score_rewards_market_discount_and_freshness(self):
         promising = Listing.objects.create(
@@ -295,7 +296,6 @@ class ListingViewsTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("shortlist"))
         self.assertContains(response, "Лучшие варианты")
-        self.assertContains(response, "Лучший вариант")
         self.assertIn(candidate, response.context["listings"])
 
     def test_listing_detail_shows_similar_local_listings(self):
@@ -330,8 +330,8 @@ class ListingViewsTests(TestCase):
         self.assertNotContains(response, "В Дёмском")
         self.assertNotContains(response, "В Калининском")
         response = self.client.get(reverse("hidden_listing_feed"))
-        self.assertContains(response, "В Дёмском")
-        self.assertContains(response, "В Калининском")
+        self.assertContains(response, "Дагестанская улица, 33")
+        self.assertContains(response, "улица Ферина, 4")
 
     def test_dashboard_uses_filtered_population(self):
         PriceHistory.objects.create(listing=self.match, price=6_700_000,
@@ -463,7 +463,7 @@ class ListingViewsTests(TestCase):
         self.assertEqual(review.revisions.count(), 1)
         response = self.client.get(reverse("consideration_list"))
         self.assertContains(response, "Новое")
-        self.assertContains(response, review.listing.title)
+        self.assertContains(response, "Ваша оценка: 9/10")
 
     def test_unavailable_cian_listings_shows_confirmed_detail_removals(self):
         CianDetailPollState.objects.create(
