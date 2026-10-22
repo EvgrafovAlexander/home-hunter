@@ -287,6 +287,7 @@ class ListingViewsTests(TestCase):
         candidate = Listing.objects.create(
             source="avito", external_id="best", url="https://example.test/best", title="Лучший вариант",
             price=5_000_000, price_per_sqm=100_000, rooms=2, area="55.00", district="Кировский",
+            latitude="54.7418", longitude="55.9776",
         )
         for index in range(5):
             Listing.objects.create(
@@ -298,6 +299,24 @@ class ListingViewsTests(TestCase):
         response = self.client.get(reverse("shortlist"))
         self.assertContains(response, "Лучшие варианты")
         self.assertIn(candidate, response.context["listings"])
+
+    def test_shortlist_excludes_below_market_listing_with_low_personal_score(self):
+        low_score = Listing.objects.create(
+            source="avito", external_id="low-score", url="https://example.test/low-score", title="Слабый вариант",
+            price=5_000_000, price_per_sqm=100_000, rooms=2, area="55.00", district="Кировский",
+            latitude="54.9000", longitude="56.2000",
+        )
+        for index in range(5):
+            Listing.objects.create(
+                source="cian", external_id=f"low-score-comparison-{index}", url="https://example.test/comparison",
+                title="Аналог", price=7_500_000, price_per_sqm=150_000, rooms=2, area="52.00",
+                district="Кировский",
+            )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("shortlist"))
+        self.assertNotIn(low_score, response.context["listings"])
+        add_listing_score([low_score])
+        self.assertLess(low_score.score, 60)
 
     def test_listing_detail_shows_similar_local_listings(self):
         similar = Listing.objects.create(

@@ -18,6 +18,7 @@ from .models import (
 from .services.change_history import change_events
 from .services.market import MIN_TARGET_AREA
 from .services.personal_filters import annotate_personal_filter
+from .services.scoring import SHORTLIST_MIN_SCORE
 from .views import (
     add_listing_score,
     add_market_position,
@@ -94,7 +95,7 @@ def shortlist(request):
     recent = (listings if isinstance(listings, list) else list(listings.order_by("-first_seen_at", "-id")[:500]))
     add_market_position(recent)
     add_listing_score(recent, scoring_preference_for(request.user))
-    best = [item for item in recent if item.market_state == "below"]
+    best = [item for item in recent if item.market_state == "below" and item.score >= SHORTLIST_MIN_SCORE]
     best.sort(key=lambda item: (item.market_delta_pct, -item.first_seen_at.timestamp()))
     reviews_by_listing = {
         review.listing_id: review

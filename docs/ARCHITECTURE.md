@@ -94,6 +94,9 @@ frontend-сборки и формального API schema layer нет.
   source-specific сервисы сохраняют только собственное enrichment.
 - Lifecycle прогресса detail-циклов CIAN и Avito вынесен в `listings/services/detail_progress.py`; команды сохраняют только source-specific fetch и persistence.
 - Фильтрация feed/shortlist и поиск похожих объявлений вынесены в `listings/services/listing_queries.py`; `views.py` оставляет только совместимые wrappers.
+- Раздел «Лучшие варианты» дополнительно требует персональный score не ниже
+  60/100 («Стоит посмотреть») и положение цены ниже рынка; низкий score сам по
+  себе не превращает объявление в рекомендацию.
 - Медианная аналитика микрорайонов вынесена в `listings/services/market.py`; view только передаёт queryset и параметры периода.
 - Агрегаты dashboard (дневные ряды, районные медианы, изменения цен и распределения) готовит `listings/services/dashboard.py`.
 - Классификация состояния сканеров и контекст CIAN detail-цикла находятся в `listings/services/scan_dashboard.py`.
