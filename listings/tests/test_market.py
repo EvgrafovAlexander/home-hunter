@@ -46,3 +46,32 @@ def test_annotate_market_position_excludes_other_microdistricts():
     assert target.market_delta_pct == -17
     assert target.market_reference == "похожим квартирам"
     assert target.market_samples == 5
+
+
+def test_web_and_telegram_use_the_same_strict_comparison_policy():
+    for index in range(5):
+        make_listing(f"comparison-{index}", price_per_sqm=150_000, area="60.00")
+    target = make_listing("target", price_per_sqm=125_000, area="60.00")
+
+    annotate_market_position([target])
+    details = market_position_details(target)
+
+    assert details == (17, "похожим квартирам от 55 м²", 5, 150_000)
+    assert target.market_delta_pct == -details[0]
+    assert target.market_reference == details[1]
+    assert target.market_samples == details[2]
+
+
+def test_web_and_telegram_use_the_same_area_fallback_policy():
+    for index in range(3):
+        make_listing(f"small-{index}", price_per_sqm=150_000, area="50.00")
+    for index in range(2):
+        make_listing(f"large-{index}", price_per_sqm=150_000, area="60.00")
+    target = make_listing("target", price_per_sqm=125_000, area="60.00")
+
+    annotate_market_position([target])
+    details = market_position_details(target)
+
+    assert details == (17, "похожим квартирам (включая 45–54 м²)", 5, 150_000)
+    assert target.market_strict_samples == 2
+    assert target.market_fallback_samples == 3

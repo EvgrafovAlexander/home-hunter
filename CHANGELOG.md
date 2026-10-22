@@ -27,6 +27,10 @@
 
 ### Архитектура
 
+- В `listings/services/market.py` введён общий результат сравнения объявлений:
+  web и Telegram теперь используют одинаковый выбор аналогов, пороги площади,
+  fallback и оценку отклонения цены.
+
 - Dashboard вынесен из общего `listings/views.py` в `listings/views_dashboard.py`;
   URL и публичный импорт обработчика сохранены.
 - Назначение polling-профилей вынесено в `listings/views_polling_profiles.py`;

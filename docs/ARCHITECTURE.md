@@ -68,7 +68,9 @@ frontend-сборки и формального API schema layer нет.
   `listings/services/polling_schedule.py`; `views.py` сохраняет только
   совместимые публичные импорты.
 - `listings/views.py` сохраняет thin wrappers для URL-совместимости; новые workflow-правила не должны возвращаться в этот модуль.
-- Market comparison теперь находится в `listings/services/market.py`, но web-аннотация и Telegram/deal tuple пока остаются двумя различающимися политиками сравнения.
+- Market comparison находится в `listings/services/market.py`; выбор аналогов и
+  пороги сравнения едины для web-аннотации и Telegram/deal tuple. Форматы полей
+  веба и кортеж уведомления остаются разными только на границе представления.
 - scoring реализован в `listings/services/scoring.py` и используется web и Telegram; `views.py` сохраняет только thin wrapper для совместимости импортов.
 - CIAN и Avito detail commands дублируют persistence/snapshot/status workflow.
 - Общие операции detail payload и перехода в `unavailable` вынесены в `listings/services/detail_persistence.py`; source-specific enrichment остаётся в командах.
@@ -82,7 +84,9 @@ frontend-сборки и формального API schema layer нет.
 
 ## Целевые границы постепенного рефакторинга
 
-1. Одна явно версионируемая market policy для web, Telegram и export; текущий первый срез только собрал расчёты в одном модуле.
+1. Одна явно версионируемая market policy для web, Telegram и export; общий
+   результат сравнения уже используется web и Telegram, следующим шагом будет
+   подключение export без дублирования форматирования.
 2. Views только принимают запрос, вызывают selectors/services и формируют response.
 3. Collectors возвращают DTO и не знают о ORM persistence.
 4. Detail polling использует общий persistence service.

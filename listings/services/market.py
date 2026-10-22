@@ -1,5 +1,6 @@
 """Общие расчёты сравнения рынка для web-интерфейса и Telegram."""
 
+from dataclasses import dataclass
 from statistics import median
 from decimal import Decimal
 
@@ -14,10 +15,72 @@ MIN_TARGET_AREA = Decimal("55")
 MICRODISTRICT_MARKET_MIN_SAMPLE = 5
 
 
+@dataclass(frozen=True)
+class MarketComparison:
+    """Результат выбора аналогов и сравнения цены объявления с рынком."""
+
+    reference: str
+    samples: int
+    strict_samples: int
+    fallback_samples: int
+    confidence: str
+    median_price: float
+    delta_pct: int
+
+    @property
+    def discount_pct(self):
+        """Возвращает отклонение в направлении, удобном для Telegram."""
+        return -self.delta_pct
+
+
 def _comparable_queryset():
     return (Listing.objects.filter(is_active=True, is_visible=True, price_per_sqm__isnull=False)
             .exclude(district__isnull=True).exclude(district="")
             .exclude(rooms__isnull=True).exclude(area__isnull=True))
+
+
+def _comparison_for_rows(listing, rows):
+    """Выбирает единую группу аналогов для веба и уведомлений."""
+    if (listing.price_per_sqm is None or not listing.district
+            or listing.rooms is None or listing.area is None):
+        return None
+    same_room = [(float(row["area"]), row["price_per_sqm"])
+                 for row in rows if row["rooms"] == listing.rooms]
+    similar = [(area, price) for area, price in same_room
+               if abs(area - float(listing.area)) <= 10]
+    strict_similar = [(area, price) for area, price in similar
+                      if area >= float(MIN_TARGET_AREA)]
+    target_is_large = float(listing.area) >= float(MIN_TARGET_AREA)
+    if target_is_large and len(strict_similar) >= MARKET_MIN_SIMILAR:
+        prices = [price for _, price in strict_similar]
+        reference, confidence = "похожим квартирам от 55 м²", "high"
+        strict_samples, fallback_samples = len(strict_similar), 0
+    elif target_is_large and len(similar) >= MARKET_MIN_SIMILAR:
+        prices = [price for _, price in similar]
+        reference, confidence = "похожим квартирам (включая 45–54 м²)", "medium"
+        strict_samples = len(strict_similar)
+        fallback_samples = len(similar) - strict_samples
+    elif len(similar) >= MARKET_MIN_SIMILAR:
+        prices = [price for _, price in similar]
+        reference, confidence = "похожим квартирам", "medium"
+        strict_samples = fallback_samples = 0
+    elif len(same_room) >= MARKET_MIN_ROOM_GROUP:
+        prices = [price for _, price in same_room]
+        location = "микрорайону" if listing.microdistrict else "району"
+        reference, confidence = f"{location} и комнатности", "low"
+        strict_samples = fallback_samples = 0
+    else:
+        local_prices = [row["price_per_sqm"] for row in rows]
+        if len(local_prices) < MARKET_MIN_DISTRICT_GROUP:
+            return None
+        prices = local_prices
+        location = "микрорайону" if listing.microdistrict else "району"
+        reference, confidence = location, "low"
+        strict_samples = fallback_samples = 0
+    median_price = float(median(prices))
+    delta_pct = round((float(listing.price_per_sqm) / median_price - 1) * 100)
+    return MarketComparison(reference, len(prices), strict_samples, fallback_samples,
+                            confidence, median_price, delta_pct)
 
 
 def annotate_market_position(listings):
@@ -47,42 +110,20 @@ def annotate_market_position(listings):
             continue
         if listing.microdistrict:
             local_prices = by_microdistrict.get((listing.district, listing.microdistrict), [])
-            location_label = "микрорайону"
         else:
             local_prices = by_unclassified_district.get(listing.district, [])
-            location_label = "району"
-        same_room = [(area, price) for pk, rooms, area, price in local_prices
-                     if pk != listing.pk and rooms == listing.rooms]
-        all_local_prices = [price for pk, _, _, price in local_prices if pk != listing.pk]
-        similar = [(area, price) for area, price in same_room if abs(area - float(listing.area)) <= 10]
-        strict_similar = [(area, price) for area, price in similar if area >= float(MIN_TARGET_AREA)]
-        if float(listing.area) >= float(MIN_TARGET_AREA) and len(strict_similar) >= MARKET_MIN_SIMILAR:
-            prices, reference = [price for _, price in strict_similar], "похожим квартирам от 55 м²"
-            listing.market_strict_samples = len(strict_similar)
-            listing.market_confidence = "high"
-        elif float(listing.area) >= float(MIN_TARGET_AREA) and len(similar) >= MARKET_MIN_SIMILAR:
-            prices, reference = [price for _, price in similar], "похожим квартирам (включая 45–54 м²)"
-            listing.market_strict_samples = len(strict_similar)
-            listing.market_fallback_samples = len(similar) - len(strict_similar)
-            listing.market_confidence = "medium"
-        elif len(similar) >= MARKET_MIN_SIMILAR:
-            prices, reference = [price for _, price in similar], "похожим квартирам"
-            listing.market_confidence = "medium"
-        elif len(same_room) >= MARKET_MIN_ROOM_GROUP:
-            prices, reference = [price for _, price in same_room], f"{location_label} и комнатности"
-            listing.market_confidence = "low"
-        elif len(all_local_prices) >= MARKET_MIN_DISTRICT_GROUP:
-            prices, reference = all_local_prices, location_label
-            listing.market_confidence = "low"
-        else:
+        rows = [{"microdistrict": listing.microdistrict, "rooms": rooms,
+                 "area": area, "price_per_sqm": price}
+                for pk, rooms, area, price in local_prices if pk != listing.pk]
+        comparison = _comparison_for_rows(listing, rows)
+        if comparison is None:
             continue
-        listing.market_samples = len(prices)
-        if not listing.market_strict_samples and float(listing.area) >= float(MIN_TARGET_AREA):
-            listing.market_strict_samples = len([price for area, price in similar if area >= float(MIN_TARGET_AREA)])
-        if not listing.market_fallback_samples and float(listing.area) >= float(MIN_TARGET_AREA):
-            listing.market_fallback_samples = max(0, listing.market_samples - listing.market_strict_samples)
-        listing.market_reference = reference
-        listing.market_delta_pct = round((float(listing.price_per_sqm) / float(median(prices)) - 1) * 100)
+        listing.market_samples = comparison.samples
+        listing.market_strict_samples = comparison.strict_samples
+        listing.market_fallback_samples = comparison.fallback_samples
+        listing.market_confidence = comparison.confidence
+        listing.market_reference = comparison.reference
+        listing.market_delta_pct = comparison.delta_pct
         if listing.market_delta_pct <= -4:
             listing.market_state = "below"
             listing.market_label = f"На {abs(listing.market_delta_pct)}% ниже рынка"
@@ -96,7 +137,7 @@ def annotate_market_position(listings):
 
 
 def market_position_details(listing: Listing):
-    """Return the Telegram/deal comparison tuple for one listing."""
+    """Возвращает совместимый с Telegram кортеж сравнения цены."""
     if (listing.price_per_sqm is None or not listing.district
             or listing.rooms is None or listing.area is None):
         return None
@@ -104,23 +145,13 @@ def market_position_details(listing: Listing):
             .values("microdistrict", "rooms", "area", "price_per_sqm"))
     if listing.microdistrict:
         rows = [row for row in rows if row["microdistrict"] == listing.microdistrict]
-        location = "микрорайону"
     else:
         rows = [row for row in rows if not row["microdistrict"]]
-        location = "району"
-    same_room = [row for row in rows if row["rooms"] == listing.rooms]
-    similar = [row["price_per_sqm"] for row in same_room if abs(float(row["area"]) - float(listing.area)) <= 10]
-    if len(similar) >= MARKET_MIN_SIMILAR:
-        prices, reference = similar, "похожим квартирам"
-    elif len(same_room) >= MARKET_MIN_ROOM_GROUP:
-        prices, reference = [row["price_per_sqm"] for row in same_room], f"{location} и комнатности"
-    elif len(rows) >= MARKET_MIN_DISTRICT_GROUP:
-        prices, reference = [row["price_per_sqm"] for row in rows], location
-    else:
+    comparison = _comparison_for_rows(listing, rows)
+    if comparison is None:
         return None
-    median_price = round(float(median(prices)))
-    discount = round((1 - float(listing.price_per_sqm) / median_price) * 100)
-    return discount, reference, len(prices), median_price
+    return (comparison.discount_pct, comparison.reference, comparison.samples,
+            round(comparison.median_price))
 
 
 def microdistrict_market_stats(listings, period_since, filters):
