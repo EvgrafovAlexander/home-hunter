@@ -11,6 +11,8 @@
 - Операционные страницы резервного копирования, контроля исчезнувших объявлений,
   недоступных карточек и качества данных размещаются в `listings/views_operations.py`;
   новые эксплуатационные workflow не добавляются в общий `listings/views.py`.
+- Справочники локаций, геозоны и карты объявлений размещаются в `listings/views_geo.py`;
+  новые географические workflow не добавляются в общий `listings/views.py`.
 - Общие операции detail persistence размещаются в `listings/services/detail_persistence.py`; команды сохраняют только source-specific enrichment.
 - Состояние циклов detail-опроса изменяется через `listings/services/detail_progress.py`; команды не дублируют lifecycle прогресса.
 - Фильтры, варианты фильтров и похожие объявления обслуживаются `listings/services/listing_queries.py`; views не содержат дублирующую query-логику.
