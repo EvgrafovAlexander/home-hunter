@@ -1,7 +1,10 @@
 """HTTP-обработчики пользовательской работы с объявлениями."""
 
+from datetime import timedelta
+
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
 
 from .models import (
     AvitoDetailPollState,
