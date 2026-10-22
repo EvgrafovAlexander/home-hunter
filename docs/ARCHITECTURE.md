@@ -18,7 +18,12 @@ SearchQuery
 
 ### Web и frontend
 
-Маршруты находятся в `listings/urls.py`, HTTP-обработчики — в `listings/views.py` и `listings/agent_views.py`. UI — Django templates в `listings/templates/listings` и `templates`; JavaScript встроен в шаблоны, карта использует Leaflet. Отдельной frontend-сборки и формального API schema layer нет.
+Маршруты находятся в `listings/urls.py`, HTTP-обработчики — в тематических модулях
+`listings/views*.py` и `listings/agent_views.py`; `listings/views.py` сохраняет
+совместимые публичные импорты и оставшиеся обработчики. Dashboard вынесен в
+`listings/views_dashboard.py`. UI — Django templates в `listings/templates/listings`
+и `templates`; JavaScript встроен в шаблоны, карта использует Leaflet. Отдельной
+frontend-сборки и формального API schema layer нет.
 
 ### Collectors
 

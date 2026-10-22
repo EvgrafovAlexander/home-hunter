@@ -12,6 +12,8 @@
 
 ### Архитектура
 
+- Dashboard вынесен из общего `listings/views.py` в `listings/views_dashboard.py`;
+  URL и публичный импорт обработчика сохранены.
 - Общие операции detail payload и перехода объявления в `unavailable` вынесены
   в `listings/services/detail_persistence.py` для CIAN и Avito.
 - Общий lifecycle прогресса detail-циклов вынесен в
