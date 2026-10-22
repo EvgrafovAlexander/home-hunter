@@ -30,7 +30,7 @@ SearchQuery
 
 ### Модели
 
-Все 33 модели находятся в `listings/models.py`. В одном модуле смешаны ingestion, локация, пользовательские reviews, polling state, Telegram alerts, history и health monitoring. `Listing` является центральной моделью и содержит source fields, visibility, coordinates, location overrides и расширенные source-specific attributes.
+`Listing` и инфраструктурные модели пока остаются в `listings/models.py`, а review-домен вынесен в `listings/models_reviews.py` с re-export из legacy-модуля. `Listing` остаётся центральной моделью; остальные группы будут выноситься постепенно без изменения схемы БД.
 
 ### Фоновые процессы и эксплуатация
 

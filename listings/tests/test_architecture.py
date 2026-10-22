@@ -36,3 +36,13 @@ def test_collectors_do_not_depend_on_http_views():
         if "tests" not in path.parts and set(_imports(path)) & forbidden
     }
     assert not violations, f"collector -> view dependency: {violations}"
+
+
+def test_review_models_have_a_dedicated_module_and_compatibility_exports():
+    """Проверяет границу review-моделей и re-export из legacy-модуля."""
+    review_source = (ROOT / "listings" / "models_reviews.py").read_text()
+    models_source = (ROOT / "listings" / "models.py").read_text()
+    for name in ("ReviewTag", "ListingReview", "ListingReviewRevision", "Consideration", "UserListingHide", "GlobalListingHide"):
+        assert f"class {name}(models.Model)" in review_source
+        assert f"class {name}(models.Model)" not in models_source
+        assert name in models_source
