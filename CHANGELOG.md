@@ -32,6 +32,9 @@
   fallback и оценку отклонения цены.
 - Лист «Квартиры» в XLSX-выгрузке переведён на тот же per-listing расчёт рынка;
   в него добавлены ориентир, число аналогов, уверенность и отклонение цены.
+- Общая orchestration-логика detail-опросов CIAN и Avito вынесена в
+  `listings/services/detail_polling.py`; команды оставляют source-specific fetch
+  и сохранение payload.
 
 - Dashboard вынесен из общего `listings/views.py` в `listings/views_dashboard.py`;
   URL и публичный импорт обработчика сохранены.

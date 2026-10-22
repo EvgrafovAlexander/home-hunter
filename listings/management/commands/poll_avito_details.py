@@ -1,10 +1,7 @@
-import asyncio
-
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
-from django.db.models import F
 from django.utils import timezone
 
 from collectors.avito.api import AvitoApiCollector
@@ -12,7 +9,8 @@ from collectors.avito.detail import parse_detail_payload
 from collectors.routing import resolve_profile
 from listings.models import AvitoDetailPayload, AvitoDetailPollProgress, AvitoDetailPollState, Listing, ListingSnapshot
 from listings.services.detail_persistence import mark_detail_unavailable, save_detail_payload
-from listings.services.detail_progress import mark_detail_completed, prepare_detail_cycle
+from listings.services.detail_progress import clear_detail_current, mark_detail_completed, prepare_detail_cycle, set_detail_current
+from listings.services.detail_polling import run_detail_batch, select_detail_candidates
 from listings.services.persistence import snapshot_data_from_listing
 
 LOCK_ID = 724198502
@@ -56,6 +54,16 @@ def prepare_cycle():
     return prepare_detail_cycle(AvitoDetailPollProgress, Listing, "avito")
 
 
+def set_current(progress_id, listing_id):
+    """Запоминает текущую карточку Avito."""
+    return set_detail_current(AvitoDetailPollProgress, progress_id, listing_id)
+
+
+def clear_current(progress_id):
+    """Очищает текущую карточку Avito после ошибки."""
+    return clear_detail_current(AvitoDetailPollProgress, progress_id)
+
+
 def mark_completed(progress_id, listing_id):
     """Отмечает объявление Avito завершённым."""
     return mark_detail_completed(AvitoDetailPollProgress, progress_id, listing_id)
@@ -83,7 +91,7 @@ class Command(BaseCommand):
             if profile.transport != "mobile_api":
                 raise CommandError("Avito detail requires a profile with Mobile API transport")
             progress_id, completed = prepare_cycle()
-            candidates = list(Listing.objects.filter(source="avito", is_active=True).exclude(pk__in=completed).select_related("avito_detail_state").order_by(F("avito_detail_state__last_checked_at").asc(nulls_first=True), "pk")[:options["limit"]])
+            candidates = select_detail_candidates("avito", "avito_detail_state", completed, options["limit"])
             if not candidates:
                 self.stdout.write("No active Avito listings")
                 return
@@ -94,14 +102,13 @@ class Command(BaseCommand):
 
     async def poll(self, candidates, progress_id, profile):
         async with AvitoApiCollector(profile=profile, route=profile.route) as collector:
-            for listing in candidates:
-                try:
-                    detail = parse_detail_payload(await collector.poll_detail(listing.external_id))
-                    await sync_to_async(save_detail)(listing.pk, detail)
-                    await sync_to_async(mark_completed)(progress_id, listing.pk)
-                    self.stdout.write(f"Avito detail {listing.external_id}: {detail.status}")
-                except Exception as exc:
-                    state = await sync_to_async(AvitoDetailPollState.objects.update_or_create)(listing=listing, defaults={"last_error": f"{type(exc).__name__}: {exc}"[:1000]})
-                    self.stderr.write(f"Avito detail {listing.external_id}: {type(exc).__name__}")
-                    if collector.stop_requested:
-                        break
+            async def fetch_detail(listing):
+                payload = await collector.poll_detail(listing.external_id)
+                return parse_detail_payload(payload)
+
+            await run_detail_batch(
+                candidates, progress_id, collector, fetch_detail, save_detail,
+                AvitoDetailPollState, mark_completed, set_current, clear_current,
+                success_message=lambda listing, detail, _available: f"Avito detail {listing.external_id}: {detail.status}",
+                source_label="Avito detail", stdout=self.stdout, stderr=self.stderr,
+            )

@@ -74,9 +74,11 @@ frontend-сборки и формального API schema layer нет.
   представления. Агрегатные листы экспорта по микрорайонам и комнатам остаются
   отдельной сводной аналитикой, а не per-listing сравнением.
 - scoring реализован в `listings/services/scoring.py` и используется web и Telegram; `views.py` сохраняет только thin wrapper для совместимости импортов.
-- CIAN и Avito detail commands дублируют persistence/snapshot/status workflow.
+- CIAN и Avito detail commands используют общий orchestration-сервис
+  `listings/services/detail_polling.py`; source-specific fetch и persistence
+  остаются в командах, а выбор кандидатов и обработка ошибок унифицированы.
 - Общие операции detail payload и перехода в `unavailable` вынесены в `listings/services/detail_persistence.py`; source-specific enrichment остаётся в командах.
-- Lifecycle прогресса detail-циклов CIAN и Avito вынесен в `listings/services/detail_progress.py`; команды сохраняют только source-specific orchestration.
+- Lifecycle прогресса detail-циклов CIAN и Avito вынесен в `listings/services/detail_progress.py`; команды сохраняют только source-specific fetch и persistence.
 - Фильтрация feed/shortlist и поиск похожих объявлений вынесены в `listings/services/listing_queries.py`; `views.py` оставляет только совместимые wrappers.
 - Медианная аналитика микрорайонов вынесена в `listings/services/market.py`; view только передаёт queryset и параметры периода.
 - Агрегаты dashboard (дневные ряды, районные медианы, изменения цен и распределения) готовит `listings/services/dashboard.py`.

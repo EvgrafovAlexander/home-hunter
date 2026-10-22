@@ -1,10 +1,7 @@
-import asyncio
-
-from asgiref.sync import async_to_sync, sync_to_async
+from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
-from django.db.models import F
 from django.utils import timezone
 
 from collectors.cian.collector import CianCollector
@@ -18,6 +15,7 @@ from listings.services.detail_progress import (
     prepare_detail_cycle,
     set_detail_current,
 )
+from listings.services.detail_polling import run_detail_batch, select_detail_candidates
 from listings.services.persistence import snapshot_data_from_listing
 from listings.services.polling import cian_polling_allowed
 from listings.services.enrichment import calculate_price_per_sqm, location_is_visible, parse_address
@@ -144,7 +142,7 @@ class Command(BaseCommand):
                 raise CommandError("Another collector is already running")
         try:
             progress_id, completed_ids = prepare_cycle()
-            candidates = list(Listing.objects.filter(source="cian", is_active=True).exclude(pk__in=completed_ids).select_related("cian_detail_state").order_by(F("cian_detail_state__last_checked_at").asc(nulls_first=True), "pk")[:limit])
+            candidates = select_detail_candidates("cian", "cian_detail_state", completed_ids, limit)
             if not candidates:
                 self.stdout.write("No active CIAN listings")
                 return
@@ -159,20 +157,15 @@ class Command(BaseCommand):
 
     async def poll(self, candidates, progress_id, headless, profile):
         async with CianCollector(headless=headless, route=profile.route, session_mode=profile.session_mode) as collector:
-            for listing in candidates:
-                if not cian_polling_allowed():
-                    self.stdout.write("CIAN daytime window ended; stopping detail batch")
-                    break
-                try:
-                    await sync_to_async(set_current)(progress_id, listing.pk)
-                    detail = await collector.poll_detail(listing)
-                    available = await sync_to_async(save_detail)(listing.pk, detail)
-                    await sync_to_async(mark_completed)(progress_id, listing.pk)
-                    self.stdout.write(f"CIAN detail {listing.external_id}: {detail.status}, available={available}")
-                except Exception as exc:
-                    await sync_to_async(clear_current)(progress_id)
-                    await sync_to_async(CianDetailPollState.objects.update_or_create)(listing=listing, defaults={"last_error": f"{type(exc).__name__}: {exc}"[:1000]})
-                    self.stderr.write(f"CIAN detail {listing.external_id}: {type(exc).__name__}")
-                    if collector.stop_requested:
-                        self.stderr.write("CIAN detail polling stopped immediately after a block or network failure")
-                        break
+            async def fetch_detail(listing):
+                return await collector.poll_detail(listing)
+
+            await run_detail_batch(
+                candidates, progress_id, collector, fetch_detail, save_detail,
+                CianDetailPollState, mark_completed, set_current, clear_current,
+                success_message=lambda listing, detail, available: f"CIAN detail {listing.external_id}: {detail.status}, available={available}",
+                source_label="CIAN detail", stdout=self.stdout, stderr=self.stderr,
+                stop_message="CIAN detail polling stopped immediately after a block or network failure",
+                continue_polling=cian_polling_allowed,
+                continue_stop_message="CIAN daytime window ended; stopping detail batch",
+            )
