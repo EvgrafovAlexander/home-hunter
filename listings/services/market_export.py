@@ -11,9 +11,10 @@ from django.conf import settings
 from django.utils import timezone
 
 from ..models import CianDetailPollState, Consideration, Listing, ListingReview, ListingSearchQuery, PriceHistory, SearchQuery
+from .market import MIN_TARGET_AREA, annotate_market_position
 
 
-TARGET_MIN_AREA = Decimal("55")
+TARGET_MIN_AREA = MIN_TARGET_AREA
 
 
 def _data_layer(listing):
@@ -72,6 +73,8 @@ def _col_name(index):
 
 
 def _sheet_xml(rows, widths):
+    if rows:
+        widths = list(widths) + [14] * (max(len(row) for row in rows) - len(widths))
     last_col = _col_name(max(1, len(widths)))
     body = []
     for row_index, row in enumerate(rows, 1):
@@ -95,6 +98,8 @@ def _styles_xml():
 
 def build_market_xlsx(user):
     listings = list(Listing.objects.all().order_by("id"))
+    # Расчёт сравнения должен совпадать с вебом и Telegram.
+    annotate_market_position(listings)
     reviews = list(ListingReview.objects.filter(author=user).select_related("listing", "author").prefetch_related("tags").order_by("id"))
     considerations = {item.review_id: item for item in Consideration.objects.filter(review__author=user)}
     own_reviews = {item.listing_id: item for item in reviews if item.author_id == user.id}
@@ -110,14 +115,14 @@ def build_market_xlsx(user):
     review_decisions = dict(ListingReview.Decision.choices)
     stages = dict(Consideration.Stage.choices)
 
-    listing_headers = ["ID", "Источник", "Внешний ID", "Заголовок", "URL источника", "HomeHunter URL", "Цена, ₽", "Цена за м², ₽", "Комнат", "Площадь, м²", "Слой данных", "Критерий 55 м²", "Причина исключения", "Кухня, м²", "Жилая, м²", "Этаж", "Этажность", "Год постройки", "Адрес", "Район", "Микрорайон", "Ремонт", "Материал дома", "Мебель", "Лифт", "Балкон/лоджия", "Санузлы совм.", "Санузлы раздельн.", "Парковка", "Высота потолка, м", "Статус публикации", "Активно", "Видимо", "Первое появление", "Последнее появление", "Обновлено", "Моя оценка, /10", "Моё решение", "Этап shortlist", "Комментарий", "Причина интереса", "Стоп-фактор", "CIAN detail status", "CIAN detail checked", "Поисковые запросы", "Фото URL"]
+    listing_headers = ["ID", "Источник", "Внешний ID", "Заголовок", "URL источника", "HomeHunter URL", "Цена, ₽", "Цена за м², ₽", "Комнат", "Площадь, м²", "Слой данных", "Критерий 55 м²", "Причина исключения", "Рынок: отклонение, %", "Рынок: ориентир", "Рынок: аналогов", "Рынок: уверенность", "Кухня, м²", "Жилая, м²", "Этаж", "Этажность", "Год постройки", "Адрес", "Район", "Микрорайон", "Ремонт", "Материал дома", "Мебель", "Лифт", "Балкон/лоджия", "Санузлы совм.", "Санузлы раздельн.", "Парковка", "Высота потолка, м", "Статус публикации", "Активно", "Видимо", "Первое появление", "Последнее появление", "Обновлено", "Моя оценка, /10", "Моё решение", "Этап shortlist", "Комментарий", "Причина интереса", "Стоп-фактор", "CIAN detail status", "CIAN detail checked", "Поисковые запросы", "Фото URL"]
     listing_rows = [listing_headers]
     for item in listings:
         review = own_reviews.get(item.id)
         consideration = considerations.get(review.id) if review else None
         state = states_by_listing.get(item.id)
         data_layer, exclusion_reason, is_candidate = _data_layer(item)
-        listing_rows.append([item.id, source_names.get(item.source, item.source), item.external_id, item.title, item.url, _homehunter_url(item), item.price, item.price_per_sqm, item.rooms, item.area, data_layer, "Да" if is_candidate else "Нет", exclusion_reason, item.kitchen_area, item.living_area, item.floor, item.floors_total, item.built_year, item.address, item.district, item.microdistrict, item.repair_type, item.building_material_type, item.has_furniture, (item.passenger_lifts_count or 0) + (item.cargo_lifts_count or 0), (item.balconies_count or 0) + (item.loggias_count or 0), item.bathrooms_combined, item.bathrooms_separate, item.parking_type, item.ceiling_height, item.get_publication_status_display(), item.is_active, item.is_visible, item.first_seen_at, item.last_seen_at, item.updated_at, review.rating if review else None, review_decisions.get(review.decision) if review else None, stages.get(consideration.stage) if consideration else None, review.comment if review else None, review.interest_reason if review else None, review.deal_breaker if review else None, state.status if state else None, state.last_checked_at if state else None, "; ".join(relations_by_listing.get(item.id, [])), item.image_url])
+        listing_rows.append([item.id, source_names.get(item.source, item.source), item.external_id, item.title, item.url, _homehunter_url(item), item.price, item.price_per_sqm, item.rooms, item.area, data_layer, "Да" if is_candidate else "Нет", exclusion_reason, item.market_delta_pct, item.market_reference, item.market_samples, item.market_confidence, item.kitchen_area, item.living_area, item.floor, item.floors_total, item.built_year, item.address, item.district, item.microdistrict, item.repair_type, item.building_material_type, item.has_furniture, (item.passenger_lifts_count or 0) + (item.cargo_lifts_count or 0), (item.balconies_count or 0) + (item.loggias_count or 0), item.bathrooms_combined, item.bathrooms_separate, item.parking_type, item.ceiling_height, item.get_publication_status_display(), item.is_active, item.is_visible, item.first_seen_at, item.last_seen_at, item.updated_at, review.rating if review else None, review_decisions.get(review.decision) if review else None, stages.get(consideration.stage) if consideration else None, review.comment if review else None, review.interest_reason if review else None, review.deal_breaker if review else None, state.status if state else None, state.last_checked_at if state else None, "; ".join(relations_by_listing.get(item.id, [])), item.image_url])
 
     review_rows = [["Review ID", "Listing ID", "Ссылка на объявление", "Источник", "Адрес", "Комнат", "Площадь, м²", "Цена за м², ₽", "Слой данных", "Вне текущего критерия", "Автор", "Оценка, /10", "Решение", "Этап", "Комментарий", "Причина интереса", "Стоп-фактор", "Создано", "Обновлено"]]
     for review in reviews:

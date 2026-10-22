@@ -87,6 +87,7 @@ class ListingViewsTests(TestCase):
             self.assertIn("xl/workbook.xml", workbook.namelist())
             self.assertIn("xl/worksheets/sheet2.xml", workbook.namelist())
             self.assertIn("Квартиры", workbook.read("xl/workbook.xml").decode())
+            self.assertIn("Рынок: ориентир", workbook.read("xl/worksheets/sheet3.xml").decode())
 
     def test_feed_shows_active_listings_and_applies_filters(self):
         self.client.force_login(self.user)
