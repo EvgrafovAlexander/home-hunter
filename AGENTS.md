@@ -13,6 +13,8 @@
   новые эксплуатационные workflow не добавляются в общий `listings/views.py`.
 - Справочники локаций, геозоны и карты объявлений размещаются в `listings/views_geo.py`;
   новые географические workflow не добавляются в общий `listings/views.py`.
+- Формирование JSON/CSV/XLSX-выгрузок размещается в `listings/views_exports.py`;
+  views не должны дублировать сериализацию и формирование файлов.
 - Общие операции detail persistence размещаются в `listings/services/detail_persistence.py`; команды сохраняют только source-specific enrichment.
 - Состояние циклов detail-опроса изменяется через `listings/services/detail_progress.py`; команды не дублируют lifecycle прогресса.
 - Фильтры, варианты фильтров и похожие объявления обслуживаются `listings/services/listing_queries.py`; views не содержат дублирующую query-логику.

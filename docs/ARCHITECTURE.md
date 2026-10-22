@@ -31,6 +31,8 @@ SearchQuery
 `listings/views_operations.py`.
 Справочники локаций, пользовательские геозоны и карты находятся в
 `listings/views_geo.py`.
+Выгрузки пользовательских оценок и рыночного сравнения находятся в
+`listings/views_exports.py`.
 JavaScript встроен в шаблоны, карта использует Leaflet. Отдельной
 frontend-сборки и формального API schema layer нет.
 
@@ -57,7 +59,7 @@ frontend-сборки и формального API schema layer нет.
   workflow — в `listings/views_reviews.py`, а операции очереди и сохранения review —
   в `listings/services/reviews.py`. Операционные страницы находятся в
   `listings/views_operations.py`, географические обработчики — в
-  `listings/views_geo.py`.
+  `listings/views_geo.py`, а выгрузки — в `listings/views_exports.py`.
 - `listings/views.py` сохраняет thin wrappers для URL-совместимости; новые workflow-правила не должны возвращаться в этот модуль.
 - Market comparison теперь находится в `listings/services/market.py`, но web-аннотация и Telegram/deal tuple пока остаются двумя различающимися политиками сравнения.
 - scoring реализован в `listings/services/scoring.py` и используется web и Telegram; `views.py` сохраняет только thin wrapper для совместимости импортов.

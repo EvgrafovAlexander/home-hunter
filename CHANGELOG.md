@@ -25,6 +25,8 @@
   `listings/views_operations.py`; URL и права доступа сохранены.
 - Справочники локаций, пользовательские геозоны и карты вынесены в
   `listings/views_geo.py`; URL и права доступа сохранены.
+- Выгрузки пользовательских оценок и рыночного сравнения вынесены в
+  `listings/views_exports.py`; форматы файлов и URL сохранены.
 - Общие операции detail payload и перехода объявления в `unavailable` вынесены
   в `listings/services/detail_persistence.py` для CIAN и Avito.
 - Общий lifecycle прогресса detail-циклов вынесен в
