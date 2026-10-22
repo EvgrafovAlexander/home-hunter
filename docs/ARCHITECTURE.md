@@ -48,6 +48,7 @@ SearchQuery
 - Фильтрация feed/shortlist и поиск похожих объявлений вынесены в `listings/services/listing_queries.py`; `views.py` оставляет только совместимые wrappers.
 - Медианная аналитика микрорайонов вынесена в `listings/services/market.py`; view только передаёт queryset и параметры периода.
 - Агрегаты dashboard (дневные ряды, районные медианы, изменения цен и распределения) готовит `listings/services/dashboard.py`.
+- Классификация состояния сканеров и контекст CIAN detail-цикла находятся в `listings/services/scan_dashboard.py`.
 - География, scoring и market calculations частично выполняются request-time в Python.
 - Telegram HTTP integration распределена между несколькими services.
 

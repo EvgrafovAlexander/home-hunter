@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
-from django.db.models import Avg, Count, F, Max, Q
+from django.db.models import Avg, Count, Max, Q
 from django.http import FileResponse, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404, redirect, render, reverse
@@ -45,9 +45,9 @@ from .services.dashboard import (
     build_distribution,
     build_price_changes,
 )
+from .services.scan_dashboard import build_cian_detail_cycle, classify_scan_health
 
 
-SCAN_STALE_AFTER = timedelta(hours=6)
 SCHEDULE_TIME_ZONE = ZoneInfo("Europe/Moscow")
 DISPLAY_TIME_ZONE = ZoneInfo("Asia/Yekaterinburg")
 
@@ -565,27 +565,6 @@ def scan_statistics(request):
             )
         return redirect("scan_statistics")
 
-    def scan_health(scans, enabled):
-        last_success = next((scan for scan in scans if scan.status == Scan.Status.SUCCESS), None)
-        failed_in_a_row = 0
-        for scan in scans:
-            if scan.status != Scan.Status.FAILED:
-                break
-            failed_in_a_row += 1
-        if not enabled:
-            return "disabled", "Отключено", "Опросы отключены в интерфейсе.", last_success, failed_in_a_row
-        if not scans:
-            return "unknown", "Нет данных", "Опросы ещё не запускались.", last_success, failed_in_a_row
-        if scans[0].status == Scan.Status.RUNNING:
-            return "running", "Выполняется", "Сейчас идёт опрос площадки.", last_success, failed_in_a_row
-        if failed_in_a_row >= 3:
-            return "error", "Ошибка", f"{failed_in_a_row} ошибки подряд.", last_success, failed_in_a_row
-        if scans[0].status == Scan.Status.FAILED:
-            return "warning", "Внимание", "Последний опрос завершился ошибкой.", last_success, failed_in_a_row
-        if not last_success or not last_success.finished_at or last_success.finished_at < now - SCAN_STALE_AFTER:
-            return "warning", "Данные устарели", "Нет успешного опроса за последние 6 часов.", last_success, failed_in_a_row
-        return "healthy", "В норме", "Последний опрос завершился успешно.", last_success, failed_in_a_row
-
     sources = []
     now = timezone.now()
     controls = {(control.source, control.mode): control.enabled for control in SourcePollingControl.objects.all()}
@@ -600,32 +579,7 @@ def scan_statistics(request):
     cian_active_ids = set(active_cian.values_list("pk", flat=True))
     cian_progress = CianDetailPollProgress.objects.select_related("current_listing").filter(source="cian").first()
     detail_health = cian_detail_health()
-    detail_cycle = None
-    if cian_progress:
-        completed_ids = [pk for pk in cian_progress.completed_listing_ids if pk in cian_active_ids]
-        # The active set may shrink during a detail pass.  Display its current
-        # size, rather than a historical cycle total which can no longer be
-        # reached after listings become inactive.
-        total = len(cian_active_ids)
-        completed = min(len(completed_ids), total)
-        elapsed_hours = max((now - cian_progress.cycle_started_at).total_seconds() / 3600, 0)
-        actual_rate = round(completed / elapsed_hours, 1) if completed and elapsed_hours >= 1 / 60 else None
-        # Until a measurable rate exists, use the configured cadence: six
-        # cards every quarter hour (24 cards/hour).
-        forecast_rate = actual_rate or 24
-        eta = now + timedelta(hours=max(total - completed, 0) / forecast_rate) if forecast_rate else None
-        next_queue = list(active_cian.exclude(pk__in=completed_ids).exclude(
-            pk=cian_progress.current_listing_id,
-        ).select_related("cian_detail_state").order_by(
-            F("cian_detail_state__last_checked_at").asc(nulls_first=True), "pk",
-        )[:5])
-        detail_cycle = {
-            "total": total, "completed": completed, "remaining": max(total - completed, 0),
-            "progress": min(100, round(100 * completed / total)) if total else 100,
-            "started_at": cian_progress.cycle_started_at, "current": cian_progress.current_listing,
-            "current_started_at": cian_progress.current_started_at, "next_queue": next_queue,
-            "actual_rate": actual_rate, "eta": eta, "last_completed_at": cian_progress.last_completed_at,
-        }
+    detail_cycle = build_cian_detail_cycle(cian_progress, cian_active_ids, active_cian, now)
     for value, label in SearchQuery.Source.choices:
         recent_scans = list(Scan.objects.filter(source=value).select_related("search_query")
                             .order_by("-started_at", "-id")[:20])
@@ -638,8 +592,8 @@ def scan_statistics(request):
         modes = []
         for run in next_runs:
             mode_scans = [scan for scan in recent_scans if scan.mode == run["mode"]]
-            health, health_label, health_reason, last_success, failed_in_a_row = scan_health(
-                mode_scans, run["enabled"],
+            health, health_label, health_reason, last_success, failed_in_a_row = classify_scan_health(
+                mode_scans, run["enabled"], now,
             )
             modes.append({
                 **run, "scans": mode_scans[:3], "health": health, "health_label": health_label,
