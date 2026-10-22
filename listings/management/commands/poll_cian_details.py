@@ -1,6 +1,4 @@
 import asyncio
-import hashlib
-import json
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.conf import settings
@@ -13,6 +11,7 @@ from collectors.cian.collector import CianCollector
 from collectors.routing import resolve_profile
 from listings.models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, Listing,
                              ListingSnapshot, PriceHistory)
+from listings.services.detail_persistence import mark_detail_unavailable, save_detail_payload as _save_detail_payload
 from listings.services.persistence import snapshot_data_from_listing
 from listings.services.polling import cian_polling_allowed
 from listings.services.enrichment import calculate_price_per_sqm, location_is_visible, parse_address
@@ -23,28 +22,8 @@ LOCK_ID = 724198501
 
 
 def save_detail_payload(listing, offer_data, observed):
-    """Keep one complete response per listing without rewriting unchanged JSON."""
-    encoded = json.dumps(offer_data, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-    checksum = hashlib.sha256(encoded).hexdigest()
-    payload, created = CianDetailPayload.objects.select_for_update().get_or_create(
-        listing=listing,
-        defaults={
-            "payload": offer_data,
-            "sha256": checksum,
-            "first_received_at": observed,
-            "last_received_at": observed,
-        },
-    )
-    if created:
-        return
-    if payload.sha256 != checksum:
-        payload.payload = offer_data
-        payload.sha256 = checksum
-        payload.last_received_at = observed
-        payload.save(update_fields=("payload", "sha256", "last_received_at"))
-    else:
-        payload.last_received_at = observed
-        payload.save(update_fields=("last_received_at",))
+    """Сохраняет полный CIAN payload через общий detail-сервис."""
+    return _save_detail_payload(CianDetailPayload, listing, offer_data, observed)
 
 
 @transaction.atomic
@@ -54,19 +33,13 @@ def save_detail(listing_id, detail):
     observed = timezone.now()
     state.last_checked_at, state.last_error = observed, ""
     if detail.status != "published":
-        state.status = CianDetailPollState.Status.UNAVAILABLE
-        state.first_unavailable_at = state.first_unavailable_at or observed
-        state.detail_data = {"status": detail.status, "photo_ids": detail.photo_ids, "photos": detail.photos, "edited_at": detail.edited_at}
-        state.save()
-        if listing.publication_status != Listing.PublicationStatus.UNAVAILABLE or listing.is_active:
-            listing.publication_status = Listing.PublicationStatus.UNAVAILABLE
-            listing.is_active = False
-            ListingSnapshot.objects.create(
-                listing=listing, observed_at=observed,
-                data={**snapshot_data_from_listing(listing), "cian_detail": state.detail_data},
-            )
-            listing.save(update_fields=("publication_status", "is_active", "updated_at"))
-        return False
+        return mark_detail_unavailable(
+            listing,
+            state,
+            {"status": detail.status, "photo_ids": detail.photo_ids, "photos": detail.photos, "edited_at": detail.edited_at},
+            observed,
+            "cian_detail",
+        )
     save_detail_payload(listing, detail.offer_data, observed)
     item = detail.listing
     changed = []

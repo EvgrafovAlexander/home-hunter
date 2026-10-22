@@ -1,6 +1,4 @@
 import asyncio
-import hashlib
-import json
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.conf import settings
@@ -13,25 +11,10 @@ from collectors.avito.api import AvitoApiCollector
 from collectors.avito.detail import parse_detail_payload
 from collectors.routing import resolve_profile
 from listings.models import AvitoDetailPayload, AvitoDetailPollProgress, AvitoDetailPollState, Listing, ListingSnapshot
+from listings.services.detail_persistence import mark_detail_unavailable, save_detail_payload
 from listings.services.persistence import snapshot_data_from_listing
 
 LOCK_ID = 724198502
-
-
-def _save_payload(listing, payload, observed):
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
-    checksum = hashlib.sha256(encoded).hexdigest()
-    row, created = AvitoDetailPayload.objects.select_for_update().get_or_create(
-        listing=listing, defaults={"payload": payload, "sha256": checksum, "first_received_at": observed, "last_received_at": observed},
-    )
-    if created:
-        return
-    fields = ["last_received_at"]
-    row.last_received_at = observed
-    if row.sha256 != checksum:
-        row.payload, row.sha256 = payload, checksum
-        fields += ["payload", "sha256"]
-    row.save(update_fields=fields)
 
 
 @transaction.atomic
@@ -41,17 +24,10 @@ def save_detail(listing_id, detail):
     observed = timezone.now()
     state.last_checked_at, state.last_error = observed, ""
     if detail.status != "published":
-        state.status = AvitoDetailPollState.Status.UNAVAILABLE
-        state.first_unavailable_at = state.first_unavailable_at or observed
-        state.detail_data = {"status": detail.status, "photos": []}
-        state.save()
-        if listing.is_active or listing.publication_status != Listing.PublicationStatus.UNAVAILABLE:
-            listing.is_active = False
-            listing.publication_status = Listing.PublicationStatus.UNAVAILABLE
-            ListingSnapshot.objects.create(listing=listing, observed_at=observed, data={**snapshot_data_from_listing(listing), "avito_detail": state.detail_data})
-            listing.save(update_fields=("is_active", "publication_status", "updated_at"))
-        return False
-    _save_payload(listing, detail.payload, observed)
+        return mark_detail_unavailable(
+            listing, state, {"status": detail.status, "photos": []}, observed, "avito_detail",
+        )
+    save_detail_payload(AvitoDetailPayload, listing, detail.payload, observed)
     changed = False
     if detail.photos and listing.image_url != detail.photos[0]["full_url"]:
         listing.image_url = detail.photos[0]["full_url"]

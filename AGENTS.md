@@ -8,6 +8,7 @@
 - `collectors` не изменяют ORM и не импортируют `listings.views`.
 - Доменные расчёты (scoring, market comparison, location rules) не размещаются во views.
 - Review queue и consideration workflow поддерживаются в `listings/views_reviews.py` и `listings/services/reviews.py`; `listings/views.py` содержит только URL-совместимые wrappers.
+- Общие операции detail persistence размещаются в `listings/services/detail_persistence.py`; команды сохраняют только source-specific enrichment.
 
 ## Изменения данных и side effects
 

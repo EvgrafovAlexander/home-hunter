@@ -43,6 +43,7 @@ SearchQuery
 - Market comparison теперь находится в `listings/services/market.py`, но web-аннотация и Telegram/deal tuple пока остаются двумя различающимися политиками сравнения.
 - scoring реализован в `listings/services/scoring.py` и используется web и Telegram; `views.py` сохраняет только thin wrapper для совместимости импортов.
 - CIAN и Avito detail commands дублируют persistence/snapshot/status workflow.
+- Общие операции detail payload и перехода в `unavailable` вынесены в `listings/services/detail_persistence.py`; source-specific enrichment остаётся в командах.
 - География, scoring и market calculations частично выполняются request-time в Python.
 - Telegram HTTP integration распределена между несколькими services.
 
