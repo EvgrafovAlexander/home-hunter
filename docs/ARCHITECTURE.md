@@ -44,6 +44,7 @@ SearchQuery
 - scoring реализован в `listings/services/scoring.py` и используется web и Telegram; `views.py` сохраняет только thin wrapper для совместимости импортов.
 - CIAN и Avito detail commands дублируют persistence/snapshot/status workflow.
 - Общие операции detail payload и перехода в `unavailable` вынесены в `listings/services/detail_persistence.py`; source-specific enrichment остаётся в командах.
+- Lifecycle прогресса detail-циклов CIAN и Avito вынесен в `listings/services/detail_progress.py`; команды сохраняют только source-specific orchestration.
 - География, scoring и market calculations частично выполняются request-time в Python.
 - Telegram HTTP integration распределена между несколькими services.
 

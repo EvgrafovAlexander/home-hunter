@@ -4,7 +4,7 @@ import pytest
 
 from collectors.base import NormalizedListing
 from collectors.cian.parser import CianDetail
-from listings.management.commands.poll_cian_details import prepare_cycle, save_detail
+from listings.management.commands.poll_cian_details import clear_current, mark_completed, prepare_cycle, save_detail, set_current
 from listings.models import CianDetailPayload, CianDetailPollProgress, Listing
 
 
@@ -69,3 +69,27 @@ def test_prepare_cycle_restarts_when_all_currently_active_listings_are_completed
     assert completed == []
     assert progress.completed_listing_ids == []
     assert progress.cycle_total == 2
+
+
+def test_detail_progress_tracks_current_and_completed_once():
+    """Проверяет общий lifecycle прогресса detail-цикла."""
+    first = Listing.objects.create(source="cian", external_id="progress-first", url="https://ufa.cian.ru/sale/flat/3/")
+    progress = CianDetailPollProgress.objects.create(source="cian", cycle_total=1)
+
+    set_current(progress.pk, first.pk)
+    progress.refresh_from_db()
+    assert progress.current_listing_id == first.pk
+    assert progress.current_started_at is not None
+
+    mark_completed(progress.pk, first.pk)
+    mark_completed(progress.pk, first.pk)
+    progress.refresh_from_db()
+    assert progress.completed_listing_ids == [first.pk]
+    assert progress.current_listing_id is None
+    assert progress.last_completed_at is not None
+
+    set_current(progress.pk, first.pk)
+    clear_current(progress.pk)
+    progress.refresh_from_db()
+    assert progress.current_listing_id is None
+    assert progress.current_started_at is None

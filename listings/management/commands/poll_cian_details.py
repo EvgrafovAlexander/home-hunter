@@ -12,6 +12,12 @@ from collectors.routing import resolve_profile
 from listings.models import (CianDetailPayload, CianDetailPollProgress, CianDetailPollState, Listing,
                              ListingSnapshot, PriceHistory)
 from listings.services.detail_persistence import mark_detail_unavailable, save_detail_payload as _save_detail_payload
+from listings.services.detail_progress import (
+    clear_detail_current,
+    mark_detail_completed,
+    prepare_detail_cycle,
+    set_detail_current,
+)
 from listings.services.persistence import snapshot_data_from_listing
 from listings.services.polling import cian_polling_allowed
 from listings.services.enrichment import calculate_price_per_sqm, location_is_visible, parse_address
@@ -97,55 +103,24 @@ def save_detail(listing_id, detail):
     return True
 
 
-@transaction.atomic
 def prepare_cycle():
-    active_ids = list(Listing.objects.filter(source="cian", is_active=True).values_list("pk", flat=True))
-    progress, _ = CianDetailPollProgress.objects.select_for_update().get_or_create(source="cian")
-    active_set = set(active_ids)
-    completed = [pk for pk in progress.completed_listing_ids if pk in active_set]
-    # Start the next pass only after the dashboard had a chance to show the
-    # completed one.  New or reactivated cards join the following fair pass.
-    # Listings can become inactive while a pass is in progress.  The saved
-    # total is informational only: use the current active set to decide
-    # whether every remaining candidate has been handled.
-    if progress.cycle_total == 0 or len(completed) >= len(active_ids):
-        progress.cycle_started_at = timezone.now()
-        completed = []
-    progress.cycle_total = len(active_ids)
-    progress.completed_listing_ids = completed
-    progress.current_listing = None
-    progress.current_started_at = None
-    progress.save()
-    return progress.pk, completed
+    """Готовит цикл CIAN через общий progress-сервис."""
+    return prepare_detail_cycle(CianDetailPollProgress, Listing, "cian")
 
 
-@transaction.atomic
 def set_current(progress_id, listing_id):
-    progress = CianDetailPollProgress.objects.select_for_update().get(pk=progress_id)
-    progress.current_listing_id = listing_id
-    progress.current_started_at = timezone.now()
-    progress.save(update_fields=("current_listing", "current_started_at", "updated_at"))
+    """Запоминает текущую карточку CIAN."""
+    return set_detail_current(CianDetailPollProgress, progress_id, listing_id)
 
 
-@transaction.atomic
 def mark_completed(progress_id, listing_id):
-    progress = CianDetailPollProgress.objects.select_for_update().get(pk=progress_id)
-    completed = list(progress.completed_listing_ids)
-    if listing_id not in completed:
-        completed.append(listing_id)
-    progress.completed_listing_ids = completed
-    progress.current_listing = None
-    progress.current_started_at = None
-    progress.last_completed_at = timezone.now()
-    progress.save()
+    """Отмечает объявление CIAN завершённым."""
+    return mark_detail_completed(CianDetailPollProgress, progress_id, listing_id)
 
 
-@transaction.atomic
 def clear_current(progress_id):
-    progress = CianDetailPollProgress.objects.select_for_update().get(pk=progress_id)
-    progress.current_listing = None
-    progress.current_started_at = None
-    progress.save(update_fields=("current_listing", "current_started_at", "updated_at"))
+    """Очищает текущую карточку CIAN после ошибки."""
+    return clear_detail_current(CianDetailPollProgress, progress_id)
 
 
 class Command(BaseCommand):

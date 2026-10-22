@@ -12,6 +12,7 @@ from collectors.avito.detail import parse_detail_payload
 from collectors.routing import resolve_profile
 from listings.models import AvitoDetailPayload, AvitoDetailPollProgress, AvitoDetailPollState, Listing, ListingSnapshot
 from listings.services.detail_persistence import mark_detail_unavailable, save_detail_payload
+from listings.services.detail_progress import mark_detail_completed, prepare_detail_cycle
 from listings.services.persistence import snapshot_data_from_listing
 
 LOCK_ID = 724198502
@@ -50,29 +51,14 @@ def save_detail(listing_id, detail):
     return True
 
 
-@transaction.atomic
 def prepare_cycle():
-    active_ids = list(Listing.objects.filter(source="avito", is_active=True).values_list("pk", flat=True))
-    progress, _ = AvitoDetailPollProgress.objects.select_for_update().get_or_create(source="avito")
-    active_set = set(active_ids)
-    completed = [pk for pk in progress.completed_listing_ids if pk in active_set]
-    if progress.cycle_total == 0 or len(completed) >= len(active_ids):
-        progress.cycle_started_at, completed = timezone.now(), []
-    progress.cycle_total, progress.completed_listing_ids = len(active_ids), completed
-    progress.current_listing, progress.current_started_at = None, None
-    progress.save()
-    return progress.pk, completed
+    """Готовит цикл Avito через общий progress-сервис."""
+    return prepare_detail_cycle(AvitoDetailPollProgress, Listing, "avito")
 
 
-@transaction.atomic
 def mark_completed(progress_id, listing_id):
-    progress = AvitoDetailPollProgress.objects.select_for_update().get(pk=progress_id)
-    completed = list(progress.completed_listing_ids)
-    if listing_id not in completed:
-        completed.append(listing_id)
-    progress.completed_listing_ids, progress.current_listing, progress.current_started_at = completed, None, None
-    progress.last_completed_at = timezone.now()
-    progress.save()
+    """Отмечает объявление Avito завершённым."""
+    return mark_detail_completed(AvitoDetailPollProgress, progress_id, listing_id)
 
 
 class Command(BaseCommand):

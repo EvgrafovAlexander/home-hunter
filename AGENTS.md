@@ -9,6 +9,7 @@
 - Доменные расчёты (scoring, market comparison, location rules) не размещаются во views.
 - Review queue и consideration workflow поддерживаются в `listings/views_reviews.py` и `listings/services/reviews.py`; `listings/views.py` содержит только URL-совместимые wrappers.
 - Общие операции detail persistence размещаются в `listings/services/detail_persistence.py`; команды сохраняют только source-specific enrichment.
+- Состояние циклов detail-опроса изменяется через `listings/services/detail_progress.py`; команды не дублируют lifecycle прогресса.
 
 ## Изменения данных и side effects
 
