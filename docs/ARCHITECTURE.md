@@ -23,7 +23,8 @@ SearchQuery
 совместимые публичные импорты и оставшиеся обработчики. Dashboard вынесен в
 `listings/views_dashboard.py`, а назначение polling-профилей — в
 `listings/views_polling_profiles.py`. UI — Django templates в `listings/templates/listings`
-и `templates`; JavaScript встроен в шаблоны, карта использует Leaflet. Отдельной
+и `templates`; мониторинг запусков находится в `listings/views_scan_statistics.py`.
+JavaScript встроен в шаблоны, карта использует Leaflet. Отдельной
 frontend-сборки и формального API schema layer нет.
 
 ### Collectors
