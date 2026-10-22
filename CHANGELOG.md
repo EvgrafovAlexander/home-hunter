@@ -41,6 +41,9 @@
 - Сохранение Avito detail вынесено в `listings/services/avito_detail_persistence.py`:
   payload, фотографии, координаты, snapshots и статусы больше не смешаны с
   management-командой.
+- Общая финализация опубликованных CIAN и Avito detail вынесена в
+  `mark_detail_published()`; одинаковые обновления Listing и detail state больше
+  не дублируются.
 
 - Dashboard вынесен из общего `listings/views.py` в `listings/views_dashboard.py`;
   URL и публичный импорт обработчика сохранены.

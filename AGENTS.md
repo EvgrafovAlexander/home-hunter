@@ -27,6 +27,9 @@
 - Сохранение Avito detail размещается в
   `listings/services/avito_detail_persistence.py`; management-команда не должна
   напрямую менять Listing, snapshots или detail state.
+- Общая финализация опубликованного detail выполняется через
+  `mark_detail_published()` в `listings/services/detail_persistence.py`;
+  source-specific сервисы передают только подготовленные данные и ключ snapshot.
 - Состояние циклов detail-опроса изменяется через `listings/services/detail_progress.py`; команды не дублируют lifecycle прогресса.
 - Общая orchestration-логика detail-циклов находится в
   `listings/services/detail_polling.py`; команды сохраняют только выбор профиля,

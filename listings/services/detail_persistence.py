@@ -46,3 +46,20 @@ def mark_detail_unavailable(listing, state, detail_data, observed, snapshot_key)
         )
         listing.save(update_fields=("is_active", "publication_status", "updated_at"))
     return False
+
+
+def mark_detail_published(listing, state, detail_data, observed, changed, snapshot_key):
+    """Фиксирует общий результат успешной проверки detail."""
+    if changed:
+        ListingSnapshot.objects.create(
+            listing=listing,
+            observed_at=observed,
+            data={**snapshot_data_from_listing(listing), snapshot_key: detail_data},
+        )
+    listing.last_seen_at, listing.is_active = observed, True
+    listing.publication_status = listing.PublicationStatus.PUBLISHED
+    listing.save()
+    state.status, state.last_available_at, state.first_unavailable_at = "published", observed, None
+    state.detail_data = detail_data
+    state.save()
+    return True

@@ -3,12 +3,11 @@
 from django.db import transaction
 from django.utils import timezone
 
-from listings.models import CianDetailPayload, CianDetailPollState, Listing, ListingSnapshot, PriceHistory
-from listings.services.detail_persistence import mark_detail_unavailable, save_detail_payload
+from listings.models import CianDetailPayload, CianDetailPollState, Listing, PriceHistory
+from listings.services.detail_persistence import mark_detail_published, mark_detail_unavailable, save_detail_payload
 from listings.services.enrichment import calculate_price_per_sqm, location_is_visible, parse_address
 from listings.services.location_directory import location_is_excluded, resolve_location
 from listings.services.microdistrict_polygons import enrich_listing_from_coordinates
-from listings.services.persistence import snapshot_data_from_listing
 
 
 def _apply_detail_fields(listing, detail):
@@ -78,18 +77,8 @@ def save_cian_detail(listing_id, detail):
     if "price" in changed:
         PriceHistory.objects.create(listing=listing, price=listing.price, observed_at=observed)
     detail_changed = state.detail_data.get("photo_ids") != detail.photo_ids or state.detail_data.get("edited_at") != detail.edited_at
-    if changed or detail_changed:
-        ListingSnapshot.objects.create(
-            listing=listing,
-            observed_at=observed,
-            data={**snapshot_data_from_listing(listing), "cian_detail": {"photo_ids": detail.photo_ids, "photos": detail.photos, "edited_at": detail.edited_at}},
-        )
-    listing.last_seen_at, listing.is_active = observed, True
-    listing.publication_status = Listing.PublicationStatus.PUBLISHED
-    listing.save()
-    state.status, state.last_available_at, state.first_unavailable_at = "published", observed, None
-    state.detail_data = {"status": "published", "photo_ids": detail.photo_ids, "photos": detail.photos, "edited_at": detail.edited_at}
-    state.save()
+    detail_data = {"status": "published", "photo_ids": detail.photo_ids, "photos": detail.photos, "edited_at": detail.edited_at}
+    mark_detail_published(listing, state, detail_data, observed, bool(changed or detail_changed), "cian_detail")
     if listing.latitude is not None and listing.longitude is not None:
         from listings.services.deal_alerts import refresh_telegram_listing_score
         transaction.on_commit(lambda listing_id=listing.pk: refresh_telegram_listing_score(listing_id))

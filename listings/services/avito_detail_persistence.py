@@ -3,9 +3,8 @@
 from django.db import transaction
 from django.utils import timezone
 
-from listings.models import AvitoDetailPayload, AvitoDetailPollState, Listing, ListingSnapshot
-from listings.services.detail_persistence import mark_detail_unavailable, save_detail_payload
-from listings.services.persistence import snapshot_data_from_listing
+from listings.models import AvitoDetailPayload, AvitoDetailPollState, Listing
+from listings.services.detail_persistence import mark_detail_published, mark_detail_unavailable, save_detail_payload
 
 
 @transaction.atomic
@@ -31,16 +30,5 @@ def save_avito_detail(listing_id, detail):
     detail_data = {"status": "published", "photos": detail.photos, "views": detail.views}
     if state.detail_data.get("photos") != detail.photos or state.detail_data.get("views") != detail.views:
         changed = True
-    if changed:
-        ListingSnapshot.objects.create(
-            listing=listing,
-            observed_at=observed,
-            data={**snapshot_data_from_listing(listing), "avito_detail": detail_data},
-        )
-    listing.last_seen_at, listing.is_active = observed, True
-    listing.publication_status = Listing.PublicationStatus.PUBLISHED
-    listing.save()
-    state.status, state.last_available_at, state.first_unavailable_at = "published", observed, None
-    state.detail_data = detail_data
-    state.save()
+    mark_detail_published(listing, state, detail_data, observed, changed, "avito_detail")
     return True

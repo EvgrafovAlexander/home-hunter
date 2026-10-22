@@ -84,6 +84,9 @@ frontend-сборки и формального API schema layer нет.
 - Сохранение Avito detail, payload, фотографий, координат и snapshots вынесено в
   `listings/services/avito_detail_persistence.py`; команда оставляет только
   source-specific fetch, parsing и совместимый вызов сервиса.
+- Общая финализация опубликованного detail (snapshot при изменении, активность
+  Listing и состояние проверки) выполняется в `mark_detail_published()`;
+  source-specific сервисы сохраняют только собственное enrichment.
 - Lifecycle прогресса detail-циклов CIAN и Avito вынесен в `listings/services/detail_progress.py`; команды сохраняют только source-specific fetch и persistence.
 - Фильтрация feed/shortlist и поиск похожих объявлений вынесены в `listings/services/listing_queries.py`; `views.py` оставляет только совместимые wrappers.
 - Медианная аналитика микрорайонов вынесена в `listings/services/market.py`; view только передаёт queryset и параметры периода.
