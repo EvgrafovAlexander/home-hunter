@@ -23,7 +23,7 @@ def _channel_message_url(chat_id, message_id):
 
 
 def _update_listing_message(alert, listing, old_price, new_price, change_percent):
-    """Update the original feed post and retain a human-readable price event."""
+    """Обновляет исходную публикацию и сохраняет понятное событие цены."""
     if not alert or not alert.message_id or not alert.message_text:
         return False
     sign = "−" if change_percent < 0 else "+"
@@ -53,7 +53,7 @@ def _update_listing_message(alert, listing, old_price, new_price, change_percent
 
 def notify_price_change(listing_id: int, old_price: int | None, new_price: int | None) -> bool:
     """Обновляет Telegram-уведомление при изменении цены объявления."""
-    """Notify the channel about drops and the bot about significant increases."""
+    """Уведомляет канал о снижении, а бота — о существенном повышении цены."""
     if not settings.TG_PRICE_ALERTS_ENABLED or not old_price or not new_price or old_price == new_price:
         return False
     listing = Listing.objects.get(pk=listing_id)
@@ -63,7 +63,7 @@ def notify_price_change(listing_id: int, old_price: int | None, new_price: int |
     change_percent = (new_price - old_price) / old_price * 100
     if abs(change_percent) < settings.TG_PRICE_ALERT_MIN_PERCENT:
         return False
-    # Keep all price events in the public feed and link them to the original post.
+    # Оставляем все события изменения цены в общей ленте и связываем их с исходной публикацией.
     target = settings.TG_CHANNEL_ID
     if not target or TelegramPriceAlert.objects.filter(
         listing=listing, old_price=old_price, new_price=new_price,
@@ -78,8 +78,8 @@ def notify_price_change(listing_id: int, old_price: int | None, new_price: int |
         f"{listing.floor}/{listing.floors_total} этаж" if listing.floor and listing.floors_total else None,
     ]))
     listing_alert = TelegramListingAlert.objects.filter(listing=listing).first()
-    # A price event must reference an already published listing post. This
-    # prevents a synchronous scan callback from bypassing the listing queue.
+    # Событие цены должно ссылаться на уже опубликованную карточку,
+    # чтобы синхронный callback сканирования не обходил очередь объявлений.
     if not listing_alert or listing_alert.delivery_status != TelegramListingAlert.DeliveryStatus.SENT:
         return False
     updated_original = _update_listing_message(listing_alert, listing, old_price, new_price, change_percent)

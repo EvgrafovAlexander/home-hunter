@@ -22,8 +22,7 @@ class ParsedAddress:
 
 
 def calculate_price_per_sqm(price: int | None, area: Decimal | None) -> int | None:
-    """Рассчитывает цену квадратного метра без деления на пустую площадь."""
-    """Return a rounded rouble price per square metre when both inputs are valid."""
+    """Возвращает округлённую цену за м², если оба аргумента заполнены."""
     if price is None or price < 0 or area is None or not area.is_finite() or area <= 0:
         return None
     return int((Decimal(price) / area).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
@@ -47,11 +46,10 @@ def location_is_visible(address: str | None, district: str | None, microdistrict
 
 
 def parse_address(address: str | None, district: str | None = None) -> ParsedAddress:
-    """Разбирает адрес на нормализованные поля и признак видимости."""
-    """Normalize an Ufa address and pull its district and microdistrict into fields."""
+    """Разбирает адрес Уфы на нормализованные поля и признак видимости."""
     parsed_district = district.strip() if district and district.strip() else district_from_address(address)
-    # Avito and Domclick append ratings and a district after a middle dot.  It is
-    # listing-card metadata, not an address component.
+    # Avito и Domclick добавляют после средней точки рейтинг и район;
+    # это метаданные карточки, а не часть адреса.
     address_without_card_metadata = re.split(r"\s*·", address or "", maxsplit=1)[0]
     components = [part.strip() for part in address_without_card_metadata.split(",") if part.strip()]
     components = [part for part in components if part.casefold() not in IGNORED_ADDRESS_COMPONENTS]

@@ -18,7 +18,7 @@ TARGET_MIN_AREA = MIN_TARGET_AREA
 
 
 def _data_layer(listing):
-    """Classify a record without removing it from the analytical export."""
+    """Определяет слой записи, не исключая её из аналитической выгрузки."""
     if listing.area is None:
         return "Вне рабочей выборки", "Нет площади", False
     area = Decimal(str(listing.area))
@@ -51,8 +51,8 @@ def _excel_date(value):
 
 def _cell(value, style=0):
     if value is None or value == "":
-        # Keep the physical cell in the XML. Omitting it shifts every
-        # following value left when a source field is missing.
+        # Сохраняем физическую ячейку в XML: без неё следующий столбец
+        # сдвигается влево, если исходное поле пустое.
         return f'<c s="{style}"></c>'
     if isinstance(value, (datetime, date)):
         number = _excel_date(datetime.combine(value, datetime.min.time()) if isinstance(value, date) and not isinstance(value, datetime) else value)

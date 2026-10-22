@@ -26,7 +26,7 @@ class SourceHealth:
 
 
 def _telegram_destinations():
-    """Return configured Telegram chats without sending duplicates."""
+    """Возвращает настроенные Telegram-чаты без повторной отправки уведомлений."""
     return list(dict.fromkeys(
         chat_id for chat_id in (settings.TG_CHAT_ID, getattr(settings, "TG_CHANNEL_ID", ""))
         if chat_id
@@ -82,8 +82,7 @@ def send_telegram_message(text: str, reply_markup=None, *, chat_id=None, parse_m
 
 
 def send_telegram_message_result(text: str, reply_markup=None, *, chat_id, parse_mode=None):
-    """Отправляет текст и возвращает ответ Telegram для сохранения message id."""
-    """Send to one chat and retain Telegram's message id for later edits."""
+    """Отправляет текст в один чат и возвращает идентификатор сообщения для правок."""
     if not settings.TG_BOT_TOKEN or not chat_id:
         return None
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} if settings.TELEGRAM_PROXY_URL else None
@@ -163,8 +162,7 @@ def edit_telegram_reply_markup(*, chat_id, message_id, reply_markup) -> bool:
 
 
 def edit_telegram_message(*, chat_id, message_id, text, message_kind="text", parse_mode=None, reply_markup=None) -> bool:
-    """Редактирует ранее отправленное Telegram-сообщение."""
-    """Replace a message's text/caption while keeping its inline keyboard."""
+    """Заменяет текст или подпись сообщения, сохраняя inline-клавиатуру."""
     if not settings.TG_BOT_TOKEN or not chat_id or not message_id:
         return False
     method = "editMessageCaption" if message_kind == "photo" else "editMessageText"
@@ -178,9 +176,8 @@ def edit_telegram_message(*, chat_id, message_id, text, message_kind="text", par
         response = requests.post(f"https://api.telegram.org/bot{settings.TG_BOT_TOKEN}/{method}", data=data, proxies=proxies, timeout=20)
         if response.ok:
             return True
-        # sendPhoto can fail and fall back to sendMessage. Older rows stored
-        # the intended photo kind, so retry those edits as text when Telegram
-        # confirms there is no caption to edit.
+        # sendPhoto иногда не подходит для старых сообщений; тогда повторяем
+        # правку как обычного текста.
         if message_kind == "photo" and "there is no caption in the message" in response.text.lower():
             text_data = {"chat_id": chat_id, "message_id": message_id, "text": text}
             if parse_mode:
@@ -223,8 +220,7 @@ def check_source_health(source: str) -> SourceHealth:
 
 
 def cian_detail_health() -> SourceHealth:
-    """Собирает состояние очереди и последней ошибки CIAN detail."""
-    """Return detail-worker health without persisting or notifying."""
+    """Возвращает состояние detail-worker без сохранения и уведомлений."""
     progress = CianDetailPollProgress.objects.filter(source="cian").first()
     latest_error = CianDetailPollState.objects.exclude(last_error="").order_by("-updated_at").first()
     now = timezone.now()
@@ -243,8 +239,7 @@ def cian_detail_health() -> SourceHealth:
 
 
 def check_cian_detail_health() -> SourceHealth:
-    """Проверяет CIAN detail и отправляет уведомление при проблеме."""
-    """Detect a blocked/stopped CIAN detail worker independently of scan runs."""
+    """Отдельно проверяет заблокированный или остановленный worker CIAN detail."""
     health = cian_detail_health()
     alert, created = CianDetailHealthAlert.objects.get_or_create(pk=1, defaults={"state": health.state})
     previous = None if created else alert.state

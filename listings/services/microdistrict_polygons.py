@@ -66,8 +66,8 @@ def _point_in_polygon(latitude: float, longitude: float, rings: list[list[list[f
 @lru_cache(maxsize=1)
 def load_polygons() -> tuple[dict, ...]:
     """Загружает полигоны микрорайонов из локального файла с кэшем."""
-    # The database is the authoritative store once boundaries are imported.
-    # Keep the JSON file as a safe bootstrap/fallback for first deployment.
+    # После импорта эталоном становится база данных.
+    # JSON оставляем для первого запуска и аварийного резервного сценария.
     try:
         rows = list(MicrodistrictBoundary.objects.filter(is_active=True).only(
             "source_polygon_id", "title", "geometry", "confidence", "priority",
@@ -110,7 +110,7 @@ def resolve_microdistrict(latitude, longitude) -> PolygonMatch | None:
             matches.append((boundary, polygon))
     if not matches:
         return None
-    # Boundary matches are deliberately lower confidence than points well inside.
+    # Совпадение на границе менее надёжно, чем точка внутри полигона.
     boundary, polygon = sorted(
         matches, key=lambda item: (-item[1].get("priority", 0), not item[0], item[1]["id"]),
     )[0]

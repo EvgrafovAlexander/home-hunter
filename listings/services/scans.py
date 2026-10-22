@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 def update_scan_progress(scan_id: int, pages_scanned: int, items_seen: int, unique_items_seen: int) -> None:
     """Сохраняет промежуточный прогресс длительного сканирования."""
-    """Persist progress while a long CIAN batch is still running."""
     Scan.objects.filter(pk=scan_id, status=Scan.Status.RUNNING).update(
         pages_scanned=pages_scanned,
         items_seen=items_seen,
@@ -134,8 +133,8 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str, profil
         cian_full_completed = False
         if checkpoint and not collection_error:
             checkpoint.refresh_from_db()
-            # Total offers can change while CIAN serves a live, paginated result
-            # set. Keep collecting and reconcile removals conservatively below.
+            # Общее число объявлений меняется во время выдачи CIAN;
+            # продолжаем сбор и осторожно сверяем исчезнувшие записи ниже.
             checkpoint.expected_total = result.expected_total
             checkpoint.total_changes += result.total_changes
             checkpoint.external_ids = sorted(set(checkpoint.external_ids).union(
@@ -161,9 +160,8 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str, profil
         if mode == Scan.Mode.FULL and not result.complete and not checkpoint:
             raise RuntimeError(f"Partial full scan: {result.stop_reason}")
         with transaction.atomic():
-            # CIAN pages are a live, shifting result set.  A multi-run pass is
-            # useful for collecting data, but is not proof that an unseen
-            # listing disappeared, so it must never deactivate CIAN records.
+            # Выдача CIAN меняется между страницами. Один проход не доказывает,
+            # что объявление исчезло, поэтому не деактивируем его сразу.
             if (mode == Scan.Mode.FULL and result.complete
                     and search.source != SearchQuery.Source.CIAN):
                 finalize_full_scan(search, seen_ids)

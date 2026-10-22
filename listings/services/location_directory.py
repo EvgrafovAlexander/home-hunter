@@ -33,8 +33,8 @@ def address_street_and_house(address: str | None) -> tuple[str, int | None]:
             break
         street_parts.append(part)
     street = normalized_text(", ".join(street_parts or components))
-    # Sources alternate between “Ленина улица” and “ул. Ленина”; rules should
-    # not depend on that presentation detail.
+    # Источники чередуют формы «Ленина улица» и «ул. Ленина»;
+    # правила не должны зависеть от этого оформления.
     street = re.sub(r"\b(?:ул(?:ица)?\.?|улица)", "", street)
     street = re.sub(r"\b(?:пр-?т\.?|проспект)", "", street)
     street = re.sub(r"\b(?:пер(?:еулок)?\.?|переулок)", "", street)

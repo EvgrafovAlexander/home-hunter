@@ -32,12 +32,11 @@ def _review_keyboard(listing, channel_message_id):
 
 
 def _send_reviewable_listing(listing, text):
-    """Publish with useful links immediately, then add the Telegram deep link.
+    """Публикует объявление со ссылками и затем добавляет deep link Telegram.
 
-    The message id is only known after sending, so the Telegram review link
-    is added in a second API call.  Keep the web review link in the initial
-    keyboard as well: a failed markup edit must never leave the notification
-    without links.
+    Идентификатор сообщения появляется только после отправки, поэтому ссылка
+    на оценку добавляется отдельным запросом. В первой клавиатуре уже остаётся
+    ссылка на Home Hunter, чтобы сбой второго запроса не лишил сообщение ссылок.
     """
     initial_keyboard = {"inline_keyboard": [[
         {"text": "📝 Оценить в Home Hunter", "url": f"{settings.PUBLIC_BASE_URL}/reviews/?listing={listing.pk}"},
@@ -61,7 +60,7 @@ def _send_reviewable_listing(listing, text):
 
 
 def _telegram_fit_score(listing):
-    """Calculate the same personal Fit score as the web feed, when coordinates exist."""
+    """Рассчитывает персональный Fit score, если координаты уже получены."""
     if listing.latitude is None or listing.longitude is None:
         return None, []
     user = get_user_model().objects.filter(username=settings.TG_REVIEW_DJANGO_USERNAME).first()
@@ -75,7 +74,7 @@ def _telegram_fit_score(listing):
 
 
 def _telegram_personal_details(listing):
-    """Return concise, preference-driven explanations for the final score."""
+    """Возвращает краткие пояснения к итоговой оценке по настройкам пользователя."""
     user = get_user_model().objects.filter(username=settings.TG_REVIEW_DJANGO_USERNAME).first()
     if not user:
         return []
@@ -102,7 +101,7 @@ def _telegram_personal_details(listing):
 
 def refresh_telegram_listing_score(listing_id: int) -> bool:
     """Обновляет опубликованную оценку после получения координат."""
-    """Replace the temporary score in the already published message after geocoding."""
+    """Заменяет временную оценку в опубликованном сообщении после геокодирования."""
     try:
         alert = TelegramListingAlert.objects.select_related("listing").get(listing_id=listing_id)
     except TelegramListingAlert.DoesNotExist:
@@ -133,7 +132,7 @@ def refresh_telegram_listing_score(listing_id: int) -> bool:
 
 def refresh_pending_telegram_scores(limit: int = 40) -> int:
     """Повторяет отложенные обновления оценок Telegram-сообщений."""
-    """Retry Telegram edits that failed after an alert was initially sent."""
+    """Повторяет правки Telegram-сообщений, не выполнившиеся после отправки."""
     alerts = (TelegramListingAlert.objects
               .filter(score_ready=False, message_id__isnull=False)
               .exclude(message_text="")
@@ -147,7 +146,7 @@ def refresh_pending_telegram_scores(limit: int = 40) -> int:
 
 
 def _listing_score(listing):
-    """Return a compact score and explainable reasons for the Telegram feed."""
+    """Возвращает компактную оценку и понятные причины для Telegram-ленты."""
     position = market_position_details(listing)
     score = 5.0
     reasons = []
@@ -196,7 +195,7 @@ def _rooms(value):
 
 
 def _brief_description(title):
-    """Remove source-generated room/area/floor fragments from the title."""
+    """Удаляет из заголовка служебные фрагменты с комнатами, площадью и этажом."""
     value = " ".join((title or "").replace("\xa0", " ").split())
     value = re.sub(r"\b\d+\s*[-‑–—]?\s*(?:комн(?:ат(?:ная|ы|ая))?\.?\s*(?:кв\.?)?|к\.)", " ", value, flags=re.I)
     value = re.sub(r"\b\d+(?:[,.]\d+)?\s*м(?:²|2)\b", " ", value, flags=re.I)
@@ -210,7 +209,6 @@ def _brief_description(title):
 
 def notify_new_listing(listing_id: int, *, alert_id: int | None = None) -> bool:
     """Публикует новое объявление в Telegram с объяснимой оценкой."""
-    """Publish one visible new listing to the channel with an explainable score."""
     if alert_id:
         alert = TelegramListingAlert.objects.select_related("listing").filter(pk=alert_id).first()
         if not alert or alert.delivery_status != TelegramListingAlert.DeliveryStatus.SENDING:

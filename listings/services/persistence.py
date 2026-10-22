@@ -26,7 +26,6 @@ def _snapshot_value(value):
 
 def snapshot_data_from_values(values: dict, *, is_active: bool) -> dict:
     """Собирает snapshot из словаря нормализованных значений."""
-    """Keep the data needed to explain a listing change without storing raw HTML."""
     fields = (*SIGNIFICANT_FIELDS, "is_active", "publication_status")
     return {
         field: _snapshot_value(
@@ -64,8 +63,8 @@ def process_listing(
     values.pop("raw_data")
     values.pop("source")
     values.pop("external_id")
-    # Keep a price published by the source; otherwise calculate the same metric
-    # from the two canonical fields.  `price / rooms` is price per room, not per m².
+    # Сохраняем цену источника; иначе считаем её по каноническим полям.
+    # Деление цены на комнаты не заменяет цену за квадратный метр.
     if values["price_per_sqm"] is None:
         values["price_per_sqm"] = calculate_price_per_sqm(values["price"], values["area"])
     parsed_address = parse_address(values["address"], values["district"])
@@ -90,7 +89,7 @@ def process_listing(
             values["is_visible"] = location_is_visible_with_rules(
                 values["address"], values["district"], values["microdistrict"],
             )
-    # A missing price is not evidence that the last known price changed.
+    # Отсутствующая цена не означает, что прежняя цена изменилась.
     if not created and values["price"] is None:
         values["price"] = listing.price
         if values["price_per_sqm"] is None:
@@ -105,9 +104,8 @@ def process_listing(
             microdistrict=listing.microdistrict,
             is_visible=listing.is_visible,
         )
-    # Manual corrections are authoritative.  Every other value is reconciled
-    # with the shared directory, so newly collected rows and old rows use the
-    # same canonical district/microdistrict names.
+    # Ручные исправления главнее данных источника. Остальные значения сверяем
+    # со справочником, чтобы старые и новые записи имели единые названия.
     if listing.location_source == "manual":
         district_ref = listing.district_ref
         microdistrict_ref = listing.microdistrict_ref
@@ -124,9 +122,8 @@ def process_listing(
         values["is_visible"] = location_is_visible_with_rules(
             values["address"], values["district"], values["microdistrict"],
         )
-        # Avito cards usually provide a street and district but not a
-        # microdistrict.  Reuse coordinates already stored for the listing
-        # and classify them against the cached Ufa polygons.
+        # В карточке Avito часто есть улица и район, но нет микрорайона.
+        # Используем сохранённые координаты и кэшированные полигоны Уфы.
         if not values["microdistrict"] and listing.latitude is not None and listing.longitude is not None:
             polygon_match = resolve_microdistrict(listing.latitude, listing.longitude)
             if polygon_match:

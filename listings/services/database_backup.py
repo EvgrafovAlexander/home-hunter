@@ -11,11 +11,11 @@ from django.conf import settings
 
 
 class BackupError(RuntimeError):
-    """Raised when pg_dump cannot create a backup."""
+    """Ошибка, когда pg_dump не смог создать резервную копию."""
 
 
 class UnlinkingFile:
-    """File wrapper that removes the temporary dump when Django closes it."""
+    """Обёртка удаляет временный дамп при закрытии файла Django."""
 
     def __init__(self, file_obj, path: str):
         self._file = file_obj
@@ -32,8 +32,7 @@ class UnlinkingFile:
 
 
 def create_database_backup():
-    """Создаёт временный дамп PostgreSQL и возвращает файл для скачивания."""
-    """Return ``(file, filename, size)`` for a freshly-created PostgreSQL dump."""
+    """Создаёт дамп PostgreSQL и возвращает файл, имя и размер."""
     database = settings.DATABASES["default"]
     if database.get("ENGINE") != "django.db.backends.postgresql":
         raise BackupError("Резервное копирование поддерживается только для PostgreSQL.")

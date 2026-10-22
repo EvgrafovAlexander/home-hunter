@@ -30,8 +30,8 @@ def _has_unfinished_primary_text(listing: Listing) -> bool:
     text = " ".join(filter(None, (listing.title, listing.description))).lower()
     if any(re.search(pattern, text, flags=re.I) for pattern in _UNFINISHED_PATTERNS):
         return True
-    # Generic "без ремонта" is allowed in old secondary listings unless the
-    # same card also looks like a new-build/developer offer.
+    # Для старых вторичных объявлений «без ремонта» допустимо,
+    # если карточка не похожа на предложение новостройки.
     return "без ремонта" in text and bool(_NEW_BUILD_CONTEXT.search(text))
 
 
@@ -48,8 +48,7 @@ def _zone_tier_for_telegram(listing: Listing):
 
 
 def telegram_listing_eligibility(listing: Listing):
-    """Проверяет, можно ли отправлять объявление в Telegram-канал."""
-    """Return ``(state, reason)`` for the Telegram listing publication gate."""
+    """Возвращает состояние и причину допуска объявления к публикации в Telegram."""
     if not settings.TG_LISTING_ALERTS_ENABLED or not getattr(settings, "TG_CHANNEL_ID", ""):
         return TelegramListingAlert.DeliveryStatus.SKIPPED, "Telegram listing alerts disabled"
     if not listing.is_visible:
@@ -69,8 +68,7 @@ def telegram_listing_eligibility(listing: Listing):
 
 
 def enqueue_new_listing_alert(listing_id: int):
-    """Создаёт или возвращает очередь уведомления для объявления."""
-    """Create or refresh the durable publication record without network I/O."""
+    """Создаёт или обновляет запись очереди без сетевого запроса."""
     listing = Listing.objects.get(pk=listing_id)
     state, reason = telegram_listing_eligibility(listing)
     now = timezone.now()
@@ -100,8 +98,7 @@ def enqueue_new_listing_alert(listing_id: int):
 
 @transaction.atomic
 def claim_listing_alerts(limit: int = 10):
-    """Атомарно забирает ограниченную пачку уведомлений на отправку."""
-    """Claim due rows for one worker process and return their primary keys."""
+    """Атомарно забирает готовые уведомления для одного worker-процесса."""
     now = timezone.now()
     rows = list(
         TelegramListingAlert.objects.select_for_update(skip_locked=True).select_related("listing")

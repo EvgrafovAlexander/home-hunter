@@ -80,7 +80,7 @@ def hard_filter_result(listing: Listing, preference: ScoringPreference, *, zones
     if preference.preferred_districts and (not listing.district or listing.district not in preference.preferred_districts):
         return False, "район не входит в выбранные", None
     if preference.require_lift and (listing.passenger_lifts_count is None and listing.cargo_lifts_count is None):
-        # Unknown is not a hard failure: source cards commonly omit building details.
+        # Отсутствие данных не считаем отказом: карточки источников часто неполны.
         pass
     elif preference.require_lift and not ((listing.passenger_lifts_count or 0) + (listing.cargo_lifts_count or 0)):
         return False, "нет лифта", None
