@@ -20,6 +20,8 @@
   `listings/services/scan_dashboard.py`.
 - Review-модели вынесены в `listings/models_reviews.py`; публичные импорты из
   `listings.models` и схема БД сохранены.
+- Detail/polling-модели вынесены в `listings/models_polling.py`; публичные
+  импорты и схема БД сохранены.
 - `0d4ca50` — централизованы scoring и market comparison, добавлены правила
   разработки Codex и исходное архитектурное описание.
 - Review queue, сохранение пользовательской оценки и список рассмотрения

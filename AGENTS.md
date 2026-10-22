@@ -12,6 +12,7 @@
 - Состояние циклов detail-опроса изменяется через `listings/services/detail_progress.py`; команды не дублируют lifecycle прогресса.
 - Фильтры, варианты фильтров и похожие объявления обслуживаются `listings/services/listing_queries.py`; views не содержат дублирующую query-логику.
 - Доменные группы моделей выносятся в отдельные `listings/models_*.py` без изменения app label, имён таблиц и публичных re-export’ов из `listings.models`.
+- Detail/polling-модели относятся к `listings/models_polling.py`; команды и сервисы импортируют их через публичный контракт приложения.
 
 ## Изменения данных и side effects
 

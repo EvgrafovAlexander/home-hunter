@@ -30,7 +30,7 @@ SearchQuery
 
 ### Модели
 
-`Listing` и инфраструктурные модели пока остаются в `listings/models.py`, а review-домен вынесен в `listings/models_reviews.py` с re-export из legacy-модуля. `Listing` остаётся центральной моделью; остальные группы будут выноситься постепенно без изменения схемы БД.
+`Listing` и инфраструктурные модели пока остаются в `listings/models.py`, а review-домен и detail/polling state вынесены в `listings/models_reviews.py` и `listings/models_polling.py` с re-export из legacy-модуля. `Listing` остаётся центральной моделью; остальные группы будут выноситься постепенно без изменения схемы БД.
 
 ### Фоновые процессы и эксплуатация
 

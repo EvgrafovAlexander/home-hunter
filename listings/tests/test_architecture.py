@@ -46,3 +46,15 @@ def test_review_models_have_a_dedicated_module_and_compatibility_exports():
         assert f"class {name}(models.Model)" in review_source
         assert f"class {name}(models.Model)" not in models_source
         assert name in models_source
+
+
+def test_polling_models_have_a_dedicated_module_and_compatibility_exports():
+    """Проверяет границу detail/polling-моделей и re-export из models."""
+    polling_source = (ROOT / "listings" / "models_polling.py").read_text()
+    models_source = (ROOT / "listings" / "models.py").read_text()
+    for name in ("CianFullScanCheckpoint", "CianDetailPollState", "CianDetailPayload",
+                 "CianDetailPollProgress", "AvitoDetailPollState", "AvitoDetailPayload",
+                 "AvitoDetailPollProgress"):
+        assert f"class {name}(models.Model)" in polling_source
+        assert f"class {name}(models.Model)" not in models_source
+        assert name in models_source
