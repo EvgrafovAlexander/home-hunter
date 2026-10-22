@@ -17,6 +17,9 @@
   views не должны дублировать сериализацию и формирование файлов.
 - Настройки личной оценки размещаются в `listings/views_preferences.py`;
   обработчики scoring не добавляются в общий `listings/views.py`.
+- Расписание опросов и ограничения режимов размещаются в
+  `listings/services/polling_schedule.py`; views не должны содержать расчёт
+  времени запусков.
 - Общие операции detail persistence размещаются в `listings/services/detail_persistence.py`; команды сохраняют только source-specific enrichment.
 - Состояние циклов detail-опроса изменяется через `listings/services/detail_progress.py`; команды не дублируют lifecycle прогресса.
 - Фильтры, варианты фильтров и похожие объявления обслуживаются `listings/services/listing_queries.py`; views не содержат дублирующую query-логику.

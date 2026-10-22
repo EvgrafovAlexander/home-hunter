@@ -20,7 +20,7 @@ from .models import (
 from .services.polling import default_polling_enabled
 from .services.scan_dashboard import build_cian_detail_cycle, classify_scan_health
 from .services.scan_health import cian_detail_health
-from .views import next_poll_runs, polling_mode_locked
+from .services.polling_schedule import next_poll_runs, polling_mode_locked
 
 
 @login_required

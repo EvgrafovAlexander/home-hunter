@@ -1,10 +1,8 @@
 from collections import Counter, defaultdict
 import hashlib
 import json
-from datetime import datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from statistics import median
-from zoneinfo import ZoneInfo
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
@@ -13,11 +11,10 @@ from django.db.models import Avg, Count, Max, Q
 from django.http import FileResponse, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404, redirect, render, reverse
-from django.utils import timezone
 
 from .models import (AvitoDetailPollState, CianDetailPayload, CianDetailPollState, Consideration, District, GlobalListingHide,
                      Listing, ListingReview, ListingSearchQuery,
-                     Microdistrict, PriceHistory, Scan, ScoringPreference, SearchQuery,
+                     Microdistrict, PriceHistory, ScoringPreference, SearchQuery,
                      StreetAssignment, UserListingHide, MicrodistrictBoundary, GeoZone)
 from .services.enrichment import location_is_visible, parse_address
 from .services.location_directory import apply_location_rules_for_assignments, location_is_visible_with_rules
@@ -25,6 +22,7 @@ from .services.microdistrict_polygons import load_polygons
 from .services.change_history import change_events
 from .services.telegram_reviews import handle_update
 from .services.personal_filters import annotate_personal_filter
+from .services.polling_schedule import next_poll_runs, polling_mode_locked
 from .services.database_backup import BackupError, create_database_backup
 from .services.market import MIN_TARGET_AREA, annotate_market_position
 from .services.market import microdistrict_market_stats as _service_microdistrict_market_stats
@@ -40,10 +38,6 @@ from .views_dashboard import dashboard
 from .views_polling_profiles import polling_profiles
 
 
-SCHEDULE_TIME_ZONE = ZoneInfo("Europe/Moscow")
-DISPLAY_TIME_ZONE = ZoneInfo("Asia/Yekaterinburg")
-
-
 @csrf_exempt
 def telegram_webhook(request):
     if request.method != "POST":
@@ -56,58 +50,6 @@ def telegram_webhook(request):
     return JsonResponse({"ok": True})
 # Candidate/review threshold.  Smaller listings remain in the database and in
 # the market-comparison pool, but are not shown as purchase candidates.
-
-
-def _next_at(now, hour: int, minute: int):
-    candidate = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    return candidate if candidate > now else candidate + timedelta(days=1)
-
-
-def _next_hourly_at(now, minute: int):
-    candidate = now.replace(minute=minute, second=0, microsecond=0)
-    return candidate if candidate > now else candidate + timedelta(hours=1)
-
-
-def _next_avito_fast_at(now):
-    """Вернуть следующий двухчасовой слот быстрого опроса Avito."""
-    candidates = []
-    for day_offset in range(2):
-        day = now.date() + timedelta(days=day_offset)
-        for hour in range(8, 23, 2):
-            candidates.append(now.replace(year=day.year, month=day.month, day=day.day,
-                                          hour=hour, minute=15, second=0, microsecond=0))
-    return next(candidate for candidate in candidates if candidate > now)
-
-
-def _next_avito_full(now):
-    for offset in range(4):
-        day = now.date() + timedelta(days=offset)
-        if (day.day - 1) % 3 == 0:
-            candidate = timezone.make_aware(datetime.combine(day, time(3, 30)), now.tzinfo)
-            if candidate > now:
-                return candidate
-
-
-def next_poll_runs(source: str, now):
-    """Mirror systemd timers (MSK) and present their dates in Yekaterinburg time."""
-    now = now.astimezone(SCHEDULE_TIME_ZONE)
-    if source == SearchQuery.Source.AVITO:
-        runs = [(Scan.Mode.FAST, "Быстрый", _next_avito_fast_at(now), "в течение 10 мин."),
-                (Scan.Mode.FULL, "Полный", _next_avito_full(now), "")]
-    elif source == SearchQuery.Source.CIAN:
-        runs = [
-            (Scan.Mode.FAST, "Быстрый", _next_hourly_at(now, 0), "в течение 5 мин."),
-            (Scan.Mode.FULL, "Полный", _next_at(now, 0, 10), "в течение 20 мин."),
-        ]
-    elif source == SearchQuery.Source.DOMCLICK:
-        runs = [(Scan.Mode.FAST, "Быстрый", _next_hourly_at(now, 15), "")]
-    else:
-        return []
-    return [(mode, label, scheduled_at.astimezone(DISPLAY_TIME_ZONE), delay) for mode, label, scheduled_at, delay in runs]
-
-
-def polling_mode_locked(source: str, mode: str) -> bool:
-    return source == SearchQuery.Source.AVITO and mode == Scan.Mode.FULL
 
 
 def _integer(value):
