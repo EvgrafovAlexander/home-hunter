@@ -18,6 +18,8 @@
   URL и права staff-only сохранены.
 - Мониторинг запусков и health-состояний вынесен в
   `listings/views_scan_statistics.py`; POST-действия и URL сохранены.
+- Feed, shortlist, hidden feed и detail объявлений вынесены в
+  `listings/views_listings.py`; URL и совместимые импорты сохранены.
 - Общие операции detail payload и перехода объявления в `unavailable` вынесены
   в `listings/services/detail_persistence.py` для CIAN и Avito.
 - Общий lifecycle прогресса detail-циклов вынесен в

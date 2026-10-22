@@ -24,6 +24,8 @@ SearchQuery
 `listings/views_dashboard.py`, а назначение polling-профилей — в
 `listings/views_polling_profiles.py`. UI — Django templates в `listings/templates/listings`
 и `templates`; мониторинг запусков находится в `listings/views_scan_statistics.py`.
+Пользовательские feed, shortlist и detail-страницы находятся в
+`listings/views_listings.py`.
 JavaScript встроен в шаблоны, карта использует Leaflet. Отдельной
 frontend-сборки и формального API schema layer нет.
 
@@ -45,7 +47,10 @@ frontend-сборки и формального API schema layer нет.
 
 ## Известные архитектурные ограничения
 
-- `listings/views.py` содержит общие HTTP-обработчики и analytics; review queue и consideration workflow находятся в `listings/views_reviews.py`, а операции очереди и сохранения review — в `listings/services/reviews.py`.
+- `listings/views.py` содержит общие HTTP-обработчики и совместимые импорты;
+  feed/detail находятся в `listings/views_listings.py`, review queue и consideration
+  workflow — в `listings/views_reviews.py`, а операции очереди и сохранения review —
+  в `listings/services/reviews.py`.
 - `listings/views.py` сохраняет thin wrappers для URL-совместимости; новые workflow-правила не должны возвращаться в этот модуль.
 - Market comparison теперь находится в `listings/services/market.py`, но web-аннотация и Telegram/deal tuple пока остаются двумя различающимися политиками сравнения.
 - scoring реализован в `listings/services/scoring.py` и используется web и Telegram; `views.py` сохраняет только thin wrapper для совместимости импортов.
