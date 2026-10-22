@@ -21,6 +21,9 @@
   `listings/services/polling_schedule.py`; views не должны содержать расчёт
   времени запусков.
 - Общие операции detail persistence размещаются в `listings/services/detail_persistence.py`; команды сохраняют только source-specific enrichment.
+- Сохранение и enrichment CIAN detail размещаются в
+  `listings/services/cian_detail_persistence.py`; management-команда не должна
+  напрямую менять Listing, snapshots или detail state.
 - Состояние циклов detail-опроса изменяется через `listings/services/detail_progress.py`; команды не дублируют lifecycle прогресса.
 - Общая orchestration-логика detail-циклов находится в
   `listings/services/detail_polling.py`; команды сохраняют только выбор профиля,

@@ -78,6 +78,9 @@ frontend-сборки и формального API schema layer нет.
   `listings/services/detail_polling.py`; source-specific fetch и persistence
   остаются в командах, а выбор кандидатов и обработка ошибок унифицированы.
 - Общие операции detail payload и перехода в `unavailable` вынесены в `listings/services/detail_persistence.py`; source-specific enrichment остаётся в командах.
+- Сохранение CIAN detail, применение атрибутов и location enrichment вынесены в
+  `listings/services/cian_detail_persistence.py`; команда оставляет только
+  source-specific fetch и совместимый вызов сервиса.
 - Lifecycle прогресса detail-циклов CIAN и Avito вынесен в `listings/services/detail_progress.py`; команды сохраняют только source-specific fetch и persistence.
 - Фильтрация feed/shortlist и поиск похожих объявлений вынесены в `listings/services/listing_queries.py`; `views.py` оставляет только совместимые wrappers.
 - Медианная аналитика микрорайонов вынесена в `listings/services/market.py`; view только передаёт queryset и параметры периода.

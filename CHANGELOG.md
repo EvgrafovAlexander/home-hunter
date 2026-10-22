@@ -35,6 +35,9 @@
 - Общая orchestration-логика detail-опросов CIAN и Avito вынесена в
   `listings/services/detail_polling.py`; команды оставляют source-specific fetch
   и сохранение payload.
+- Сохранение CIAN detail вынесено в `listings/services/cian_detail_persistence.py`:
+  применение полей, location enrichment, snapshots и статусы больше не смешаны
+  с management-командой.
 
 - Dashboard вынесен из общего `listings/views.py` в `listings/views_dashboard.py`;
   URL и публичный импорт обработчика сохранены.
