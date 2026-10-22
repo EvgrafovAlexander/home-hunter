@@ -18,7 +18,7 @@ from .scoring import scoring_preference_for
 
 
 def personal_candidate_queryset(queryset, user):
-    """Apply configured hard filters, including user GeoZone polygons."""
+    """Применяет жёсткие фильтры и геозоны пользователя к queryset."""
     preference = scoring_preference_for(user)
     queryset = apply_scalar_hard_filters(queryset, preference)
     zones = list(GeoZone.objects.filter(user=user, is_active=True))

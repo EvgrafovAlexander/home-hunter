@@ -90,7 +90,7 @@ def load_polygons() -> tuple[dict, ...]:
 
 
 def resolve_microdistrict(latitude, longitude) -> PolygonMatch | None:
-    """Return the containing microdistrict, or None for unknown coordinates."""
+    """Возвращает содержащий точку микрорайон или None для неизвестных координат."""
     if latitude is None or longitude is None:
         return None
     latitude, longitude = float(latitude), float(longitude)
@@ -127,7 +127,7 @@ def canonical_microdistrict_name(value: str | None) -> str:
 
 
 def normalized_microdistrict_label(value: str | None) -> str:
-    """Return a readable label without source-specific suffixes."""
+    """Формирует читаемую подпись без суффиксов конкретного источника."""
     value = unicodedata.normalize("NFKC", value or "").replace("\xa0", " ")
     value = re.sub(r"\s+", " ", value).strip()
     value = re.sub(r"^(?:м-н|мкр\.?|микрорайон)\s+", "", value, flags=re.I)
@@ -146,7 +146,7 @@ def find_microdistrict_ref(title: str, microdistricts):
 
 
 def enrich_listing_from_coordinates(listing) -> set[str]:
-    """Fill a listing's missing location fields as soon as coordinates exist."""
+    """Заполняет отсутствующие поля локации при наличии координат."""
     if (listing.location_source == "manual" or listing.microdistrict_override or
             listing.microdistrict or listing.latitude is None or listing.longitude is None):
         return set()

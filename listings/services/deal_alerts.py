@@ -101,6 +101,7 @@ def _telegram_personal_details(listing):
 
 
 def refresh_telegram_listing_score(listing_id: int) -> bool:
+    """Обновляет опубликованную оценку после получения координат."""
     """Replace the temporary score in the already published message after geocoding."""
     try:
         alert = TelegramListingAlert.objects.select_related("listing").get(listing_id=listing_id)
@@ -131,6 +132,7 @@ def refresh_telegram_listing_score(listing_id: int) -> bool:
 
 
 def refresh_pending_telegram_scores(limit: int = 40) -> int:
+    """Повторяет отложенные обновления оценок Telegram-сообщений."""
     """Retry Telegram edits that failed after an alert was initially sent."""
     alerts = (TelegramListingAlert.objects
               .filter(score_ready=False, message_id__isnull=False)
@@ -207,6 +209,7 @@ def _brief_description(title):
 
 
 def notify_new_listing(listing_id: int, *, alert_id: int | None = None) -> bool:
+    """Публикует новое объявление в Telegram с объяснимой оценкой."""
     """Publish one visible new listing to the channel with an explainable score."""
     if alert_id:
         alert = TelegramListingAlert.objects.select_related("listing").filter(pk=alert_id).first()

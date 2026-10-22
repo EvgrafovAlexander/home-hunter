@@ -84,6 +84,7 @@ def _comparison_for_rows(listing, rows):
 
 
 def annotate_market_position(listings):
+    """Добавляет объявлениям единые поля сравнения с рынком."""
     """Annotate listings with the web-feed market comparison fields."""
     comparable = _comparable_queryset().values(
         "id", "district", "microdistrict", "rooms", "area", "price_per_sqm",

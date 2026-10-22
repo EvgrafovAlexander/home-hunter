@@ -20,7 +20,7 @@ def _matches(value: str | None, name: str, aliases: list[str]) -> bool:
 
 
 def address_street_and_house(address: str | None) -> tuple[str, int | None]:
-    """Extract a stable street key and the first house number from an address."""
+    """Выделяет стабильное имя улицы и первый номер дома из адреса."""
     components = [part.strip() for part in (address or "").split(",") if part.strip()]
     if not components:
         return "", None
@@ -88,17 +88,12 @@ def location_is_visible_with_rules(
     district: str | None,
     microdistrict: str | None,
 ) -> bool:
-    """Return base visibility while always enforcing street exclusions.
-
-    This is deliberately separate from ``enrichment.location_is_visible``:
-    the latter only knows about the static district/microdistrict denylist and
-    cannot enforce editable street rules (including manual location overrides).
-    """
+    """Проверяет видимость с учётом редактируемых исключений улиц."""
     return location_is_visible(address, district, microdistrict) and not location_is_excluded(address)
 
 
 def apply_location_rules():
-    """Reapply current directory rules to already collected listings."""
+    """Пересчитывает правила справочника для уже собранных объявлений."""
     updated = 0
     unresolved = 0
     for listing in Listing.objects.all().order_by("pk").iterator(chunk_size=200):
@@ -126,7 +121,7 @@ def apply_location_rules():
 
 
 def apply_location_rules_for_assignments(*assignments):
-    """Reapply rules only to listings that can match the changed streets."""
+    """Пересчитывает только объявления, затронутые изменёнными улицами."""
     assignments = [item for item in assignments if item is not None]
     if not assignments:
         return 0, 0
@@ -166,7 +161,7 @@ def apply_location_rules_for_assignments(*assignments):
 
 def resolve_location(address: str | None, district_name: str | None,
                      microdistrict_name: str | None) -> LocationResolution:
-    """Use explicit parser values first, then a house-range street rule."""
+    """Определяет локацию по данным parser и правилам диапазона домов."""
     street_rule = _matching_street_rule(address, district_name)
     if street_rule:
         return LocationResolution(street_rule.district, street_rule.microdistrict, "street", street_rule.is_excluded)

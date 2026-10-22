@@ -52,6 +52,7 @@ def _update_listing_message(alert, listing, old_price, new_price, change_percent
 
 
 def notify_price_change(listing_id: int, old_price: int | None, new_price: int | None) -> bool:
+    """Обновляет Telegram-уведомление при изменении цены объявления."""
     """Notify the channel about drops and the bot about significant increases."""
     if not settings.TG_PRICE_ALERTS_ENABLED or not old_price or not new_price or old_price == new_price:
         return False

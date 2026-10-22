@@ -163,6 +163,7 @@ def edit_telegram_reply_markup(*, chat_id, message_id, reply_markup) -> bool:
 
 
 def edit_telegram_message(*, chat_id, message_id, text, message_kind="text", parse_mode=None, reply_markup=None) -> bool:
+    """Редактирует ранее отправленное Telegram-сообщение."""
     """Replace a message's text/caption while keeping its inline keyboard."""
     if not settings.TG_BOT_TOKEN or not chat_id or not message_id:
         return False
@@ -222,6 +223,7 @@ def check_source_health(source: str) -> SourceHealth:
 
 
 def cian_detail_health() -> SourceHealth:
+    """Собирает состояние очереди и последней ошибки CIAN detail."""
     """Return detail-worker health without persisting or notifying."""
     progress = CianDetailPollProgress.objects.filter(source="cian").first()
     latest_error = CianDetailPollState.objects.exclude(last_error="").order_by("-updated_at").first()
@@ -241,6 +243,7 @@ def cian_detail_health() -> SourceHealth:
 
 
 def check_cian_detail_health() -> SourceHealth:
+    """Проверяет CIAN detail и отправляет уведомление при проблеме."""
     """Detect a blocked/stopped CIAN detail worker independently of scan runs."""
     health = cian_detail_health()
     alert, created = CianDetailHealthAlert.objects.get_or_create(pk=1, defaults={"state": health.state})

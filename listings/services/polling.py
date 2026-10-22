@@ -6,13 +6,13 @@ from listings.models import Scan, SearchQuery, SourcePollingControl
 
 
 def cian_polling_allowed(moment=None) -> bool:
-    """Hard daytime guard for CIAN, including long-running batches."""
+    """Проверяет дневное окно CIAN, включая продолжительные циклы."""
     hour = timezone.localtime(moment or timezone.now()).hour
     return settings.CIAN_POLL_START_HOUR <= hour < settings.CIAN_POLL_END_HOUR
 
 
 def default_polling_enabled(source: str, mode: str) -> bool:
-    """Avito full scans are unsafe until a dedicated safe implementation exists."""
+    """Возвращает безопасный режим по умолчанию для источника и типа скана."""
     return not (source == SearchQuery.Source.AVITO and mode == Scan.Mode.FULL)
 
 

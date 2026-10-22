@@ -22,6 +22,7 @@ class ParsedAddress:
 
 
 def calculate_price_per_sqm(price: int | None, area: Decimal | None) -> int | None:
+    """Рассчитывает цену квадратного метра без деления на пустую площадь."""
     """Return a rounded rouble price per square metre when both inputs are valid."""
     if price is None or price < 0 or area is None or not area.is_finite() or area <= 0:
         return None
@@ -46,6 +47,7 @@ def location_is_visible(address: str | None, district: str | None, microdistrict
 
 
 def parse_address(address: str | None, district: str | None = None) -> ParsedAddress:
+    """Разбирает адрес на нормализованные поля и признак видимости."""
     """Normalize an Ufa address and pull its district and microdistrict into fields."""
     parsed_district = district.strip() if district and district.strip() else district_from_address(address)
     # Avito and Domclick append ratings and a district after a middle dot.  It is

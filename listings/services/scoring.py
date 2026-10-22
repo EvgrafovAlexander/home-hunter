@@ -119,7 +119,7 @@ def house_fit_score(item):
 
 
 def add_listing_score(listings, preferences=None):
-    """Attach an explainable 0–100 Fit Score; market signals remain context."""
+    """Добавляет объяснимую оценку 0–100, оставляя рынок контекстом."""
     listings = list(listings)
     preferences = preferences or ScoringPreference()
     for item in listings:

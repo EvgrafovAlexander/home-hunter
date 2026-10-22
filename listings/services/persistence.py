@@ -25,6 +25,7 @@ def _snapshot_value(value):
 
 
 def snapshot_data_from_values(values: dict, *, is_active: bool) -> dict:
+    """Собирает snapshot из словаря нормализованных значений."""
     """Keep the data needed to explain a listing change without storing raw HTML."""
     fields = (*SIGNIFICANT_FIELDS, "is_active", "publication_status")
     return {

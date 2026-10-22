@@ -48,6 +48,7 @@ def _zone_tier_for_telegram(listing: Listing):
 
 
 def telegram_listing_eligibility(listing: Listing):
+    """Проверяет, можно ли отправлять объявление в Telegram-канал."""
     """Return ``(state, reason)`` for the Telegram listing publication gate."""
     if not settings.TG_LISTING_ALERTS_ENABLED or not getattr(settings, "TG_CHANNEL_ID", ""):
         return TelegramListingAlert.DeliveryStatus.SKIPPED, "Telegram listing alerts disabled"
@@ -68,6 +69,7 @@ def telegram_listing_eligibility(listing: Listing):
 
 
 def enqueue_new_listing_alert(listing_id: int):
+    """Создаёт или возвращает очередь уведомления для объявления."""
     """Create or refresh the durable publication record without network I/O."""
     listing = Listing.objects.get(pk=listing_id)
     state, reason = telegram_listing_eligibility(listing)
@@ -98,6 +100,7 @@ def enqueue_new_listing_alert(listing_id: int):
 
 @transaction.atomic
 def claim_listing_alerts(limit: int = 10):
+    """Атомарно забирает ограниченную пачку уведомлений на отправку."""
     """Claim due rows for one worker process and return their primary keys."""
     now = timezone.now()
     rows = list(

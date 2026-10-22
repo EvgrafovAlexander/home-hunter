@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def update_scan_progress(scan_id: int, pages_scanned: int, items_seen: int, unique_items_seen: int) -> None:
+    """Сохраняет промежуточный прогресс длительного сканирования."""
     """Persist progress while a long CIAN batch is still running."""
     Scan.objects.filter(pk=scan_id, status=Scan.Status.RUNNING).update(
         pages_scanned=pages_scanned,
@@ -42,6 +43,7 @@ def finalize_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
 
 @transaction.atomic
 def finalize_cian_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
+    """Завершает полный скан CIAN и безопасно обновляет статусы объявлений."""
     """Mark CIAN offers inactive only after two complete passes miss them.
 
     CIAN's live pagination can shift while a multi-batch pass is in progress.

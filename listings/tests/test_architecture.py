@@ -38,6 +38,33 @@ def test_collectors_do_not_depend_on_http_views():
     assert not violations, f"collector -> view dependency: {violations}"
 
 
+def test_service_modules_have_russian_boundary_documentation():
+    """Проверяет module docstring и публичные функции сервисного слоя."""
+    service_dir = ROOT / "listings" / "services"
+    undocumented = {}
+    for path in sorted(service_dir.glob("*.py")):
+        tree = ast.parse(path.read_text())
+        module_doc = ast.get_docstring(tree) or ""
+        missing = []
+        if not any("а" <= char.lower() <= "я" for char in module_doc):
+            missing.append("module docstring")
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith("_"):
+                if not ast.get_docstring(node) or not any("а" <= char.lower() <= "я" for char in ast.get_docstring(node)):
+                    missing.append(node.name)
+        if missing:
+            undocumented[str(path.relative_to(ROOT))] = missing
+    assert not undocumented, f"service documentation gaps: {undocumented}"
+
+
+def test_services_catalog_lists_every_service_module():
+    """Проверяет, что каталог сервисов не отстал от структуры кода."""
+    catalog = (ROOT / "docs" / "SERVICES.md").read_text()
+    service_dir = ROOT / "listings" / "services"
+    missing = [path.name for path in service_dir.glob("*.py") if f"`{path.name}`" not in catalog]
+    assert not missing, f"services missing from docs/SERVICES.md: {missing}"
+
+
 def test_review_models_have_a_dedicated_module_and_compatibility_exports():
     """Проверяет границу review-моделей и re-export из legacy-модуля."""
     review_source = (ROOT / "listings" / "models_reviews.py").read_text()

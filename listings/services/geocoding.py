@@ -20,6 +20,7 @@ class Coordinates:
 
 
 def geocode_ufa_address(address: str) -> Coordinates | None:
+    """Запрашивает координаты адреса у геокодера с безопасным fallback."""
     """Resolve a normalized address with the public Nominatim API."""
     if not settings.NOMINATIM_USER_AGENT:
         raise GeocodingError("Set NOMINATIM_USER_AGENT before using the public geocoder")

@@ -32,6 +32,7 @@ class UnlinkingFile:
 
 
 def create_database_backup():
+    """Создаёт временный дамп PostgreSQL и возвращает файл для скачивания."""
     """Return ``(file, filename, size)`` for a freshly-created PostgreSQL dump."""
     database = settings.DATABASES["default"]
     if database.get("ENGINE") != "django.db.backends.postgresql":

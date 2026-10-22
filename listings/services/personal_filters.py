@@ -36,7 +36,7 @@ def _point_in_polygon(point, coordinates):
 
 
 def geometry_contains(geometry, latitude, longitude):
-    """Return whether a lat/lon point is inside a GeoJSON Polygon/MultiPolygon."""
+    """Проверяет попадание координат в GeoJSON Polygon или MultiPolygon."""
     if not geometry or latitude is None or longitude is None:
         return False
     try:
@@ -53,11 +53,7 @@ def geometry_contains(geometry, latitude, longitude):
 
 
 def zone_for_listing(listing: Listing, zones=None):
-    """Return the highest-priority matching tier for a listing, or ``None``.
-
-    D is deliberately checked first so an accidental overlapping D polygon
-    always excludes the listing.
-    """
+    """Возвращает приоритетный tier зоны или None, если пересечения нет."""
     if listing.latitude is None or listing.longitude is None:
         return None
     user_id = getattr(listing, "_personal_filter_user_id", None)
@@ -70,7 +66,7 @@ def zone_for_listing(listing: Listing, zones=None):
 
 
 def hard_filter_result(listing: Listing, preference: ScoringPreference, *, zones=None):
-    """Return ``(allowed, reason, zone_tier)`` for the configured hard rules."""
+    """Возвращает разрешение, причину отказа и tier по жёстким фильтрам."""
     if preference.max_price is not None and (listing.price is None or listing.price > preference.max_price):
         return False, "цена выше абсолютного максимума", None
     if preference.min_area is not None and (listing.area is None or listing.area < preference.min_area):
@@ -101,7 +97,7 @@ def hard_filter_result(listing: Listing, preference: ScoringPreference, *, zones
 
 
 def annotate_personal_filter(listings, user):
-    """Annotate an iterable without changing the queryset or persisted data."""
+    """Аннотирует список без изменения queryset и сохранённых данных."""
     preference = ScoringPreference.objects.filter(user=user).first() or ScoringPreference(user=user)
     zones = list(GeoZone.objects.filter(user=user, is_active=True))
     result = []
@@ -118,7 +114,7 @@ def annotate_personal_filter(listings, user):
 
 
 def apply_scalar_hard_filters(queryset, preference):
-    """Push filters that do not require geometry into SQL."""
+    """Передаёт в SQL фильтры, которым не нужна проверка геометрии."""
     if preference.max_price is not None:
         queryset = queryset.filter(price__isnull=False, price__lte=preference.max_price)
     if preference.min_area is not None:
