@@ -7,6 +7,7 @@
 - Направление зависимостей: `views/templates -> application services/selectors -> models`; `commands -> services`; `collectors -> normalized DTOs`.
 - `collectors` не изменяют ORM и не импортируют `listings.views`.
 - Доменные расчёты (scoring, market comparison, location rules) не размещаются во views.
+- Review queue и consideration workflow поддерживаются в `listings/views_reviews.py` и `listings/services/reviews.py`; `listings/views.py` содержит только URL-совместимые wrappers.
 
 ## Изменения данных и side effects
 
@@ -39,4 +40,5 @@ Live browser tests запускаются отдельно и не должны 
 
 - Фактическая архитектура описывается в `docs/ARCHITECTURE.md`.
 - При изменении границ модулей, фоновых процессов, моделей или внешних интеграций обновляйте архитектурную документацию в том же изменении.
+- Каждое заметное изменение фиксируйте в `CHANGELOG.md` в том же коммите, что и код.
 - Не описывайте будущую архитектуру как уже существующую.

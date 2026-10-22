@@ -10,7 +10,6 @@ from zoneinfo import ZoneInfo
 from django.contrib.auth.decorators import login_required
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
-from django.db import transaction
 from django.db.models import Avg, Count, F, Max, Q
 from django.db.models.functions import TruncDate
 from django.http import FileResponse, HttpResponse, HttpResponseForbidden, JsonResponse
@@ -30,11 +29,12 @@ from .services.change_history import change_events
 from .services.polling import default_polling_enabled
 from .services.scan_health import cian_detail_health
 from .services.telegram_reviews import handle_update
-from .services.personal_filters import apply_scalar_hard_filters, annotate_personal_filter
+from .services.personal_filters import annotate_personal_filter
 from .services.database_backup import BackupError, create_database_backup
 from .services.market import MIN_TARGET_AREA, annotate_market_position
 from .services.scoring import add_listing_score as _service_add_listing_score
 from .services.scoring import scoring_preference_for as _service_scoring_preference_for
+from .services.reviews import personal_candidate_queryset as _service_personal_candidate_queryset
 
 
 SCAN_STALE_AFTER = timedelta(hours=6)
@@ -216,16 +216,8 @@ def add_listing_score(listings, preferences=None):
 
 
 def personal_candidate_queryset(queryset, user):
-    """Apply configured hard filters, including user GeoZone polygons."""
-    preference = scoring_preference_for(user)
-    queryset = apply_scalar_hard_filters(queryset, preference)
-    zones = list(GeoZone.objects.filter(user=user, is_active=True))
-    if not zones:
-        return queryset
-    # The current GeoJSON implementation is deliberately bounded to the same
-    # candidate window used by the feed.  A future PostGIS migration can push
-    # this predicate into SQL without changing the view contract.
-    return annotate_personal_filter(list(queryset[:1000]), user)
+    """Backward-compatible view import; candidate filtering lives in a service."""
+    return _service_personal_candidate_queryset(queryset, user)
 
 
 def similar_listings(listing: Listing, limit: int = 6):
@@ -394,134 +386,19 @@ def shortlist(request):
     })
 
 
-def _review_queue(user):
-    return Listing.objects.filter(is_active=True, is_visible=True).exclude(
-        global_hides__is_active=True,
-    ).exclude(
-        user_hides__user=user,
-    ).filter(
-        area__gte=MIN_TARGET_AREA,
-    ).exclude(
-        reviews__author=user,
-    ).order_by("-first_seen_at", "-id")
-
-
-def _tag_groups():
-    tags = ReviewTag.objects.filter(is_active=True)
-    return [(value, label, list(tags.filter(category=value))) for value, label in ReviewTag.Category.choices]
-
-
-def _save_review(request, listing):
-    try:
-        rating = int(request.POST.get("rating", ""))
-    except ValueError:
-        rating = 0
-    decision = request.POST.get("decision")
-    if not 1 <= rating <= 10 or decision not in ListingReview.Decision.values:
-        return "Поставьте оценку от 1 до 10 и выберите решение."
-    tags = list(ReviewTag.objects.filter(is_active=True, pk__in=request.POST.getlist("tags")))
-    with transaction.atomic():
-        review, _ = ListingReview.objects.update_or_create(
-            listing=listing, author=request.user,
-            defaults={"rating": rating, "decision": decision, "comment": request.POST.get("comment", "").strip(),
-                      "interest_reason": request.POST.get("interest_reason", "").strip(),
-                      "deal_breaker": request.POST.get("deal_breaker", "").strip()},
-        )
-        review.tags.set(tags)
-        ListingReviewRevision.objects.create(
-            review=review, rating=review.rating, decision=review.decision, comment=review.comment,
-            interest_reason=review.interest_reason, deal_breaker=review.deal_breaker,
-            tag_codes=list(review.tags.values_list("code", flat=True)),
-        )
-        if decision == ListingReview.Decision.CONSIDER:
-            Consideration.objects.get_or_create(review=review)
-        else:
-            Consideration.objects.filter(review=review).delete()
-    return None
-
-
-@login_required
 def review_queue(request):
-    queue = personal_candidate_queryset(_review_queue(request.user), request.user)
-    if isinstance(queue, list):
-        queue = [item for item in queue if item.area is not None and item.area >= MIN_TARGET_AREA]
-    requested_id = _integer(request.GET.get("listing") or request.POST.get("listing_id"))
-    listing = None
-    if requested_id:
-        # A direct link from an offer must open that exact offer even when it
-        # already has a review; the sequential queue intentionally excludes
-        # reviewed listings.
-        listing = (Listing.objects.filter(pk=requested_id, is_active=True, is_visible=True)
-                   .filter(area__gte=MIN_TARGET_AREA)
-                   .exclude(global_hides__is_active=True)
-                   .exclude(user_hides__user=request.user).first())
-        if listing:
-            listing = next(iter(annotate_personal_filter([listing], request.user)), None)
-    if listing is None:
-        listing = queue[0] if isinstance(queue, list) and queue else queue.first() if not isinstance(queue, list) else None
-    if request.method == "POST":
-        if not listing:
-            return redirect("review_queue")
-        error = _save_review(request, listing)
-        if not error:
-            if request.POST.get("hide_personally"):
-                UserListingHide.objects.get_or_create(listing=listing, user=request.user)
-            if request.user.is_staff and request.POST.get("hide_globally"):
-                reason = request.POST.get("global_reason", "").strip() or "Скрыто модератором"
-                GlobalListingHide.objects.update_or_create(
-                    listing=listing,
-                    is_active=True,
-                    defaults={"hidden_by": request.user, "reason": reason},
-                )
-            return redirect("review_queue")
-    else:
-        error = None
-    if listing:
-        add_market_position([listing])
-        add_listing_score([listing], scoring_preference_for(request.user))
-        try:
-            review_photos = listing.cian_detail_state.detail_data.get("photos", [])
-        except CianDetailPollState.DoesNotExist:
-            review_photos = []
-        if not review_photos and listing.image_url:
-            review_photos = [{"full_url": listing.image_url}]
-    else:
-        review_photos = []
-    return render(request, "listings/review_queue.html", {
-        "item": listing, "tag_groups": _tag_groups(), "error": error,
-        "queue_count": _review_queue(request.user).count(),
-        "review_photos": review_photos,
-        "selected_listing_id": listing.pk if listing else None,
-    })
+    from .views_reviews import review_queue as _review_queue_view
+    return _review_queue_view(request)
 
 
-@login_required
 def consideration_list(request):
-    if request.method == "POST":
-        consideration = get_object_or_404(Consideration, pk=request.POST.get("consideration_id"), review__author=request.user)
-        stage = request.POST.get("stage")
-        if stage in Consideration.Stage.values:
-            consideration.stage = stage
-            consideration.save(update_fields=("stage", "updated_at"))
-        return redirect("consideration_list")
-    considerations = Consideration.objects.filter(review__author=request.user).select_related("review__listing").order_by("stage", "-updated_at")
-    grouped = [(value, label, [item for item in considerations if item.stage == value]) for value, label in Consideration.Stage.choices]
-    return render(request, "listings/consideration_list.html", {
-        "grouped": grouped, "stages": Consideration.Stage.choices,
-        "total_considerations": considerations.count(),
-    })
+    from .views_reviews import consideration_list as _consideration_list_view
+    return _consideration_list_view(request)
 
 
-@login_required
 def my_reviews(request):
-    reviews = ListingReview.objects.filter(author=request.user).select_related("listing").prefetch_related("tags")
-    evaluated_count = reviews.count()
-    pending_count = _review_queue(request.user).count()
-    return render(request, "listings/my_reviews.html", {
-        "reviews": reviews, "evaluated_count": evaluated_count,
-        "pending_count": pending_count, "total_count": evaluated_count + pending_count,
-        "pending_listings": _review_queue(request.user),
-    })
+    from .views_reviews import my_reviews as _my_reviews_view
+    return _my_reviews_view(request)
 
 
 @login_required

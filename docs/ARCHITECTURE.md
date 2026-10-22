@@ -38,7 +38,8 @@ SearchQuery
 
 ## Известные архитектурные ограничения
 
-- `listings/views.py` содержит HTTP, analytics и workflow logic; scoring и market comparison вызываются через сервисные wrappers.
+- `listings/views.py` содержит общие HTTP-обработчики и analytics; review queue и consideration workflow находятся в `listings/views_reviews.py`, а операции очереди и сохранения review — в `listings/services/reviews.py`.
+- `listings/views.py` сохраняет thin wrappers для URL-совместимости; новые workflow-правила не должны возвращаться в этот модуль.
 - Market comparison теперь находится в `listings/services/market.py`, но web-аннотация и Telegram/deal tuple пока остаются двумя различающимися политиками сравнения.
 - scoring реализован в `listings/services/scoring.py` и используется web и Telegram; `views.py` сохраняет только thin wrapper для совместимости импортов.
 - CIAN и Avito detail commands дублируют persistence/snapshot/status workflow.
