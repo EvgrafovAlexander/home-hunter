@@ -26,6 +26,9 @@ SearchQuery
 и `templates`; мониторинг запусков находится в `listings/views_scan_statistics.py`.
 Пользовательские feed, shortlist и detail-страницы находятся в
 `listings/views_listings.py`.
+Операционные страницы резервного копирования, контроля исчезнувших объявлений,
+недоступных карточек CIAN и качества данных находятся в
+`listings/views_operations.py`.
 JavaScript встроен в шаблоны, карта использует Leaflet. Отдельной
 frontend-сборки и формального API schema layer нет.
 
@@ -50,7 +53,8 @@ frontend-сборки и формального API schema layer нет.
 - `listings/views.py` содержит общие HTTP-обработчики и совместимые импорты;
   feed/detail находятся в `listings/views_listings.py`, review queue и consideration
   workflow — в `listings/views_reviews.py`, а операции очереди и сохранения review —
-  в `listings/services/reviews.py`.
+  в `listings/services/reviews.py`. Операционные страницы находятся в
+  `listings/views_operations.py`.
 - `listings/views.py` сохраняет thin wrappers для URL-совместимости; новые workflow-правила не должны возвращаться в этот модуль.
 - Market comparison теперь находится в `listings/services/market.py`, но web-аннотация и Telegram/deal tuple пока остаются двумя различающимися политиками сравнения.
 - scoring реализован в `listings/services/scoring.py` и используется web и Telegram; `views.py` сохраняет только thin wrapper для совместимости импортов.
