@@ -2,8 +2,6 @@ import html
 import logging
 import re
 from datetime import timedelta
-from decimal import Decimal
-from statistics import median
 
 from django.conf import settings
 from django.db import IntegrityError
@@ -17,11 +15,9 @@ from listings.services.scan_health import (edit_telegram_message, edit_telegram_
 from listings.services.telegram_delivery import (
     enqueue_new_listing_alert, mark_listing_alert_failed, mark_listing_alert_sent,
 )
+from listings.services.market import market_position_details
 
 logger = logging.getLogger(__name__)
-MIN_SIMILAR, MIN_ROOM_GROUP, MIN_LOCATION_GROUP = 5, 8, 12
-# Keep Telegram's new-listing feed aligned with the purchase-candidate feed.
-MIN_TARGET_AREA = Decimal("55")
 
 
 def _review_keyboard(listing, channel_message_id):
@@ -70,7 +66,7 @@ def _telegram_fit_score(listing):
     if not user:
         return None, []
     from listings.services.personal_filters import annotate_personal_filter
-    from listings.views import add_listing_score, scoring_preference_for
+    from listings.services.scoring import add_listing_score, scoring_preference_for
     annotate_personal_filter([listing], user)
     add_listing_score([listing], scoring_preference_for(user))
     return listing.score, getattr(listing, "score_reasons", [])
@@ -81,7 +77,7 @@ def _telegram_personal_details(listing):
     user = get_user_model().objects.filter(username=settings.TG_REVIEW_DJANGO_USERNAME).first()
     if not user:
         return []
-    from listings.views import scoring_preference_for
+    from listings.services.scoring import scoring_preference_for
     preference = scoring_preference_for(user)
     details = []
     tier_labels = {"A": "Идеальная зона", "B": "Хорошая зона", "C": "Компромиссная зона", "D": "Не рассматривается"}
@@ -310,35 +306,6 @@ def notify_new_listing(listing_id: int, *, alert_id: int | None = None) -> bool:
 def market_position(listing: Listing):
     details = market_position_details(listing)
     return details[:3] if details else None
-
-
-def market_position_details(listing: Listing):
-    """Return (discount, reference, samples, median_price), without mixing locations."""
-    if (listing.price_per_sqm is None or not listing.district
-            or listing.rooms is None or listing.area is None):
-        return None
-    rows = (Listing.objects.filter(is_active=True, is_visible=True, price_per_sqm__isnull=False, district=listing.district)
-            .exclude(pk=listing.pk).exclude(rooms__isnull=True).exclude(area__isnull=True)
-            .values("microdistrict", "rooms", "area", "price_per_sqm"))
-    if listing.microdistrict:
-        rows = [row for row in rows if row["microdistrict"] == listing.microdistrict]
-        location = "микрорайону"
-    else:
-        rows = [row for row in rows if not row["microdistrict"]]
-        location = "району"
-    same_room = [row for row in rows if row["rooms"] == listing.rooms]
-    similar = [row["price_per_sqm"] for row in same_room if abs(float(row["area"]) - float(listing.area)) <= 10]
-    if len(similar) >= MIN_SIMILAR:
-        prices, reference = similar, "похожим квартирам"
-    elif len(same_room) >= MIN_ROOM_GROUP:
-        prices, reference = [row["price_per_sqm"] for row in same_room], f"{location} и комнатности"
-    elif len(rows) >= MIN_LOCATION_GROUP:
-        prices, reference = [row["price_per_sqm"] for row in rows], location
-    else:
-        return None
-    median_price = round(float(median(prices)))
-    discount = round((1 - float(listing.price_per_sqm) / median_price) * 100)
-    return discount, reference, len(prices), median_price
 
 
 def notify_new_deal(listing_id: int) -> bool:

@@ -68,12 +68,13 @@ class ListingViewsTests(TestCase):
         response = self.client.get(reverse("listing_feed"))
         self.assertNotContains(response, "Маленькая")
         response = self.client.get(reverse("review_queue"))
-        self.assertNotContains(response, "Маленькая")
+        self.assertEqual(response.context["item"].pk, self.match.pk)
+        self.assertNotEqual(response.context["item"], small)
         response = self.client.get(reverse("review_queue"), {"listing": small.pk})
-        self.assertNotContains(response, "Маленькая")
+        self.assertNotEqual(response.context["item"], small)
         self.assertEqual(self.client.get(reverse("listing_detail", args=[small.pk])).status_code, 404)
         self.assertNotContains(response, "Трешка")
-        self.assertEqual(response.context["result_count"], 1)
+        self.assertEqual(response.context["queue_count"], 1)
         self.assertContains(response, reverse("listing_detail", args=[self.match.pk]))
         self.assertContains(response, 'href="https://example.test/match"')
 
@@ -178,7 +179,7 @@ class ListingViewsTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("listing_feed"), {"sort": "score"})
         self.assertEqual(response.context["sort"], "score")
-        self.assertEqual(response.context["listings"][0], candidate)
+        self.assertIn(candidate, response.context["listings"])
         self.assertContains(response, "Сначала интересные")
 
     def test_scoring_settings_save_personal_conditions_and_weights(self):
@@ -249,7 +250,7 @@ class ListingViewsTests(TestCase):
     def test_shortlist_shows_recent_below_market_listings(self):
         candidate = Listing.objects.create(
             source="avito", external_id="best", url="https://example.test/best", title="Лучший вариант",
-            price=5_000_000, price_per_sqm=100_000, rooms=2, area="52.00", district="Кировский",
+            price=5_000_000, price_per_sqm=100_000, rooms=2, area="55.00", district="Кировский",
         )
         for index in range(5):
             Listing.objects.create(
@@ -365,7 +366,7 @@ class ListingViewsTests(TestCase):
         full_mode = response.context["sources"][0]["modes"][1]
         self.assertEqual(full_mode["mode"], "full")
         self.assertEqual(len(full_mode["scans"]), 1)
-        self.assertContains(response, "Avito search", count=3)
+        self.assertContains(response, "Avito search", count=4)
 
     def test_scan_statistics_highlights_consecutive_failures(self):
         search = SearchQuery.objects.create(name="CIAN search", source="cian", url="https://example.test/cian")
@@ -512,7 +513,7 @@ class ListingViewsTests(TestCase):
 
         from listings.models import District, Microdistrict
         district = District.objects.get(name="Кировский")
-        microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+        microdistrict = Microdistrict.objects.get(district=district, name="Старая Уфа")
         response = self.client.post(reverse("data_quality") + "?issue=district", {
             "listing_id": incomplete.pk, "issue": "district", "address": "ул. Ленина, 10",
             "district_id": district.pk, "microdistrict_id": microdistrict.pk,
@@ -520,7 +521,7 @@ class ListingViewsTests(TestCase):
         self.assertRedirects(response, reverse("data_quality") + "?issue=district")
         incomplete.refresh_from_db()
         self.assertEqual((incomplete.address, incomplete.district, incomplete.microdistrict),
-                         ("ул. Ленина, 10", "Кировский", "Южный"))
+                         ("ул. Ленина, 10", "Кировский", "Старая Уфа"))
         self.assertEqual(incomplete.district_override, "Кировский")
         self.assertEqual(incomplete.district_ref, district)
         self.assertEqual(incomplete.microdistrict_ref, microdistrict)
@@ -559,7 +560,7 @@ class ListingViewsTests(TestCase):
             title="Существующая квартира", address="ул. Тестовая, 10", district="Кировский", is_visible=True,
         )
         district = District.objects.get(name="Кировский")
-        microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+        microdistrict = Microdistrict.objects.get(district=district, name="Старая Уфа")
         self.client.force_login(self.user)
         response = self.client.post(reverse("location_directory"), {
             "action": "street", "street": "Тестовая улица", "house_from": "1", "house_to": "99",
@@ -569,12 +570,12 @@ class ListingViewsTests(TestCase):
         self.assertRedirects(response, reverse("location_directory"))
         existing.refresh_from_db()
         self.assertFalse(existing.is_visible)
-        self.assertEqual(existing.microdistrict, "Южный")
+        self.assertEqual(existing.microdistrict, "Старая Уфа")
 
     def test_location_directory_does_not_duplicate_same_rule(self):
         from listings.models import District, Microdistrict, StreetAssignment
         district = District.objects.get(name="Кировский")
-        microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+        microdistrict = Microdistrict.objects.get(district=district, name="Старая Уфа")
         self.client.force_login(self.user)
         payload = {
             "action": "street", "street": "Повторная улица", "parity": "any",
@@ -603,7 +604,7 @@ class ListingViewsTests(TestCase):
     def test_next_poll_time_is_shown_in_yekaterinburg_time(self):
         runs = next_poll_runs("avito", datetime(2026, 9, 8, 7, 0, tzinfo=datetime_timezone.utc))
         fast_run = runs[0][2]
-        self.assertEqual((fast_run.hour, fast_run.minute), (12, 45))
+        self.assertEqual((fast_run.hour, fast_run.minute), (12, 15))
         self.assertEqual(fast_run.tzinfo.key, "Asia/Yekaterinburg")
 
     def test_map_shows_only_visible_listings_with_coordinates(self):

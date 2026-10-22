@@ -14,3 +14,4 @@
   <div><label>Добавлено</label><select name="days"><option value="">За всё время</option><option value="1" {% if filters.days == '1' %}selected{% endif %}>За сутки</option><option value="7" {% if filters.days == '7' %}selected{% endif %}>За 7 дней</option><option value="30" {% if filters.days == '30' %}selected{% endif %}>За 30 дней</option><option value="90" {% if filters.days == '90' %}selected{% endif %}>За 90 дней</option></select></div>
   <input type="hidden" name="active" value="{{ filters.active }}"><div class="filter-actions"><button>Показать</button><a href="{{ request.path }}">Сбросить</a></div>
 </form>
+{% if listings %}<div class="listing-summary" aria-label="Названия объявлений">{% for item in listings %}<span>{{ item.title }}</span>{% if item.market_label %}<span>{{ item.market_label }} · {{ item.market_reference }}, {{ item.market_samples }} аналогов</span>{% endif %}{% endfor %}</div>{% endif %}

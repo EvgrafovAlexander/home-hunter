@@ -39,10 +39,10 @@ def test_notifies_once_for_a_new_listing_below_local_market(settings):
         price=6_250_000, price_per_sqm=125_000, rooms=2, area="50.00",
         district="Кировский", microdistrict="Центр",
     )
-    with patch("listings.services.deal_alerts.send_telegram_message", return_value=True) as send:
+    with patch("listings.services.deal_alerts.send_telegram_message_result", return_value={"message_id": 1}) as send:
         assert notify_new_deal(deal.pk)
         assert not notify_new_deal(deal.pk)
-    assert "На 17% ниже рынка" in send.call_args.args[0]
+    assert "На 17% ниже медианы" in send.call_args.args[0]
     keyboard = send.call_args.args[1]
     assert keyboard["inline_keyboard"][0][0]["url"].endswith(f"/reviews/?listing={deal.pk}")
     assert "Подходит по критериям:" in send.call_args.args[0]
@@ -80,8 +80,8 @@ def test_uses_photo_when_listing_has_one(settings):
         price=6_250_000, price_per_sqm=125_000, rooms=2, area="50.00",
         district="Кировский", microdistrict="Центр", image_url="https://example.test/photo.jpg",
     )
-    with patch("listings.services.deal_alerts.send_telegram_photo", return_value=True) as photo, \
-            patch("listings.services.deal_alerts.send_telegram_message") as message:
+    with patch("listings.services.deal_alerts.send_telegram_photo_result", return_value={"message_id": 1}) as photo, \
+            patch("listings.services.deal_alerts.send_telegram_message_result") as message:
         assert notify_new_deal(deal.pk)
     photo.assert_called_once()
     message.assert_not_called()

@@ -32,12 +32,14 @@ from .services.scan_health import cian_detail_health
 from .services.telegram_reviews import handle_update
 from .services.personal_filters import apply_scalar_hard_filters, annotate_personal_filter
 from .services.database_backup import BackupError, create_database_backup
+from .services.market import MIN_TARGET_AREA, annotate_market_position
+from .services.scoring import add_listing_score as _service_add_listing_score
+from .services.scoring import scoring_preference_for as _service_scoring_preference_for
 
 
 SCAN_STALE_AFTER = timedelta(hours=6)
 SCHEDULE_TIME_ZONE = ZoneInfo("Europe/Moscow")
 DISPLAY_TIME_ZONE = ZoneInfo("Asia/Yekaterinburg")
-MARKET_MIN_SIMILAR = 5
 
 
 @csrf_exempt
@@ -50,12 +52,9 @@ def telegram_webhook(request):
         return JsonResponse({"ok": False}, status=400)
     handle_update(payload)
     return JsonResponse({"ok": True})
-MARKET_MIN_ROOM_GROUP = 8
-MARKET_MIN_DISTRICT_GROUP = 12
 MICRODISTRICT_MARKET_MIN_SAMPLE = 5
 # Candidate/review threshold.  Smaller listings remain in the database and in
 # the market-comparison pool, but are not shown as purchase candidates.
-MIN_TARGET_AREA = Decimal("55")
 
 
 def _next_at(now, hour: int, minute: int):
@@ -204,83 +203,16 @@ def filter_options(*, visible: bool = True):
 
 
 def add_market_position(listings):
-    """Compare within a microdistrict first; avoid mixing distinct local markets."""
-    comparable = (Listing.objects.filter(is_active=True, is_visible=True, price_per_sqm__isnull=False)
-                  .exclude(district__isnull=True).exclude(district="")
-                  .exclude(rooms__isnull=True).exclude(area__isnull=True)
-                  .values("id", "district", "microdistrict", "rooms", "area", "price_per_sqm"))
-    by_microdistrict, by_unclassified_district = {}, {}
-    for row in comparable:
-        entry = (row["id"], row["rooms"], float(row["area"]), row["price_per_sqm"])
-        if row["microdistrict"]:
-            by_microdistrict.setdefault((row["district"], row["microdistrict"]), []).append(entry)
-        else:
-            by_unclassified_district.setdefault(row["district"], []).append(entry)
-
-    for listing in listings:
-        listing.market_delta_pct = None
-        listing.market_reference = ""
-        listing.market_samples = 0
-        listing.market_strict_samples = 0
-        listing.market_fallback_samples = 0
-        listing.market_confidence = "none"
-        listing.market_state = ""
-        listing.market_label = ""
-        if (listing.price_per_sqm is None or not listing.district
-                or listing.rooms is None or listing.area is None):
-            continue
-        if listing.microdistrict:
-            local_prices = by_microdistrict.get((listing.district, listing.microdistrict), [])
-            location_label = "микрорайону"
-        else:
-            local_prices = by_unclassified_district.get(listing.district, [])
-            location_label = "району"
-        same_room = [(area, price) for pk, rooms, area, price in local_prices
-                     if pk != listing.pk and rooms == listing.rooms]
-        all_local_prices = [price for pk, _, _, price in local_prices if pk != listing.pk]
-        similar = [(area, price) for area, price in same_room if abs(area - float(listing.area)) <= 10]
-        strict_similar = [(area, price) for area, price in similar if area >= float(MIN_TARGET_AREA)]
-        if float(listing.area) >= float(MIN_TARGET_AREA) and len(strict_similar) >= MARKET_MIN_SIMILAR:
-            prices, reference = [price for _, price in strict_similar], "похожим квартирам от 55 м²"
-            listing.market_strict_samples = len(strict_similar)
-            listing.market_confidence = "high"
-        elif float(listing.area) >= float(MIN_TARGET_AREA) and len(similar) >= MARKET_MIN_SIMILAR:
-            prices, reference = [price for _, price in similar], "похожим квартирам (включая 45–54 м²)"
-            listing.market_strict_samples = len(strict_similar)
-            listing.market_fallback_samples = len(similar) - len(strict_similar)
-            listing.market_confidence = "medium"
-        elif len(similar) >= MARKET_MIN_SIMILAR:
-            prices, reference = [price for _, price in similar], "похожим квартирам"
-            listing.market_confidence = "medium"
-        elif len(same_room) >= MARKET_MIN_ROOM_GROUP:
-            prices, reference = [price for _, price in same_room], f"{location_label} и комнатности"
-            listing.market_confidence = "low"
-        elif len(all_local_prices) >= MARKET_MIN_DISTRICT_GROUP:
-            prices, reference = all_local_prices, location_label
-            listing.market_confidence = "low"
-        else:
-            continue
-        listing.market_samples = len(prices)
-        if not listing.market_strict_samples and float(listing.area) >= float(MIN_TARGET_AREA):
-            listing.market_strict_samples = len([price for area, price in similar if area >= float(MIN_TARGET_AREA)])
-        if not listing.market_fallback_samples and float(listing.area) >= float(MIN_TARGET_AREA):
-            listing.market_fallback_samples = max(0, listing.market_samples - listing.market_strict_samples)
-        listing.market_reference = reference
-        listing.market_delta_pct = round((float(listing.price_per_sqm) / float(median(prices)) - 1) * 100)
-        if listing.market_delta_pct <= -4:
-            listing.market_state = "below"
-            listing.market_label = f"На {abs(listing.market_delta_pct)}% ниже рынка"
-        elif listing.market_delta_pct >= 4:
-            listing.market_state = "above"
-            listing.market_label = f"На {listing.market_delta_pct}% выше рынка"
-        else:
-            listing.market_state = "neutral"
-            listing.market_label = "В пределах рынка"
-    return listings
+    return annotate_market_position(listings)
 
 
 def scoring_preference_for(user):
-    return ScoringPreference.objects.filter(user=user).first() or ScoringPreference(user=user)
+    return _service_scoring_preference_for(user)
+
+
+def add_listing_score(listings, preferences=None):
+    """Backward-compatible view import; scoring lives in the service layer."""
+    return _service_add_listing_score(listings, preferences)
 
 
 def personal_candidate_queryset(queryset, user):
@@ -294,213 +226,6 @@ def personal_candidate_queryset(queryset, user):
     # candidate window used by the feed.  A future PostGIS migration can push
     # this predicate into SQL without changing the view contract.
     return annotate_personal_filter(list(queryset[:1000]), user)
-
-
-# Centres of the requested Ufa areas. Their overlapping radii form the target corridors.
-UFA_TARGET_POINTS = (
-    (54.7248, 55.9473),  # Гостиный двор
-    (54.7528, 56.0041),  # проспект Октября / Госцирк
-    (54.7418, 55.9776),  # Аграрный университет
-    (54.7340, 55.9865),  # Айская
-    (54.7200, 55.9960),  # Бакалинская
-)
-
-
-def target_location_score(listing):
-    if listing.latitude is None or listing.longitude is None:
-        return 50, "локация не уточнена"
-    latitude, longitude = float(listing.latitude), float(listing.longitude)
-    distance = min((((latitude - point_lat) * 111) ** 2 + ((longitude - point_lon) * 65) ** 2) ** .5
-                   for point_lat, point_lon in UFA_TARGET_POINTS)
-    if distance <= .7:
-        return 100, "в целевой локации"
-    if distance <= 1.5:
-        return 78, "рядом с целевой локацией"
-    if distance <= 2.5:
-        return 52, "вне приоритетной зоны"
-    return 18, "далеко от целевых локаций"
-
-
-def geo_zone_location_score(listing):
-    """Translate a configured personal zone priority into a Fit component."""
-    tier = getattr(listing, "geo_zone_tier", None)
-    if tier == GeoZone.Tier.A:
-        return 100, "идеальная зона"
-    if tier == GeoZone.Tier.B:
-        return 80, "хорошая зона"
-    if tier == GeoZone.Tier.C:
-        return 55, "компромиссная зона"
-    if tier == GeoZone.Tier.D:
-        return 0, "зона не рассматривается"
-    if getattr(listing, "geo_zone_configured", False):
-        if listing.latitude is None or listing.longitude is None:
-            return 40, "зона не определена: нет координат"
-        return 25, "вне заданных зон"
-    return target_location_score(listing)
-
-
-def condition_score(listing):
-    """Prefer explicit CIAN condition; unknown condition remains neutral."""
-    explicit_conditions = {
-        "euro": (85, "евроремонт указан в карточке"),
-        "cosmetic": (60, "косметический ремонт указан в карточке"),
-        "withoutRepair": (20, "без ремонта по данным карточки"),
-    }
-    if listing.repair_type in explicit_conditions:
-        return explicit_conditions[listing.repair_type]
-    text = f"{listing.title} {listing.description or ''}".lower()
-    if any(value in text for value in ("требует ремонта", "под ремонт", "без ремонта", "нужен ремонт")):
-        return 20, "требуется ремонт"
-    if any(value in text for value in ("дизайнерск", "евроремонт", "качественный ремонт", "новый ремонт", "новым ремонтом")):
-        return 85, "есть признаки хорошего ремонта"
-    return 50, "состояние не подтверждено"
-
-
-FIT_WEIGHTS = {
-    "location_weight": 40,
-    "area_rooms_weight": 25,
-    "condition_weight": 15,
-    "layout_weight": 10,
-    "house_weight": 5,
-    "floor_weight": 5,
-}
-
-
-def area_rooms_fit_score(item, preferences):
-    if item.area is None:
-        area_score = 40
-    elif preferences.max_area and item.area > preferences.max_area:
-        area_score = 35
-    elif preferences.max_area and preferences.min_area:
-        midpoint = (float(preferences.min_area) + float(preferences.max_area)) / 2
-        distance = abs(float(item.area) - midpoint) / max(midpoint - float(preferences.min_area), 1)
-        area_score = round(max(55, 100 - distance * 30))
-    else:
-        area_score = round(min(100, 70 + max(0, float(item.area) - 55) * 1.5))
-    if preferences.preferred_rooms:
-        room_score = 100 if item.rooms in {int(value) for value in preferences.preferred_rooms if str(value).isdigit()} else 35
-    else:
-        room_score = 70 if item.rooms is not None else 45
-    return round(area_score * 0.7 + room_score * 0.3)
-
-
-def layout_fit_score(item):
-    scores = []
-    if item.kitchen_area is not None and item.area:
-        ratio = float(item.kitchen_area) / float(item.area)
-        scores.append(100 if ratio >= .20 else 80 if ratio >= .16 else 60 if ratio >= .12 else 35)
-    if item.bathrooms_combined is not None or item.bathrooms_separate is not None:
-        scores.append(75 if (item.bathrooms_separate or 0) else 60)
-    return round(sum(scores) / len(scores)) if scores else 50
-
-
-def house_fit_score(item):
-    signals = []
-    signals.append(80 if item.building_material_type else 50)
-    signals.append(80 if item.built_year else 50)
-    signals.append(80 if item.passenger_lifts_count is not None or item.cargo_lifts_count is not None else 50)
-    signals.append(75 if item.parking_type else 50)
-    return round(sum(signals) / len(signals))
-
-
-def add_listing_score(listings, preferences=None):
-    """Attach an explainable 0–100 Fit Score; market signals belong to Deal Score."""
-    listings = list(listings)
-    preferences = preferences or ScoringPreference()
-    for item in listings:
-        reasons = []
-        preference_checks = []
-        if preferences.min_kitchen_area is not None:
-            matches = item.kitchen_area is not None and item.kitchen_area >= preferences.min_kitchen_area
-            preference_checks.append(matches)
-            if not matches:
-                reasons.append("кухня меньше вашей цели")
-        if preferences.preferred_repair_types:
-            matches = item.repair_type in preferences.preferred_repair_types
-            preference_checks.append(matches)
-            if not matches:
-                reasons.append("тип ремонта не соответствует предпочтению")
-        if preferences.prefer_photo:
-            matches = bool(item.image_url)
-            preference_checks.append(matches)
-            if not matches:
-                reasons.append("нет обязательного фото")
-        if preferences.prefer_furniture:
-            matches = item.has_furniture is True
-            preference_checks.append(matches)
-            if not matches:
-                reasons.append("мебель не указана")
-        if preferences.use_ufa_target_zones:
-            location_score, location_reason = geo_zone_location_score(item)
-            reasons.insert(0, location_reason)
-        else:
-            location_score = 50
-        condition_value, condition_reason = condition_score(item)
-        reasons.append(condition_reason)
-        # Keep the market signal visible as context, but never let it affect Fit.
-        market_delta_pct = getattr(item, "market_delta_pct", None)
-        if market_delta_pct is not None:
-            if market_delta_pct <= -10:
-                reasons.append("Deal: существенно ниже рынка")
-            elif market_delta_pct >= 10:
-                reasons.append("Deal: существенно выше рынка")
-        layout_score = layout_fit_score(item)
-        if preference_checks:
-            preference_score = 100 * sum(preference_checks) / len(preference_checks)
-            layout_score = round(layout_score * .7 + preference_score * .3)
-        floor_score = 100 if item.floor and item.floors_total and 1 < item.floor < item.floors_total else 20 if item.floor else 55
-        if preferences.floor_min is not None and (item.floor is None or item.floor < preferences.floor_min):
-            floor_score = min(floor_score, 30)
-            reasons.append("этаж ниже вашей цели")
-        if preferences.floor_max is not None and (item.floor is None or item.floor > preferences.floor_max):
-            floor_score = min(floor_score, 30)
-            reasons.append("этаж выше вашей цели")
-        personal_reasons = [
-            reason for reason in reasons if reason in {
-                "кухня меньше вашей цели", "этаж ниже вашей цели", "этаж выше вашей цели", "нет обязательного фото",
-                "тип ремонта не соответствует предпочтению", "нет лифта",
-                "нет балкона или лоджии", "мебель не указана",
-            }
-        ]
-        components = {
-            "location_weight": location_score,
-            "area_rooms_weight": area_rooms_fit_score(item, preferences),
-            "condition_weight": condition_value,
-            "layout_weight": layout_score,
-            "house_weight": house_fit_score(item),
-            "floor_weight": floor_score,
-        }
-        labels = {
-            "location_weight": "Зона и локация", "area_rooms_weight": "Площадь и комнаты",
-            "condition_weight": "Состояние квартиры", "layout_weight": "Планировка и кухня",
-            "house_weight": "Дом", "floor_weight": "Этаж",
-        }
-        if getattr(item, "geo_zone_configured", False):
-            zone_floor = {"A": 76, "B": 51, "C": 26, "D": 0}.get(getattr(item, "geo_zone_tier", None), 0)
-            non_location = {key: value for key, value in components.items() if key != "location_weight"}
-            non_total = sum(FIT_WEIGHTS[key] for key in non_location)
-            non_score = sum(value * FIT_WEIGHTS[key] for key, value in non_location.items()) / non_total if non_total else 0
-            item.score = round(zone_floor + non_score * .24)
-            item.score_breakdown = [{"label": "Приоритет зоны", "score": round(location_score), "weight": 75,
-                                    "contribution": zone_floor}]
-            item.score_breakdown.extend(
-                {"label": labels[key], "score": round(value), "weight": FIT_WEIGHTS[key],
-                 "contribution": round(value * FIT_WEIGHTS[key] / non_total * 24) if non_total else 0}
-                for key, value in non_location.items()
-            )
-        else:
-            total_weight = sum(FIT_WEIGHTS.values())
-            item.score = round(sum(value * FIT_WEIGHTS[key] for key, value in components.items()) / total_weight)
-            item.score_breakdown = [
-                {"label": labels[key], "score": round(value), "weight": FIT_WEIGHTS[key],
-                 "contribution": round(value * FIT_WEIGHTS[key] / total_weight)}
-                for key, value in components.items()
-            ]
-        item.score_reasons = (personal_reasons + [reason for reason in reasons if reason not in personal_reasons])[:3]
-        item.score_label = "Высокий интерес" if item.score >= 75 else (
-            "Стоит посмотреть" if item.score >= 60 else "Нейтрально"
-        )
-    return listings
 
 
 def similar_listings(listing: Listing, limit: int = 6):
@@ -718,6 +443,8 @@ def _save_review(request, listing):
 @login_required
 def review_queue(request):
     queue = personal_candidate_queryset(_review_queue(request.user), request.user)
+    if isinstance(queue, list):
+        queue = [item for item in queue if item.area is not None and item.area >= MIN_TARGET_AREA]
     requested_id = _integer(request.GET.get("listing") or request.POST.get("listing_id"))
     listing = None
     if requested_id:

@@ -48,10 +48,11 @@ class LocationResolution:
     excluded: bool = False
 
 
-def _matching_street_rule(address: str | None):
+def _matching_street_rule(address: str | None, district_name: str | None = None):
     street, house = address_street_and_house(address)
     if not street:
         return None
+    matches = []
     for rule in StreetAssignment.objects.select_related("district", "microdistrict").all():
         if address_street_and_house(rule.street)[0] != street:
             continue
@@ -64,8 +65,15 @@ def _matching_street_rule(address: str | None):
                 continue
             if rule.parity == StreetAssignment.Parity.EVEN and house % 2:
                 continue
-        return rule
-    return None
+        matches.append(rule)
+    if not matches:
+        return None
+    if district_name:
+        requested = normalized_text(district_name)
+        district_match = next((rule for rule in matches if normalized_text(rule.district.name) == requested), None)
+        if district_match:
+            return district_match
+    return matches[0]
 
 
 def location_is_excluded(address: str | None) -> bool:
@@ -157,7 +165,7 @@ def apply_location_rules_for_assignments(*assignments):
 def resolve_location(address: str | None, district_name: str | None,
                      microdistrict_name: str | None) -> LocationResolution:
     """Use explicit parser values first, then a house-range street rule."""
-    street_rule = _matching_street_rule(address)
+    street_rule = _matching_street_rule(address, district_name)
     if street_rule:
         return LocationResolution(street_rule.district, street_rule.microdistrict, "street", street_rule.is_excluded)
     districts = list(District.objects.all())

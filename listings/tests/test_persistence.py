@@ -122,31 +122,31 @@ def test_records_photo_change_in_snapshot(search, item):
 
 def test_resolves_street_rule_with_house_range(search, item):
     district = District.objects.get(name="Кировский")
-    microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+    microdistrict = Microdistrict.objects.get(district=district, name="Старая Уфа")
     StreetAssignment.objects.create(
         street="ул. Ленина", house_from=10, house_to=20, district=district, microdistrict=microdistrict,
     )
     result = process_listing(search, replace(item, address="Ленина улица, 14"), timezone.now())
     assert result.listing.district_ref == district
     assert result.listing.microdistrict_ref == microdistrict
-    assert result.listing.microdistrict == "Южный"
+    assert result.listing.microdistrict == "Старая Уфа"
     assert result.listing.location_source == "street"
 
 
 def test_excluded_street_rule_hides_listing_and_sets_microdistrict(search, item):
     district = District.objects.get(name="Кировский")
-    microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+    microdistrict = Microdistrict.objects.get(district=district, name="Старая Уфа")
     StreetAssignment.objects.create(
         street="ул. Лётчиков", district=district, microdistrict=microdistrict, is_excluded=True,
     )
     result = process_listing(search, replace(item, address="Лётчиков улица, 14", district="Кировский"), timezone.now())
-    assert result.listing.microdistrict == "Южный"
+    assert result.listing.microdistrict == "Старая Уфа"
     assert not result.listing.is_visible
 
 
 def test_manual_location_override_cannot_bypass_excluded_street(search, item):
     district = District.objects.get(name="Кировский")
-    microdistrict = Microdistrict.objects.get(district=district, name="Южный")
+    microdistrict = Microdistrict.objects.get(district=district, name="Старая Уфа")
     StreetAssignment.objects.create(
         street="ул. Лётчиков", district=district, microdistrict=microdistrict, is_excluded=True,
     )
@@ -154,7 +154,7 @@ def test_manual_location_override_cannot_bypass_excluded_street(search, item):
     listing = first.listing
     listing.address_override = "ул. Лётчиков, 14"
     listing.district_override = "Кировский"
-    listing.microdistrict_override = "Южный"
+    listing.microdistrict_override = "Старая Уфа"
     listing.location_source = "manual"
     listing.district_ref = district
     listing.microdistrict_ref = microdistrict

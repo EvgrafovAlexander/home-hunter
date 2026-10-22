@@ -74,6 +74,7 @@ TRACKED_FIELDS = (
 
 def change_events(snapshots):
     """Return newest-first events, omitting the initial snapshot's field noise."""
+    snapshots = sorted(snapshots, key=lambda snapshot: (snapshot.observed_at, snapshot.pk), reverse=True)
     previous = None
     events = []
     for snapshot in reversed(snapshots):
