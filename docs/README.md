@@ -17,12 +17,6 @@
 | [`LISTING_VISIBILITY_AND_GEO_ZONES.md`](LISTING_VISIBILITY_AND_GEO_ZONES.md) | Видимость объявлений, геокодирование и геозоны. |
 | [`AVITO_SECONDARY_FILTER.md`](AVITO_SECONDARY_FILTER.md) | Текущие признаки вторичного рынка Avito и ограничения фильтра. |
 
-## Исторические и аналитические материалы
-
-`network_tunnel_diagnosis.md` и `homehunter-next-stage-analysis.md` сохраняют
-результаты прошлых проверок и предложения по развитию. Они помечены прямо в
-начале файла и не заменяют фактическую документацию выше.
-
 `market_analysis/market_analysis_prompt.md` — рабочий промпт для подготовки
 аналитического отчёта, а не описание программного контракта приложения.
 
