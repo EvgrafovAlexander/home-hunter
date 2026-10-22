@@ -38,6 +38,9 @@
 - Сохранение CIAN detail вынесено в `listings/services/cian_detail_persistence.py`:
   применение полей, location enrichment, snapshots и статусы больше не смешаны
   с management-командой.
+- Сохранение Avito detail вынесено в `listings/services/avito_detail_persistence.py`:
+  payload, фотографии, координаты, snapshots и статусы больше не смешаны с
+  management-командой.
 
 - Dashboard вынесен из общего `listings/views.py` в `listings/views_dashboard.py`;
   URL и публичный импорт обработчика сохранены.
