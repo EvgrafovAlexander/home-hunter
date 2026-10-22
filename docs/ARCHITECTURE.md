@@ -45,6 +45,7 @@ SearchQuery
 - CIAN и Avito detail commands дублируют persistence/snapshot/status workflow.
 - Общие операции detail payload и перехода в `unavailable` вынесены в `listings/services/detail_persistence.py`; source-specific enrichment остаётся в командах.
 - Lifecycle прогресса detail-циклов CIAN и Avito вынесен в `listings/services/detail_progress.py`; команды сохраняют только source-specific orchestration.
+- Фильтрация feed/shortlist и поиск похожих объявлений вынесены в `listings/services/listing_queries.py`; `views.py` оставляет только совместимые wrappers.
 - География, scoring и market calculations частично выполняются request-time в Python.
 - Telegram HTTP integration распределена между несколькими services.
 
