@@ -44,6 +44,40 @@ class ListingViewsTests(TestCase):
         response = self.client.get(reverse("listing_feed"))
         self.assertRedirects(response, f"/accounts/login/?next={reverse('listing_feed')}")
 
+    def test_shortlist_page_renders_after_view_extraction(self):
+        """Проверяет, что вынесенный shortlist не падает на фильтре дат."""
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("shortlist"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_consideration_page_renders_reviewed_listing(self):
+        """Проверяет HTTP-ответ страницы рассмотрения после декомпозиции views."""
+        review = ListingReview.objects.create(
+            listing=self.match,
+            author=self.user,
+            rating=8,
+            decision=ListingReview.Decision.CONSIDER,
+        )
+        Consideration.objects.create(review=review)
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("consideration_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Готов рассмотреть")
+
+    def test_review_export_returns_csv_after_view_extraction(self):
+        """Проверяет JSON/CSV export view не только импорт модуля."""
+        ListingReview.objects.create(
+            listing=self.match,
+            author=self.user,
+            rating=8,
+            decision=ListingReview.Decision.CONSIDER,
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("review_export", args=["csv"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/csv", response["Content-Type"])
+        self.assertIn("listing_id", response.content.decode("utf-8-sig"))
+
     def test_market_xlsx_export_returns_workbook(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("market_export_xlsx"))
