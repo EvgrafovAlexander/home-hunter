@@ -306,11 +306,13 @@ def notify_new_listing(listing_id: int, *, alert_id: int | None = None) -> bool:
 
 
 def market_position(listing: Listing):
+    """Возвращает рыночное сравнение в формате, совместимом с alert-кодом."""
     details = market_position_details(listing)
     return details[:3] if details else None
 
 
 def notify_new_deal(listing_id: int) -> bool:
+    """Публикует Telegram-уведомление, если объявление проходит порог сделки."""
     if not settings.TG_DEAL_ALERTS_ENABLED:
         return False
     listing = Listing.objects.get(pk=listing_id)

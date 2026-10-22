@@ -143,6 +143,7 @@ def _finish(session):
 
 
 def handle_update(update):
+    """Обрабатывает один входящий Telegram update для review-сессии."""
     callback = update.get("callback_query")
     if callback:
         user_id = callback.get("from", {}).get("id")

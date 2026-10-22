@@ -10,6 +10,7 @@ from listings.services.enrichment import location_is_visible
 
 
 def normalized_text(value: str | None) -> str:
+    """Приводит название локации к форме для сравнения."""
     return re.sub(r"\s+", " ", (value or "").strip().casefold().replace("ё", "е"))
 
 
@@ -77,6 +78,7 @@ def _matching_street_rule(address: str | None, district_name: str | None = None)
 
 
 def location_is_excluded(address: str | None) -> bool:
+    """Проверяет адрес по пользовательским исключениям справочника."""
     rule = _matching_street_rule(address)
     return bool(rule and rule.is_excluded)
 

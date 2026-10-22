@@ -1,9 +1,7 @@
-"""Жёсткие фильтры пользователя и лёгкая проверка GeoJSON-зон.
+"""Жёсткие фильтры пользователя и проверка GeoJSON-зон без PostGIS.
 
-The first implementation intentionally avoids a PostGIS dependency.  Zone
-geometries are stored as GeoJSON and evaluated in a background-friendly,
-deterministic Python service; the model can be moved to PostGIS later without
-changing the user-facing contract.
+Геометрии хранятся в моделях как GeoJSON и проверяются детерминированно в
+Python; сервис не отвечает за хранение или отрисовку зон.
 """
 
 from listings.models import GeoZone, Listing, ScoringPreference

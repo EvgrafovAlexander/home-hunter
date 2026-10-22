@@ -28,6 +28,7 @@ def personal_candidate_queryset(queryset, user):
 
 
 def review_queue_queryset(user):
+    """Возвращает объявления, ожидающие пользовательской оценки."""
     return Listing.objects.filter(is_active=True, is_visible=True).exclude(
         global_hides__is_active=True,
     ).exclude(
@@ -40,11 +41,13 @@ def review_queue_queryset(user):
 
 
 def review_tag_groups():
+    """Группирует активные теги для формы оценки."""
     tags = ReviewTag.objects.filter(is_active=True)
     return [(value, label, list(tags.filter(category=value))) for value, label in ReviewTag.Category.choices]
 
 
 def save_review(request, listing):
+    """Сохраняет оценку, теги и этап рассмотрения из формы пользователя."""
     try:
         rating = int(request.POST.get("rating", ""))
     except ValueError:
@@ -83,10 +86,12 @@ def save_review(request, listing):
 
 
 def hide_listing_for_user(listing, user):
+    """Создаёт или возвращает персональное скрытие объявления."""
     return UserListingHide.objects.get_or_create(listing=listing, user=user)
 
 
 def hide_listing_globally(listing, user, reason):
+    """Создаёт или обновляет глобальное скрытие объявления."""
     return GlobalListingHide.objects.update_or_create(
         listing=listing,
         is_active=True,

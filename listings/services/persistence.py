@@ -36,6 +36,7 @@ def snapshot_data_from_values(values: dict, *, is_active: bool) -> dict:
 
 
 def snapshot_data_from_listing(listing: Listing, *, is_active: bool | None = None) -> dict:
+    """Собирает сериализуемое состояние объявления для snapshot."""
     return {
         field: _snapshot_value(is_active if field == "is_active" and is_active is not None else getattr(listing, field))
         for field in (*SIGNIFICANT_FIELDS, "is_active", "publication_status")
@@ -54,6 +55,7 @@ class PersistenceResult:
 def process_listing(
     search_query: SearchQuery, normalized_listing: NormalizedListing, observed_at: datetime,
 ) -> PersistenceResult:
+    """Идемпотентно сохраняет объявление и его историю изменений."""
     item = normalized_listing
     if item.source != search_query.source or not item.external_id:
         raise ValueError("Listing source/id does not match search")

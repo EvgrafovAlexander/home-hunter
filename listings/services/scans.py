@@ -24,6 +24,7 @@ def update_scan_progress(scan_id: int, pages_scanned: int, items_seen: int, uniq
 
 @transaction.atomic
 def finalize_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
+    """Безопасно деактивирует объявления, исчезнувшие из полного скана."""
     affected = list(search.listing_relations.values_list("listing_id", flat=True))
     search.listing_relations.exclude(listing_id__in=seen_ids).update(is_active=False)
     search.listing_relations.filter(listing_id__in=seen_ids).update(is_active=True)
@@ -75,6 +76,7 @@ def finalize_cian_full_scan(search: SearchQuery, seen_ids: set[int]) -> None:
 
 
 def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str, profile=None) -> Scan:
+    """Запускает collector, сохраняет результат и закрывает запись Scan."""
     scan = Scan.objects.create(
         search_query=search, source=search.source, mode=mode,
         profile_code=getattr(profile, "code", ""),

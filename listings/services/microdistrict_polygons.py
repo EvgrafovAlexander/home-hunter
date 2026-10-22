@@ -65,6 +65,7 @@ def _point_in_polygon(latitude: float, longitude: float, rings: list[list[list[f
 
 @lru_cache(maxsize=1)
 def load_polygons() -> tuple[dict, ...]:
+    """Загружает полигоны микрорайонов из локального файла с кэшем."""
     # The database is the authoritative store once boundaries are imported.
     # Keep the JSON file as a safe bootstrap/fallback for first deployment.
     try:
@@ -117,6 +118,7 @@ def resolve_microdistrict(latitude, longitude) -> PolygonMatch | None:
 
 
 def canonical_microdistrict_name(value: str | None) -> str:
+    """Возвращает стабильное имя микрорайона для группировки."""
     value = unicodedata.normalize("NFKC", value or "").replace("\xa0", " ")
     value = re.sub(r"\s+", " ", value.replace("ё", "е").strip().casefold())
     value = re.sub(r"^(?:м-н|мкр\.?|микрорайон)\s+", "", value)
@@ -134,6 +136,7 @@ def normalized_microdistrict_label(value: str | None) -> str:
 
 
 def find_microdistrict_ref(title: str, microdistricts):
+    """Находит запись справочника по названию микрорайона."""
     target = canonical_microdistrict_name(title)
     for item in microdistricts:
         names = [item.name, *(item.aliases or [])]

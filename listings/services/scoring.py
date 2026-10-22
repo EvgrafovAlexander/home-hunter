@@ -22,10 +22,12 @@ FIT_WEIGHTS = {
 
 
 def scoring_preference_for(user):
+    """Возвращает настройки scoring или объект с безопасными значениями по умолчанию."""
     return ScoringPreference.objects.filter(user=user).first() or ScoringPreference(user=user)
 
 
 def target_location_score(listing):
+    """Оценивает близость объявления к целевым точкам пользователя."""
     if listing.latitude is None or listing.longitude is None:
         return 50, "локация не уточнена"
     latitude, longitude = float(listing.latitude), float(listing.longitude)
@@ -41,6 +43,7 @@ def target_location_score(listing):
 
 
 def geo_zone_location_score(listing):
+    """Оценивает объявление по настроенной геозоне пользователя."""
     tier = getattr(listing, "geo_zone_tier", None)
     if tier == GeoZone.Tier.A:
         return 100, "идеальная зона"
@@ -58,6 +61,7 @@ def geo_zone_location_score(listing):
 
 
 def condition_score(listing):
+    """Оценивает состояние квартиры по атрибутам и тексту карточки."""
     explicit_conditions = {
         "euro": (85, "евроремонт указан в карточке"),
         "cosmetic": (60, "косметический ремонт указан в карточке"),
@@ -74,6 +78,7 @@ def condition_score(listing):
 
 
 def area_rooms_fit_score(item, preferences):
+    """Оценивает соответствие площади и комнатности пользовательским настройкам."""
     if item.area is None:
         area_score = 40
     elif preferences.max_area and item.area > preferences.max_area:
@@ -92,6 +97,7 @@ def area_rooms_fit_score(item, preferences):
 
 
 def layout_fit_score(item):
+    """Оценивает планировку по кухне и количеству санузлов."""
     scores = []
     if item.kitchen_area is not None and item.area:
         ratio = float(item.kitchen_area) / float(item.area)
@@ -102,6 +108,7 @@ def layout_fit_score(item):
 
 
 def house_fit_score(item):
+    """Оценивает полноту данных о доме и инфраструктуре."""
     signals = [
         80 if item.building_material_type else 50,
         80 if item.built_year else 50,

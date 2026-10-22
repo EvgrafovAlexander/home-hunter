@@ -139,6 +139,7 @@ def claim_listing_alerts(limit: int = 10):
 
 
 def mark_listing_alert_sent(alert_id: int, *, result: dict, message_text: str):
+    """Фиксирует успешную доставку объявления и идентификатор сообщения."""
     TelegramListingAlert.objects.filter(pk=alert_id).update(
         delivery_status=TelegramListingAlert.DeliveryStatus.SENT,
         chat_id=str(settings.TG_CHANNEL_ID),
@@ -153,6 +154,7 @@ def mark_listing_alert_sent(alert_id: int, *, result: dict, message_text: str):
 
 
 def mark_listing_alert_failed(alert_id: int, error: str):
+    """Фиксирует ошибку доставки и переводит alert в повторную обработку."""
     alert = TelegramListingAlert.objects.get(pk=alert_id)
     delay = min(3600, 60 * (2 ** min(alert.delivery_attempts, 5)))
     alert.delivery_status = TelegramListingAlert.DeliveryStatus.FAILED

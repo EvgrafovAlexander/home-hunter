@@ -17,6 +17,7 @@ def default_polling_enabled(source: str, mode: str) -> bool:
 
 
 def polling_enabled(source: str, mode: str = Scan.Mode.FAST) -> bool:
+    """Возвращает, разрешён ли режим опроса для источника."""
     control, _ = SourcePollingControl.objects.get_or_create(
         source=source, mode=mode, defaults={"enabled": default_polling_enabled(source, mode)},
     )

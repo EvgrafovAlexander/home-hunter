@@ -97,6 +97,7 @@ def _styles_xml():
 
 
 def build_market_xlsx(user):
+    """Формирует XLSX со списком объявлений, оценками и рыночными сводками."""
     listings = list(Listing.objects.all().order_by("id"))
     # Расчёт сравнения должен совпадать с вебом и Telegram.
     annotate_market_position(listings)

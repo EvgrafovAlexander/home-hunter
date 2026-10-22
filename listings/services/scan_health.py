@@ -34,6 +34,7 @@ def _telegram_destinations():
 
 
 def source_health(source: str) -> SourceHealth:
+    """Собирает текущее состояние обычного опроса источника."""
     scans = list(Scan.objects.filter(source=source).order_by("-started_at", "-id")[:20])
     if not scans:
         return SourceHealth("unknown", "Нет данных", "Опросы ещё не запускались")
@@ -55,6 +56,7 @@ def source_health(source: str) -> SourceHealth:
 
 
 def send_telegram_message(text: str, reply_markup=None, *, chat_id=None, parse_mode=None) -> bool:
+    """Отправляет текстовое сообщение и возвращает признак успеха."""
     destinations = [chat_id] if chat_id else _telegram_destinations()
     if not settings.TG_BOT_TOKEN or not destinations:
         return False
@@ -80,6 +82,7 @@ def send_telegram_message(text: str, reply_markup=None, *, chat_id=None, parse_m
 
 
 def send_telegram_message_result(text: str, reply_markup=None, *, chat_id, parse_mode=None):
+    """Отправляет текст и возвращает ответ Telegram для сохранения message id."""
     """Send to one chat and retain Telegram's message id for later edits."""
     if not settings.TG_BOT_TOKEN or not chat_id:
         return None
@@ -99,6 +102,7 @@ def send_telegram_message_result(text: str, reply_markup=None, *, chat_id, parse
 
 
 def send_telegram_photo(photo_url: str, caption: str, reply_markup=None, *, chat_id=None, parse_mode=None) -> bool:
+    """Отправляет фото с подписью и возвращает признак успеха."""
     destinations = [chat_id] if chat_id else _telegram_destinations()
     if not settings.TG_BOT_TOKEN or not destinations or not photo_url:
         return False
@@ -124,6 +128,7 @@ def send_telegram_photo(photo_url: str, caption: str, reply_markup=None, *, chat
 
 
 def send_telegram_photo_result(photo_url: str, caption: str, reply_markup=None, *, chat_id, parse_mode=None):
+    """Отправляет фото и возвращает ответ Telegram без изменения ORM."""
     if not settings.TG_BOT_TOKEN or not chat_id or not photo_url:
         return None
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} if settings.TELEGRAM_PROXY_URL else None
@@ -142,6 +147,7 @@ def send_telegram_photo_result(photo_url: str, caption: str, reply_markup=None, 
 
 
 def edit_telegram_reply_markup(*, chat_id, message_id, reply_markup) -> bool:
+    """Обновляет inline-клавиатуру сообщения Telegram."""
     if not settings.TG_BOT_TOKEN:
         return False
     proxies = {"http": settings.TELEGRAM_PROXY_URL, "https": settings.TELEGRAM_PROXY_URL} if settings.TELEGRAM_PROXY_URL else None
@@ -194,6 +200,7 @@ def edit_telegram_message(*, chat_id, message_id, text, message_kind="text", par
 
 
 def check_source_health(source: str) -> SourceHealth:
+    """Проверяет источник и отправляет уведомление при ухудшении состояния."""
     if not polling_enabled(source, Scan.Mode.FAST):
         return SourceHealth("disabled", "Отключено", "Опросы отключены в интерфейсе")
     health = source_health(source)

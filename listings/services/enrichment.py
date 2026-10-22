@@ -29,6 +29,7 @@ def calculate_price_per_sqm(price: int | None, area: Decimal | None) -> int | No
 
 
 def district_from_address(address: str | None) -> str | None:
+    """Извлекает название района из текстового адреса."""
     if not address:
         return None
     match = DISTRICT_PATTERN.search(address)
@@ -36,6 +37,7 @@ def district_from_address(address: str | None) -> str | None:
 
 
 def location_is_visible(address: str | None, district: str | None, microdistrict: str | None) -> bool:
+    """Проверяет, не относится ли адрес к скрытой локации."""
     return (
         bool(address)
         and (district or "").casefold() not in HIDDEN_DISTRICTS
