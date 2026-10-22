@@ -18,20 +18,20 @@ from django.shortcuts import get_object_or_404, redirect, render, reverse
 from django.utils import timezone
 
 from .models import (AvitoDetailPayload, AvitoDetailPollState, CianDetailPayload, CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, District, GlobalListingHide,
-                     Listing, ListingReview, ListingReviewRevision, ListingSearchQuery, ListingSnapshot, ManualDomclickJob,
+                     Listing, ListingReview, ListingReviewRevision, ListingSearchQuery, ManualDomclickJob,
                      Microdistrict, NetworkRoute, PollingProfile, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery, SourcePollingControl,
                      StreetAssignment, UserListingHide, MicrodistrictBoundary, GeoZone, SourcePollingProfile, PollingDiagnosticJob)
 from .services.enrichment import location_is_visible, parse_address
 from .services.location_directory import apply_location_rules_for_assignments, location_is_visible_with_rules
-from .services.microdistrict_polygons import (canonical_microdistrict_name, load_polygons,
-                                              normalized_microdistrict_label)
+from .services.microdistrict_polygons import load_polygons
 from .services.change_history import change_events
 from .services.polling import default_polling_enabled
 from .services.scan_health import cian_detail_health
 from .services.telegram_reviews import handle_update
 from .services.personal_filters import annotate_personal_filter
 from .services.database_backup import BackupError, create_database_backup
-from .services.market import MIN_TARGET_AREA, annotate_market_position
+from .services.market import MIN_TARGET_AREA, MICRODISTRICT_MARKET_MIN_SAMPLE, annotate_market_position
+from .services.market import microdistrict_market_stats as _service_microdistrict_market_stats
 from .services.scoring import add_listing_score as _service_add_listing_score
 from .services.scoring import scoring_preference_for as _service_scoring_preference_for
 from .services.reviews import personal_candidate_queryset as _service_personal_candidate_queryset
@@ -57,7 +57,6 @@ def telegram_webhook(request):
         return JsonResponse({"ok": False}, status=400)
     handle_update(payload)
     return JsonResponse({"ok": True})
-MICRODISTRICT_MARKET_MIN_SAMPLE = 5
 # Candidate/review threshold.  Smaller listings remain in the database and in
 # the market-comparison pool, but are not shown as purchase candidates.
 
@@ -170,63 +169,8 @@ def similar_listings(listing: Listing, limit: int = 6):
 
 
 def microdistrict_market_stats(listings, period_since, filters):
-    """A median-based local market view; small groups are intentionally omitted."""
-    rows = (listings.exclude(district__isnull=True).exclude(district="")
-            .exclude(microdistrict__isnull=True).exclude(microdistrict="")
-            .exclude(price_per_sqm__isnull=True)
-            .values("district", "microdistrict", "price_per_sqm", "price", "area", "first_seen_at", "is_visible"))
-    directory_names = {
-        canonical_microdistrict_name(item.name): item.name
-        for item in Microdistrict.objects.all()
-    }
-    groups = {}
-    display_names = {}
-    district_names = {}
-    for row in rows:
-        key = canonical_microdistrict_name(row["microdistrict"])
-        display_names[key] = directory_names.get(key, normalized_microdistrict_label(row["microdistrict"]))
-        district_names.setdefault(key, set()).add(row["district"])
-        groups.setdefault(key, []).append(row)
-    all_sqm_prices = [row["price_per_sqm"] for rows in groups.values() for row in rows]
-    overall_median = median(all_sqm_prices) if all_sqm_prices else None
-
-    removed_counts = {}
-    removals = (ListingSnapshot.objects.filter(observed_at__gte=period_since, listing__is_visible=True)
-                .select_related("listing").only("data", "listing__source", "listing__district", "listing__microdistrict"))
-    for snapshot in removals:
-        if snapshot.data.get("is_active") is not False:
-            continue
-        if filters.get("source") and snapshot.listing.source != filters["source"]:
-            continue
-        if filters.get("district") and snapshot.listing.district != filters["district"]:
-            continue
-        key = canonical_microdistrict_name(snapshot.data.get("microdistrict") or snapshot.listing.microdistrict)
-        if key in groups:
-            removed_counts[key] = removed_counts.get(key, 0) + 1
-
-    eligible_total = sum(len(entries) for entries in groups.values() if len(entries) >= MICRODISTRICT_MARKET_MIN_SAMPLE)
-    stats = []
-    for microdistrict, entries in groups.items():
-        if len(entries) < MICRODISTRICT_MARKET_MIN_SAMPLE:
-            continue
-        sqm_prices = [entry["price_per_sqm"] for entry in entries]
-        prices = [entry["price"] for entry in entries if entry["price"] is not None]
-        areas = [float(entry["area"]) for entry in entries if entry["area"] is not None]
-        median_sqm = int(median(sqm_prices))
-        stats.append({
-            "district": ", ".join(sorted(district_names.get(microdistrict, set()))),
-            "microdistrict": display_names.get(microdistrict, microdistrict),
-            "count": len(entries),
-            "visible_count": sum(entry["is_visible"] for entry in entries),
-            "hidden_count": sum(not entry["is_visible"] for entry in entries),
-            "share_pct": round(len(entries) / eligible_total * 100, 1) if eligible_total else 0,
-            "median_sqm": median_sqm, "median_price": int(median(prices)) if prices else None,
-            "median_area": median(areas) if areas else None,
-            "new_count": sum(entry["first_seen_at"] >= period_since for entry in entries),
-            "removed_count": removed_counts.get(microdistrict, 0),
-            "relative_pct": round((median_sqm / overall_median - 1) * 100) if overall_median else 0,
-        })
-    return sorted(stats, key=lambda row: (-row["median_sqm"], -row["count"], row["microdistrict"]))
+    """Возвращает рыночную статистику через сервис market analytics."""
+    return _service_microdistrict_market_stats(listings, period_since, filters)
 
 
 @login_required

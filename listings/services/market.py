@@ -3,13 +3,15 @@
 from statistics import median
 from decimal import Decimal
 
-from listings.models import Listing
+from listings.models import Listing, ListingSnapshot, Microdistrict
+from listings.services.microdistrict_polygons import canonical_microdistrict_name, normalized_microdistrict_label
 
 
 MARKET_MIN_SIMILAR = 5
 MARKET_MIN_ROOM_GROUP = 8
 MARKET_MIN_DISTRICT_GROUP = 12
 MIN_TARGET_AREA = Decimal("55")
+MICRODISTRICT_MARKET_MIN_SAMPLE = 5
 
 
 def _comparable_queryset():
@@ -119,3 +121,63 @@ def market_position_details(listing: Listing):
     median_price = round(float(median(prices)))
     discount = round((1 - float(listing.price_per_sqm) / median_price) * 100)
     return discount, reference, len(prices), median_price
+
+
+def microdistrict_market_stats(listings, period_since, filters):
+    """Считает медианные показатели рынка по микрорайонам."""
+    rows = (listings.exclude(district__isnull=True).exclude(district="")
+            .exclude(microdistrict__isnull=True).exclude(microdistrict="")
+            .exclude(price_per_sqm__isnull=True)
+            .values("district", "microdistrict", "price_per_sqm", "price", "area", "first_seen_at", "is_visible"))
+    directory_names = {
+        canonical_microdistrict_name(item.name): item.name
+        for item in Microdistrict.objects.all()
+    }
+    groups = {}
+    display_names = {}
+    district_names = {}
+    for row in rows:
+        key = canonical_microdistrict_name(row["microdistrict"])
+        display_names[key] = directory_names.get(key, normalized_microdistrict_label(row["microdistrict"]))
+        district_names.setdefault(key, set()).add(row["district"])
+        groups.setdefault(key, []).append(row)
+    all_sqm_prices = [row["price_per_sqm"] for entries in groups.values() for row in entries]
+    overall_median = median(all_sqm_prices) if all_sqm_prices else None
+
+    removed_counts = {}
+    removals = (ListingSnapshot.objects.filter(observed_at__gte=period_since, listing__is_visible=True)
+                .select_related("listing").only("data", "listing__source", "listing__district", "listing__microdistrict"))
+    for snapshot in removals:
+        if snapshot.data.get("is_active") is not False:
+            continue
+        if filters.get("source") and snapshot.listing.source != filters["source"]:
+            continue
+        if filters.get("district") and snapshot.listing.district != filters["district"]:
+            continue
+        key = canonical_microdistrict_name(snapshot.data.get("microdistrict") or snapshot.listing.microdistrict)
+        if key in groups:
+            removed_counts[key] = removed_counts.get(key, 0) + 1
+
+    eligible_total = sum(len(entries) for entries in groups.values() if len(entries) >= MICRODISTRICT_MARKET_MIN_SAMPLE)
+    stats = []
+    for microdistrict, entries in groups.items():
+        if len(entries) < MICRODISTRICT_MARKET_MIN_SAMPLE:
+            continue
+        sqm_prices = [entry["price_per_sqm"] for entry in entries]
+        prices = [entry["price"] for entry in entries if entry["price"] is not None]
+        areas = [float(entry["area"]) for entry in entries if entry["area"] is not None]
+        median_sqm = int(median(sqm_prices))
+        stats.append({
+            "district": ", ".join(sorted(district_names.get(microdistrict, set()))),
+            "microdistrict": display_names.get(microdistrict, microdistrict),
+            "count": len(entries),
+            "visible_count": sum(entry["is_visible"] for entry in entries),
+            "hidden_count": sum(not entry["is_visible"] for entry in entries),
+            "share_pct": round(len(entries) / eligible_total * 100, 1) if eligible_total else 0,
+            "median_sqm": median_sqm, "median_price": int(median(prices)) if prices else None,
+            "median_area": median(areas) if areas else None,
+            "new_count": sum(entry["first_seen_at"] >= period_since for entry in entries),
+            "removed_count": removed_counts.get(microdistrict, 0),
+            "relative_pct": round((median_sqm / overall_median - 1) * 100) if overall_median else 0,
+        })
+    return sorted(stats, key=lambda row: (-row["median_sqm"], -row["count"], row["microdistrict"]))
