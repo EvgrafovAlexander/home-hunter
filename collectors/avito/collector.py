@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import math
+import shutil
 import time
 from tempfile import TemporaryDirectory
 from datetime import datetime, timezone
@@ -107,6 +108,8 @@ class AvitoCollector(BaseCollector):
             self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
             profile = self.browser_profile_dir or self.state.directory / "chromium"
             persistent_profile = self._persistent_profile_enabled()
+            if persistent_profile:
+                self._rotate_invalid_profile_if_needed(profile)
             if not persistent_profile:
                 self.temporary_profile = TemporaryDirectory(prefix="chromium-run-", dir=self.state.directory)
                 profile = self.temporary_profile.name
@@ -123,6 +126,29 @@ class AvitoCollector(BaseCollector):
             self.stop_requested = True
             self.start_error = exc
             raise
+
+    def _rotate_invalid_profile_if_needed(self, profile) -> None:
+        """Архивирует профиль, помеченный после WAF или невалидной страницы."""
+        state = self.state.read()
+        if not state.get("session_rotation_pending"):
+            return
+        profile = profile if hasattr(profile, "exists") else self.state.directory / profile
+        if profile.exists():
+            archive_root = self.state.directory / "archive"
+            archive_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            archived = archive_root / f"chromium-{stamp}"
+            suffix = 1
+            while archived.exists():
+                archived = archive_root / f"chromium-{stamp}-{suffix}"
+                suffix += 1
+            shutil.move(str(profile), str(archived))
+        self.state.update(session_rotation_pending=False, session_validated_at=None)
+
+    def _request_session_rotation(self) -> None:
+        """Откладывает замену постоянной сессии до следующего запуска."""
+        if self._persistent_profile_enabled():
+            self.state.update(session_rotation_pending=True)
 
     def _persistent_profile_enabled(self):
         if self.session_mode == "persistent":
@@ -240,6 +266,7 @@ class AvitoCollector(BaseCollector):
         if blocked:
             self.stop_requested = True
             self.state.block(settings.AVITO_BLOCK_COOLDOWN_SECONDS, headers.get("retry-after"))
+            self._request_session_rotation()
         self._diagnose(url, html, status, headers, "navigation")
         if blocked:
             if self.manual_wait_seconds:
@@ -248,7 +275,11 @@ class AvitoCollector(BaseCollector):
         if status is None or status >= 400:
             raise RuntimeError(f"Page HTTP error: {status if status is not None else 'no response'}")
         if state != "ready":
+            self._request_session_rotation()
             raise RuntimeError("Unrecognized search page")
+        # Отмечаем сессию только после полной проверки страницы: WAF-ответ не
+        # должен считаться успешным подтверждением пригодности cookies.
+        self.state.update(session_validated_at=datetime.now(timezone.utc).isoformat())
         return html
 
     async def collect(self, search: "SearchQuery", *, mode: str) -> CollectionResult:

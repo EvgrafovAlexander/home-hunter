@@ -162,6 +162,33 @@ def test_polling_profile_isolates_browser_and_request_state(settings):
     )
 
 
+def test_invalid_persistent_profile_is_archived_before_next_start(settings, tmp_path):
+    from unittest.mock import patch
+
+    settings.AVITO_STATE_DIR = tmp_path
+    state_dir = tmp_path / "profiles" / "avito-server-persistent"
+    profile = state_dir / "chromium"
+    profile.mkdir(parents=True)
+    (profile / "Cookies").write_text("old")
+    collector = AvitoCollector(profile_code="avito-server-persistent", session_mode="persistent")
+    collector.state.update(session_rotation_pending=True)
+    driver = AsyncMock()
+    start = AsyncMock(return_value=driver)
+
+    async def check():
+        async with collector:
+            await collector._start()
+
+    with patch("collectors.avito.collector.async_playwright", return_value=SimpleNamespace(start=start)):
+        asyncio.run(check())
+
+    assert not profile.exists()
+    archived = list((state_dir / "archive").glob("chromium-*"))
+    assert len(archived) == 1
+    assert (archived[0] / "Cookies").read_text() == "old"
+    assert collector.state.read()["session_rotation_pending"] is False
+
+
 def test_invalid_polling_profile_code_is_rejected(settings):
     with pytest.raises(ValueError, match="Invalid Avito polling profile code"):
         AvitoCollector(profile_code="../shared")
