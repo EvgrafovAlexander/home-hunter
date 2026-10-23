@@ -12,6 +12,11 @@ class SearchQuery(models.Model):
     name = models.CharField(max_length=255)
     source = models.CharField(max_length=20, choices=Source.choices)
     url = models.TextField()
+    mobile_api_url = models.TextField(
+        blank=True,
+        default="",
+        help_text="URL выдачи Mobile API Avito для того же набора фильтров.",
+    )
     enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

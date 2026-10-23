@@ -14,6 +14,11 @@ SearchQuery
   -> Django views/templates, XLSX export, Telegram delivery
 ```
 
+Для Avito `SearchQuery` может содержать обычный HTML URL (`url`) и соответствующий
+URL Mobile API (`mobile_api_url`). Транспорт выбирается polling-профилем, поэтому
+один запуск использует только одну форму запроса; оба collector'а передают данные
+в общий `NormalizedListing` и persistence-контракт.
+
 ## Модули
 
 Назначение и границы сервисных модулей собраны в отдельном фактическом каталоге

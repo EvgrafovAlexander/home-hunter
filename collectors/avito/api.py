@@ -1,7 +1,7 @@
-"""Необязательный коллектор Avito через мобильный API.
+"""Коллектор поисковой выдачи Avito через Mobile API.
 
-The browser/HTML collector remains the default.  This module is deliberately
-selected only by an Avito polling profile with ``transport=mobile_api``.
+Коллектор выбирается только профилем с ``transport=mobile_api`` и передаёт
+нормализованные объявления в общий persistence-контракт приложения.
 """
 
 import asyncio
@@ -186,10 +186,15 @@ class AvitoApiCollector(BaseCollector):
         if data.get("user_agent"):
             self.session.headers["User-Agent"] = data["user_agent"]
 
-    def _api_url(self, search_url: str) -> str:
+    def _api_url(self, search) -> str:
+        """Возвращает URL API для поиска, не смешивая два транспорта."""
+        explicit_url = getattr(search, "mobile_api_url", "")
+        if explicit_url:
+            return explicit_url
         configured = self._settings.get("api_url")
         if configured:
             return configured
+        search_url = search.url
         cache_path = self.state.directory / "api-urls.json"
         cache = {}
         if cache_path.exists():
@@ -232,7 +237,7 @@ class AvitoApiCollector(BaseCollector):
             if limit < 1:
                 raise ValueError("Invalid Avito scan settings")
             self._check_cooldown()
-            api_url = self._api_url(search.url)
+            api_url = self._api_url(search)
             seen = set()
             for page in range(1, limit + 1):
                 await self._pace()

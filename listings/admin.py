@@ -25,8 +25,9 @@ class ListingAdmin(admin.ModelAdmin):
 
 @admin.register(SearchQuery)
 class SearchQueryAdmin(admin.ModelAdmin):
-    list_display = ("name", "source", "enabled", "url")
+    list_display = ("name", "source", "enabled", "url", "mobile_api_url")
     list_filter = ("source", "enabled")
+    search_fields = ("name", "url", "mobile_api_url")
 
 
 @admin.register(NetworkRoute)

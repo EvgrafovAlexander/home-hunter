@@ -53,3 +53,12 @@ def test_api_collector_reads_catalog_without_affecting_browser_collector(setting
     ))
     assert result.complete and len(result.listings) == 1
     assert extract_catalog({"catalog": {"items": []}})["items"] == []
+
+
+def test_api_collector_prefers_search_mobile_url(settings):
+    collector = AvitoApiCollector(profile=api_profile())
+    search = SimpleNamespace(
+        url="https://www.avito.ru/ufa/kvartiry",
+        mobile_api_url="https://www.avito.ru/web/1/js/items?categoryId=24",
+    )
+    assert collector._api_url(search) == search.mobile_api_url
