@@ -1,5 +1,10 @@
 # Changelog
 
+- Для Avito добавлен единый клиент SPFA: баланс, обычные и мобильные cookies,
+  постановка cookies в разблокировку и преобразование web URL в Mobile API URL.
+  SPFA cookies можно использовать как в Mobile API, так и в Chromium-профиле;
+  API-ключ и proxy credentials остаются только в окружении.
+
 - Для одного поиска Avito теперь можно хранить обычный HTML URL и отдельный
   `mobile_api_url`; выбранный polling-профиль использует только один транспорт
   за запуск, поэтому HTML и Mobile API не опрашиваются параллельно.

@@ -9,11 +9,11 @@ def get_collector(source: str, *, headless: bool = True, manual_wait_seconds: fl
                 return AvitoApiCollector(profile=profile, route=route)
             if getattr(profile, "transport", "browser_html") != "browser_html":
                 raise ValueError("Unsupported Avito transport")
-            if getattr(profile, "cookie_strategy", "browser_profile") != "browser_profile":
-                raise ValueError("Own/SPFA cookies require Avito Mobile API transport")
-        return AvitoCollector(headless=headless, manual_wait_seconds=manual_wait_seconds,
+            if getattr(profile, "cookie_strategy", "browser_profile") not in {"browser_profile", "spfa"}:
+                raise ValueError("Unsupported Avito browser cookie strategy")
+            return AvitoCollector(headless=headless, manual_wait_seconds=manual_wait_seconds,
                               route=route, session_mode=session_mode,
-                              profile_code=getattr(profile, "code", None))
+                              profile_code=getattr(profile, "code", None), profile=profile)
     if source == "cian":
         from collectors.cian.collector import CianCollector
         return CianCollector(headless=headless, manual_wait_seconds=manual_wait_seconds,

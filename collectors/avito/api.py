@@ -20,6 +20,7 @@ from collectors.routing import RouteSpec
 from .collector import AvitoBlocked
 from .parser import parse_money, parse_title
 from .session import SessionState, profile_state_directory
+from .spfa import SpfaClient, SpfaCookies, SpfaError
 
 logger = logging.getLogger(__name__)
 
@@ -173,18 +174,36 @@ class AvitoApiCollector(BaseCollector):
             api_key = settings.AVITO_SPFA_API_KEY
         if not api_key:
             raise ValueError(f"SPFA API key is not configured: {api_key_env}")
-        proxy = self.route.resolved_proxy_url if self.route is not None else ""
-        endpoint = self._settings.get("spfa_cookies_endpoint", "https://spfa.pro/api/cookies/mobile/")
-        response = requests.post(endpoint, json={"api_key": api_key, "mobile": True, "proxy": proxy}, timeout=120)
-        response.raise_for_status()
-        payload = response.json()
-        data = payload.get("results", {}) if payload.get("success") else {}
-        cookies = data.get("cookies")
-        if not isinstance(cookies, dict) or not cookies:
-            raise ValueError("SPFA returned no cookies")
-        self.session.cookies.update(cookies)
-        if data.get("user_agent"):
-            self.session.headers["User-Agent"] = data["user_agent"]
+        proxy = ""
+        if self.route is not None:
+            options = self.route.resolved_proxy_options
+            if options.get("username"):
+                proxy = f"{options['username']}:{options['password']}@{options['server'].split('://', 1)[-1]}"
+        base_url = self._settings.get("spfa_base_url", settings.AVITO_SPFA_BASE_URL)
+        client = SpfaClient(api_key, base_url=base_url, timeout=float(self._settings.get("spfa_timeout", 120)))
+        cache_path = self.state.directory / "spfa-cookies.json"
+        cookie_data = None
+        if cache_path.exists():
+            try:
+                cached = json.loads(cache_path.read_text(encoding="utf-8"))
+                if cached.get("mobile"):
+                    refreshed = client.unblock(int(cached["id"]), proxy=proxy)
+                    if refreshed:
+                        cookie_data = SpfaCookies(int(cached["id"]), refreshed.cookies,
+                                                  str(cached.get("user_agent") or ""), cached.get("fingerprint"))
+            except (OSError, ValueError, KeyError, SpfaError):
+                cookie_data = None
+        if cookie_data is None:
+            cookie_data = client.cookies(mobile=True, proxy=proxy)
+        self.session.cookies.update(cookie_data.cookies)
+        if cookie_data.fingerprint and isinstance(cookie_data.fingerprint.get("headers"), dict):
+            self.session.headers.update({str(k): str(v) for k, v in cookie_data.fingerprint["headers"].items()})
+        if cookie_data.user_agent:
+            self.session.headers["User-Agent"] = cookie_data.user_agent
+        self.state.write_json("spfa-cookies.json", {
+            "id": cookie_data.cookie_id, "cookies": cookie_data.cookies,
+            "user_agent": cookie_data.user_agent, "fingerprint": cookie_data.fingerprint, "mobile": True,
+        })
 
     def _api_url(self, search) -> str:
         """Возвращает URL API для поиска, не смешивая два транспорта."""
@@ -204,12 +223,13 @@ class AvitoApiCollector(BaseCollector):
         endpoint = self._settings.get(
             "url_converter_endpoint", settings.AVITO_URL_CONVERTER_ENDPOINT,
         )
-        response = requests.post(endpoint, json={"url": search_url}, timeout=30)
-        response.raise_for_status()
-        payload = response.json()
-        api_url = payload.get("api_url") if payload.get("success") else None
-        if not api_url:
-            raise ValueError("URL converter did not return api_url")
+        api_key = os.getenv(self._settings.get("spfa_api_key_env", "AVITO_SPFA_API_KEY"), "")
+        if not api_key and self._settings.get("spfa_api_key_env", "AVITO_SPFA_API_KEY") == "AVITO_SPFA_API_KEY":
+            api_key = settings.AVITO_SPFA_API_KEY
+        # Конвертер бесплатный, но общий клиент требует ключ только для
+        # платных методов, поэтому вызываем его с произвольным маркером.
+        client = SpfaClient(api_key or "url-converter", base_url=endpoint.rsplit("/avito-url", 1)[0])
+        api_url = client.web_to_api(search_url)
         cache[search_url] = api_url
         self.state.write_json("api-urls.json", cache)
         return api_url

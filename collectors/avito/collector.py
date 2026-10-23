@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import math
 import shutil
@@ -18,6 +19,7 @@ from collectors.proxy_pool import select_working_proxy
 from . import selectors as sel
 from .parser import parse_page
 from .session import SessionState, profile_state_directory
+from .spfa import SpfaClient, SpfaCookies, SpfaError
 
 if TYPE_CHECKING:
     from listings.models import SearchQuery
@@ -43,7 +45,7 @@ class AvitoBlocked(RuntimeError):
 class AvitoCollector(BaseCollector):
     def __init__(self, *, headless: bool = True, manual_wait_seconds: float = 0,
                  route: RouteSpec | None = None, session_mode: str = "settings",
-                 profile_code: str | None = None):
+                 profile_code: str | None = None, profile=None):
         if manual_wait_seconds < 0 or not math.isfinite(manual_wait_seconds):
             raise ValueError("Invalid manual captcha timeout")
         if headless and manual_wait_seconds:
@@ -52,6 +54,8 @@ class AvitoCollector(BaseCollector):
         self.route = route
         self.session_mode = session_mode
         self.profile_code = profile_code
+        self.profile = profile
+        self._spfa_cookies: SpfaCookies | None = None
         self.stop_requested = False
         self.state = SessionState(self._state_directory())
         # Диагностика может изолировать состояние запросов, не меняя
@@ -96,6 +100,9 @@ class AvitoCollector(BaseCollector):
         if self.page is not None:
             return
         try:
+            self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+            if getattr(self.profile, "cookie_strategy", "browser_profile") == "spfa":
+                self._prepare_spfa_cookies()
             if self.route is not None and self.route.kind == "free_proxy_pool":
                 proxy_options = {}
             else:
@@ -105,7 +112,6 @@ class AvitoCollector(BaseCollector):
                     else build_proxy_options(settings.AVITO_PROXY_URL)
                 )
                 proxy_options = {"proxy": selected_proxy} if selected_proxy else {}
-            self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
             profile = self.browser_profile_dir or self.state.directory / "chromium"
             persistent_profile = self._persistent_profile_enabled()
             if persistent_profile:
@@ -116,16 +122,47 @@ class AvitoCollector(BaseCollector):
             self.playwright = await async_playwright().start()
             if self.route is not None and self.route.kind == "free_proxy_pool":
                 proxy_options["proxy"] = await select_working_proxy(self.playwright, self.route)
+            launch_options = {"headless": self.headless, "channel": "chromium",
+                              "viewport": {"width": 1440, "height": 1000}, "locale": "ru-RU", **proxy_options}
+            if self._spfa_cookies and self._spfa_cookies.user_agent:
+                launch_options["user_agent"] = self._spfa_cookies.user_agent
             self.context = await self.playwright.chromium.launch_persistent_context(
-                str(profile), headless=self.headless, channel="chromium",
-                viewport={"width": 1440, "height": 1000}, locale="ru-RU", **proxy_options,
+                str(profile), **launch_options,
             )
+            if self._spfa_cookies:
+                await self.context.add_cookies([
+                    {"name": name, "value": value, "domain": ".avito.ru", "path": "/"}
+                    for name, value in self._spfa_cookies.cookies.items()
+                ])
             self.browser = self.context.browser
             self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
         except Exception as exc:
             self.stop_requested = True
             self.start_error = exc
             raise
+
+    def _prepare_spfa_cookies(self) -> None:
+        """Загружает сохранённые cookies и ставит их в бесплатную очередь разблокировки."""
+        api_key = settings.AVITO_SPFA_API_KEY
+        if not api_key:
+            raise ValueError("SPFA API key is not configured")
+        client = SpfaClient(api_key, base_url=settings.AVITO_SPFA_BASE_URL, timeout=120)
+        cached = self.state.directory / "spfa-cookies.json"
+        if cached.exists():
+            try:
+                data = json.loads(cached.read_text(encoding="utf-8"))
+                cookie_id = int(data["id"])
+                refreshed = client.unblock(cookie_id)
+                if refreshed:
+                    self._spfa_cookies = SpfaCookies(cookie_id, refreshed.cookies, str(data.get("user_agent") or ""))
+                    return
+            except (OSError, ValueError, KeyError, SpfaError):
+                pass
+        self._spfa_cookies = client.cookies(mobile=False, full_format=True)
+        self.state.write_json("spfa-cookies.json", {
+            "id": self._spfa_cookies.cookie_id, "cookies": self._spfa_cookies.cookies,
+            "user_agent": self._spfa_cookies.user_agent, "mobile": False,
+        })
 
     def _rotate_invalid_profile_if_needed(self, profile) -> None:
         """Архивирует профиль, помеченный после WAF или невалидной страницы."""
