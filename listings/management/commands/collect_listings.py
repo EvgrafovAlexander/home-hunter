@@ -81,8 +81,9 @@ class Command(BaseCommand):
         finally:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT pg_advisory_unlock(%s)", [lock_id])
-            if options["mode"] == "full":
-                send_full_scan_summary(options["source"], full_started_at, command_error=command_error)
+            if options["mode"] in {"fast", "full"}:
+                send_full_scan_summary(options["source"], full_started_at,
+                                       command_error=command_error, mode=options["mode"])
         if command_error:
             raise CommandError(command_error)
         if failed:

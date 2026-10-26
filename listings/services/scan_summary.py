@@ -8,10 +8,11 @@ from listings.services.polling_schedule import next_poll_runs
 from listings.services.scan_health import send_telegram_message
 
 
-def send_full_scan_summary(source: str, started_at, *, command_error: str = "") -> None:
-    """Отправляет итог полного batch-опроса только личным получателям Telegram."""
+def send_full_scan_summary(source: str, started_at, *, command_error: str = "",
+                           mode: str = Scan.Mode.FULL) -> None:
+    """Отправляет итог batch-опроса только личным получателям Telegram."""
     scans = list(Scan.objects.filter(
-        source=source, mode=Scan.Mode.FULL, started_at__gte=started_at,
+        source=source, mode=mode, started_at__gte=started_at,
     ).order_by("started_at", "id"))
     if command_error:
         overall = f"ошибка запуска: {command_error[:300]}"
@@ -21,16 +22,17 @@ def send_full_scan_summary(source: str, started_at, *, command_error: str = "") 
         overall = "успешно"
     else:
         overall = "завершён с ошибками"
-    lines = [f"📊 Полный опрос {source.upper()}: {overall}"]
+    mode_label = "Полный" if mode == Scan.Mode.FULL else "Fast"
+    lines = [f"📊 {mode_label} опрос {source.upper()}: {overall}"]
     for scan in scans:
         lines.append(
             f"• Scan {scan.pk}: {scan.status}; нов./обновл. {scan.new_items}/{scan.updated_items}; "
             f"страниц {scan.pages_scanned}"
             + (f"; ошибка: {scan.error[:240]}" if scan.error else "")
         )
-    next_full = next((run for run in next_poll_runs(source, timezone.now()) if run[0] == Scan.Mode.FULL), None)
-    if next_full:
-        lines.append(f"Следующий полный опрос: {next_full[2].strftime('%d.%m.%Y %H:%M %Z')}")
+    next_run = next((run for run in next_poll_runs(source, timezone.now()) if run[0] == mode), None)
+    if next_run:
+        lines.append(f"Следующий {mode_label.lower()} опрос: {next_run[2].strftime('%d.%m.%Y %H:%M %Z')}")
     else:
         lines.append("Следующий полный опрос: расписание не определено")
     text = "\n".join(lines)
