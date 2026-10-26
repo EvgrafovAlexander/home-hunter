@@ -7,6 +7,6 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/home_hunter
-ExecStart=/usr/bin/flock -n -E 75 /tmp/home-hunter-collector.lock /usr/bin/docker compose --profile cian run --no-deps --rm -e CIAN_FULL_SCAN_ENABLED=true cian-collector xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' python manage.py collect_listings --source cian --mode full --headed
+ExecStart=/usr/bin/flock -n -E 75 /tmp/home-hunter-cian.lock /usr/bin/docker compose --profile cian run --no-deps --rm -e CIAN_FULL_SCAN_ENABLED=true cian-collector xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' python manage.py collect_listings --source cian --mode full --headed
 SuccessExitStatus=75
 TimeoutStartSec=45min

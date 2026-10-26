@@ -18,7 +18,11 @@ from listings.models import PollingDiagnosticJob, Scan
 from listings.services.scans import run_scan
 
 
-LOCK_ID = 724198501
+LOCK_IDS = {
+    "avito": 724198501,
+    "cian": 724198503,
+    "domclick": 724198504,
+}
 MAX_LOG_LENGTH = 100_000
 
 
@@ -79,8 +83,11 @@ class Command(BaseCommand):
 
     def process_one(self):
         """Забирает диагностическую задачу, только если обычные сборщики не работают."""
+        lock_id = LOCK_IDS.get(self._queued_source())
+        if lock_id is None:
+            return False
         with connection.cursor() as cursor:
-            cursor.execute("SELECT pg_try_advisory_lock(%s)", [LOCK_ID])
+            cursor.execute("SELECT pg_try_advisory_lock(%s)", [lock_id])
             acquired = cursor.fetchone()[0]
         if not acquired:
             return False
@@ -101,7 +108,16 @@ class Command(BaseCommand):
             return True
         finally:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT pg_advisory_unlock(%s)", [LOCK_ID])
+                cursor.execute("SELECT pg_advisory_unlock(%s)", [lock_id])
+
+    def _queued_source(self):
+        """Возвращает источник первой ожидающей диагностики для выбора его lock."""
+        job = (PollingDiagnosticJob.objects
+               .filter(status=PollingDiagnosticJob.Status.QUEUED)
+               .only("source")
+               .order_by("created_at", "pk")
+               .first())
+        return job.source if job else None
 
     def run_job(self, job):
         handler = JobLogHandler(job.pk)

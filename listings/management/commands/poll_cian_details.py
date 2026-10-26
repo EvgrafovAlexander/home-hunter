@@ -16,7 +16,7 @@ from listings.services.detail_progress import (
 from listings.services.detail_polling import run_detail_batch, select_detail_candidates
 from listings.services.polling import cian_polling_allowed
 
-LOCK_ID = 724198501
+LOCK_ID = 724198503
 
 
 def save_detail(listing_id, detail):

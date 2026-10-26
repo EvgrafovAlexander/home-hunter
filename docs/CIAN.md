@@ -122,7 +122,8 @@ Retry-After может увеличить её. До конца паузы но�
 
 Профиль в Docker volume cian_state, путь /app/.cian-state. Копировать его можно
 только при закрытых браузерах. Один профиль нельзя открывать двумя Chromium.
-Команда использует общий PostgreSQL advisory lock с Avito, systemd — общий flock.
+Команда использует отдельный PostgreSQL advisory lock CIAN; systemd также использует
+отдельный flock-файл `/tmp/home-hunter-cian.lock`, поэтому CIAN не блокирует Avito.
 
 ## Управление на первом VPS
 

@@ -7,6 +7,6 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/home_hunter
-ExecStart=/usr/bin/flock -n -E 75 /tmp/home-hunter-collector.lock /usr/bin/docker compose run --rm collector python manage.py collect_listings --source avito --mode full
+ExecStart=/usr/bin/flock -n -E 75 /tmp/home-hunter-avito.lock /usr/bin/docker compose run --rm collector python manage.py collect_listings --source avito --mode full
 SuccessExitStatus=75
 TimeoutStartSec=3h
