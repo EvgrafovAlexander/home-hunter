@@ -4,14 +4,22 @@ from asgiref.sync import async_to_sync, sync_to_async
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
 from django.conf import settings
+from django.utils import timezone
 
 from collectors.registry import get_collector
 from collectors.routing import resolve_profile
 from listings.models import Scan, SearchQuery
 from listings.services.polling import cian_polling_allowed, polling_enabled
 from listings.services.scans import run_scan
+from listings.services.scan_summary import send_full_scan_summary
 
-LOCK_ID = 724198501
+# Источники получают разные advisory lock, чтобы независимые запросы не ждали друг друга.
+LOCK_IDS = {
+    "avito": 724198501,
+    "cian": 724198503,
+    "domclick": 724198504,
+}
+LOCK_ID = LOCK_IDS["avito"]
 
 
 class Command(BaseCommand):
@@ -57,16 +65,26 @@ class Command(BaseCommand):
             profile = resolve_profile(options["source"], options["mode"], options.get("profile"))
         except ValueError as exc:
             raise CommandError(str(exc)) from exc
-        # Защищаем и ручные запуски; host timers дополнительно используют flock.
+        # Защищаем ручные запуски в пределах источника; host timers дополнительно используют flock.
+        lock_id = LOCK_IDS[options["source"]]
         with connection.cursor() as cursor:
-            cursor.execute("SELECT pg_try_advisory_lock(%s)", [LOCK_ID])
+            cursor.execute("SELECT pg_try_advisory_lock(%s)", [lock_id])
             if not cursor.fetchone()[0]:
                 raise CommandError("Another collector is already running")
+        full_started_at = timezone.now()
+        command_error = ""
         try:
             failed = async_to_sync(self.collect_searches)(searches, options, profile)
+        except Exception as exc:
+            failed = 1
+            command_error = f"{type(exc).__name__}: {str(exc)}"
         finally:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT pg_advisory_unlock(%s)", [LOCK_ID])
+                cursor.execute("SELECT pg_advisory_unlock(%s)", [lock_id])
+            if options["mode"] == "full":
+                send_full_scan_summary(options["source"], full_started_at, command_error=command_error)
+        if command_error:
+            raise CommandError(command_error)
         if failed:
             raise CommandError(f"{failed} scan(s) failed; inspect Scan in Admin")
 

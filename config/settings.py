@@ -121,6 +121,9 @@ TG_CHAT_ID = os.getenv("TG_CHAT_ID", "")
 TG_CHANNEL_ID = os.getenv("TG_CHANNEL_ID", "")
 TG_BOT_USERNAME = os.getenv("TG_BOT_USERNAME", "")
 TG_REVIEW_USER_IDS = tuple(filter(None, (item.strip() for item in os.getenv("TG_REVIEW_USER_IDS", "").split(","))))
+TG_FULL_SCAN_CHAT_IDS = tuple(filter(None, (item.strip() for item in os.getenv(
+    "TG_FULL_SCAN_CHAT_IDS", os.getenv("TG_REVIEW_USER_IDS", "")
+).split(","))))
 TG_REVIEW_DJANGO_USERNAME = os.getenv("TG_REVIEW_DJANGO_USERNAME", "admin")
 TG_REVIEW_USER_MAP = {
     key.strip(): value.strip()
