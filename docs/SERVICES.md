@@ -9,6 +9,8 @@
 
 ## Сохранение и detail polling
 
+| `spfa_audit.py` | Fail-closed учёт вызовов SPFA и сохранение снимков cookies Avito | `AvitoSpfaRequest`, `AvitoSpfaCookie` |
+
 | Модуль | Назначение | Изменяет данные / side effects |
 |---|---|---|
 | `persistence.py` | Нормализация `NormalizedListing`, location rules, сохранение `Listing`, истории и snapshots | ORM-транзакции |

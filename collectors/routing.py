@@ -63,6 +63,10 @@ def build_proxy_options(proxy_url: str, *, username: str = "", password: str = "
     """
     if not proxy_url:
         return {}
+    # Провайдеры часто выдают адрес как host:port; для HTTP-прокси явно
+    # добавляем схему, иначе urlsplit ошибочно принимает порт за часть пути.
+    if "://" not in proxy_url:
+        proxy_url = f"http://{proxy_url}"
     proxy = urlsplit(proxy_url)
     if (proxy.scheme not in {"socks5", "http", "https"} or not proxy.hostname
             or not proxy.port or proxy.path not in {"", "/"}

@@ -75,6 +75,8 @@ AVITO_STATE_DIR = Path(os.getenv("AVITO_STATE_DIR", str(BASE_DIR / ".avito-state
 AVITO_FULL_SCAN_ENABLED = os.getenv("AVITO_FULL_SCAN_ENABLED", "false").lower() == "true"
 AVITO_SPFA_API_KEY = os.getenv("AVITO_SPFA_API_KEY", "")
 AVITO_SPFA_BASE_URL = os.getenv("AVITO_SPFA_BASE_URL", "https://spfa.pro/api")
+# Минимальный интервал между платными запросами cookies/unblock к SPFA.
+AVITO_SPFA_MIN_INTERVAL_SECONDS = float(os.getenv("AVITO_SPFA_MIN_INTERVAL_SECONDS", "86400"))
 AVITO_URL_CONVERTER_ENDPOINT = os.getenv(
     "AVITO_URL_CONVERTER_ENDPOINT", "https://spfa.pro/api/avito-url/",
 )

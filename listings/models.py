@@ -61,6 +61,45 @@ class NetworkRoute(models.Model):
         return self.name
 
 
+class AvitoSpfaCookie(models.Model):
+    """Снимок cookies SPFA и его жизненный цикл для профиля Avito."""
+
+    profile_code = models.CharField(max_length=80)
+    route_code = models.CharField(max_length=80, blank=True)
+    cookie_id = models.BigIntegerField()
+    cookies = models.JSONField()
+    user_agent = models.TextField(blank=True)
+    fingerprint = models.JSONField(null=True, blank=True)
+    mobile = models.BooleanField(default=False)
+    status = models.CharField(max_length=16, default="active")
+    received_at = models.DateTimeField(auto_now_add=True)
+    refreshed_at = models.DateTimeField(auto_now=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("profile_code", "status")), models.Index(fields=("cookie_id",))]
+
+
+class AvitoSpfaRequest(models.Model):
+    """Неизменяемый учёт каждого вызова платного SPFA API."""
+
+    profile_code = models.CharField(max_length=80, blank=True)
+    route_code = models.CharField(max_length=80, blank=True)
+    operation = models.CharField(max_length=40)
+    endpoint = models.CharField(max_length=120)
+    request_hash = models.CharField(max_length=64)
+    cookie_id = models.BigIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=16, default="pending")
+    response_status = models.PositiveSmallIntegerField(null=True, blank=True)
+    response_success = models.BooleanField(null=True, blank=True)
+    error = models.TextField(blank=True)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-started_at", "-pk")
+
+
 class PollingProfile(models.Model):
     """Настройки опроса источника и режима, включая сетевой маршрут."""
 

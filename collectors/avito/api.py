@@ -21,6 +21,7 @@ from .collector import AvitoBlocked
 from .parser import parse_money, parse_title
 from .session import SessionState, profile_state_directory
 from .spfa import SpfaClient, SpfaCookies, SpfaError
+from listings.services.spfa_audit import SpfaAudit
 
 logger = logging.getLogger(__name__)
 
@@ -108,9 +109,12 @@ class AvitoApiCollector(BaseCollector):
         self.state = SessionState(profile_state_directory(settings.AVITO_STATE_DIR, self.profile_code))
         self.session = requests.Session()
         self.stop_requested = False
+        self.audit = SpfaAudit(profile_code=self.profile_code, route_code=route.code if route else "")
         self._configure_session()
 
     async def __aenter__(self):
+        if getattr(self.profile, "cookie_strategy", "own_cookies") == "spfa":
+            await asyncio.to_thread(self._load_spfa_cookies)
         return self
 
     async def __aexit__(self, *args):
@@ -141,7 +145,9 @@ class AvitoApiCollector(BaseCollector):
         if strategy == "own_cookies":
             self._load_cookies()
         elif strategy == "spfa":
-            self._load_spfa_cookies()
+            # Загрузка cookie выполняется в рабочем потоке: внутри неё есть
+            # синхронная запись аудита в Django ORM.
+            return
         else:
             raise ValueError("Mobile API requires own_cookies or spfa cookie strategy")
 
@@ -180,20 +186,33 @@ class AvitoApiCollector(BaseCollector):
             if options.get("username"):
                 proxy = f"{options['username']}:{options['password']}@{options['server'].split('://', 1)[-1]}"
         base_url = self._settings.get("spfa_base_url", settings.AVITO_SPFA_BASE_URL)
-        client = SpfaClient(api_key, base_url=base_url, timeout=float(self._settings.get("spfa_timeout", 120)))
+        client = SpfaClient(api_key, base_url=base_url, timeout=float(self._settings.get("spfa_timeout", 120)), audit=self.audit)
         cache_path = self.state.directory / "spfa-cookies.json"
         cookie_data = None
+        min_interval = float(self._settings.get(
+            "spfa_min_interval_seconds", settings.AVITO_SPFA_MIN_INTERVAL_SECONDS,
+        ))
         if cache_path.exists():
             try:
                 cached = json.loads(cache_path.read_text(encoding="utf-8"))
-                if cached.get("mobile"):
+                if (cached.get("mobile") and cached.get("invalidated")
+                        and isinstance(cached.get("cookies"), dict) and cached["cookies"]):
+                    # Восстановление старой cookie бесплатно; суточный лимит
+                    # относится только к выдаче новой платной cookie.
                     refreshed = client.unblock(int(cached["id"]), proxy=proxy)
                     if refreshed:
-                        cookie_data = SpfaCookies(int(cached["id"]), refreshed.cookies,
+                        cookie_data = SpfaCookies(refreshed.cookie_id, refreshed.cookies,
                                                   str(cached.get("user_agent") or ""), cached.get("fingerprint"))
+                elif (cached.get("mobile") and not cached.get("invalidated")
+                        and isinstance(cached.get("cookies"), dict) and cached["cookies"]):
+                    # Пока Avito не заблокировал сессию, повторное обращение к
+                    # платному SPFA не требуется: используем сохранённый набор.
+                    cookie_data = SpfaCookies(int(cached["id"]), cached["cookies"],
+                                              str(cached.get("user_agent") or ""), cached.get("fingerprint"))
             except (OSError, ValueError, KeyError, SpfaError):
                 cookie_data = None
         if cookie_data is None:
+            self.audit.ensure_paid_allowed(min_interval)
             cookie_data = client.cookies(mobile=True, proxy=proxy)
         self.session.cookies.update(cookie_data.cookies)
         if cookie_data.fingerprint and isinstance(cookie_data.fingerprint.get("headers"), dict):
@@ -204,6 +223,7 @@ class AvitoApiCollector(BaseCollector):
             "id": cookie_data.cookie_id, "cookies": cookie_data.cookies,
             "user_agent": cookie_data.user_agent, "fingerprint": cookie_data.fingerprint, "mobile": True,
         })
+        self.audit.save_cookie(cookie_data, fingerprint=cookie_data.fingerprint, mobile=True)
 
     def _api_url(self, search) -> str:
         """Возвращает URL API для поиска, не смешивая два транспорта."""
@@ -228,7 +248,7 @@ class AvitoApiCollector(BaseCollector):
             api_key = settings.AVITO_SPFA_API_KEY
         # Конвертер бесплатный, но общий клиент требует ключ только для
         # платных методов, поэтому вызываем его с произвольным маркером.
-        client = SpfaClient(api_key or "url-converter", base_url=endpoint.rsplit("/avito-url", 1)[0])
+        client = SpfaClient(api_key or "url-converter", base_url=endpoint.rsplit("/avito-url", 1)[0], audit=self.audit)
         api_url = client.web_to_api(search_url)
         cache[search_url] = api_url
         self.state.write_json("api-urls.json", cache)
@@ -239,6 +259,16 @@ class AvitoApiCollector(BaseCollector):
         if response.status_code in {403, 429, 439}:
             self.stop_requested = True
             self.state.block(settings.AVITO_BLOCK_COOLDOWN_SECONDS, response.headers.get("Retry-After"))
+            # Следующий запуск запросит свежую cookie; текущий не делает
+            # дополнительного платного вызова SPFA во время обработки ошибки.
+            cached = self.state.directory / "spfa-cookies.json"
+            try:
+                if cached.exists():
+                    data = json.loads(cached.read_text(encoding="utf-8"))
+                    data["invalidated"] = True
+                    self.state.write_json("spfa-cookies.json", data)
+            except (OSError, ValueError):
+                pass
             raise AvitoBlocked(f"Avito API blocked: HTTP {response.status_code}")
         response.raise_for_status()
         payload = response.json()
@@ -257,7 +287,7 @@ class AvitoApiCollector(BaseCollector):
             if limit < 1:
                 raise ValueError("Invalid Avito scan settings")
             self._check_cooldown()
-            api_url = self._api_url(search)
+            api_url = await asyncio.to_thread(self._api_url, search)
             seen = set()
             for page in range(1, limit + 1):
                 await self._pace()

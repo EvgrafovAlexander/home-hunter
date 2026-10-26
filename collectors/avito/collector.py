@@ -20,6 +20,7 @@ from . import selectors as sel
 from .parser import parse_page
 from .session import SessionState, profile_state_directory
 from .spfa import SpfaClient, SpfaCookies, SpfaError
+from listings.services.spfa_audit import SpfaAudit
 
 if TYPE_CHECKING:
     from listings.models import SearchQuery
@@ -102,7 +103,8 @@ class AvitoCollector(BaseCollector):
         try:
             self.state.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
             if getattr(self.profile, "cookie_strategy", "browser_profile") == "spfa":
-                self._prepare_spfa_cookies()
+                # SPFA-клиент и аудит используют синхронный HTTP/ORM; не выполняем их в event loop.
+                await asyncio.to_thread(self._prepare_spfa_cookies)
             if self.route is not None and self.route.kind == "free_proxy_pool":
                 proxy_options = {}
             else:
@@ -146,7 +148,8 @@ class AvitoCollector(BaseCollector):
         api_key = settings.AVITO_SPFA_API_KEY
         if not api_key:
             raise ValueError("SPFA API key is not configured")
-        client = SpfaClient(api_key, base_url=settings.AVITO_SPFA_BASE_URL, timeout=120)
+        audit = SpfaAudit(profile_code=self.profile_code or "avito", route_code=self.route.code if self.route else "")
+        client = SpfaClient(api_key, base_url=settings.AVITO_SPFA_BASE_URL, timeout=120, audit=audit)
         cached = self.state.directory / "spfa-cookies.json"
         if cached.exists():
             try:
@@ -155,6 +158,7 @@ class AvitoCollector(BaseCollector):
                 refreshed = client.unblock(cookie_id)
                 if refreshed:
                     self._spfa_cookies = SpfaCookies(cookie_id, refreshed.cookies, str(data.get("user_agent") or ""))
+                    audit.save_cookie(self._spfa_cookies)
                     return
             except (OSError, ValueError, KeyError, SpfaError):
                 pass
@@ -163,6 +167,7 @@ class AvitoCollector(BaseCollector):
             "id": self._spfa_cookies.cookie_id, "cookies": self._spfa_cookies.cookies,
             "user_agent": self._spfa_cookies.user_agent, "mobile": False,
         })
+        audit.save_cookie(self._spfa_cookies)
 
     def _rotate_invalid_profile_if_needed(self, profile) -> None:
         """Архивирует профиль, помеченный после WAF или невалидной страницы."""

@@ -26,22 +26,35 @@ class SpfaCookies:
 class SpfaClient:
     """Вызывает API SPFA с единым timeout и без утечки API-ключа в ошибки."""
 
-    def __init__(self, api_key: str, *, base_url: str = "https://spfa.pro/api", timeout: float = 120):
+    def __init__(self, api_key: str, *, base_url: str = "https://spfa.pro/api", timeout: float = 120, audit=None):
         if not api_key:
             raise SpfaError("SPFA API key is not configured")
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.audit = audit
 
-    def _post(self, path: str, payload: dict[str, Any], *, accepted: tuple[int, ...] = (200,)) -> dict[str, Any]:
+    def _post(self, path: str, payload: dict[str, Any], *, accepted: tuple[int, ...] = (200,),
+              cookie_id: int | None = None) -> dict[str, Any]:
+        audit_record = None
+        if self.audit is not None:
+            audit_record = self.audit.start(path.strip("/"), path.strip("/"), payload, cookie_id=cookie_id)
         try:
             response = requests.post(f"{self.base_url}/{path.strip('/')}/", json=payload, timeout=self.timeout)
             data = response.json()
         except (requests.RequestException, ValueError) as exc:
+            if audit_record is not None:
+                self.audit.finish(audit_record, status="error", error=type(exc).__name__)
             raise SpfaError(f"SPFA request failed: {type(exc).__name__}") from exc
         if response.status_code not in accepted or not isinstance(data, dict) or not data.get("success"):
             message = data.get("message", "unknown error") if isinstance(data, dict) else "invalid response"
+            if audit_record is not None:
+                self.audit.finish(audit_record, status="error", response_status=response.status_code,
+                                  response_success=bool(data.get("success")) if isinstance(data, dict) else False,
+                                  error=message)
             raise SpfaError(f"SPFA {path} failed: HTTP {response.status_code}: {message}")
+        if audit_record is not None:
+            self.audit.finish(audit_record, status="success", response_status=response.status_code, response_success=True)
         return data
 
     def balance(self) -> Any:
@@ -74,7 +87,7 @@ class SpfaClient:
         payload: dict[str, Any] = {"id": int(cookie_id), "api_key": self.api_key}
         if proxy:
             payload["proxy"] = proxy
-        data = self._post("unblock", payload, accepted=(200, 202)).get("results") or {}
+        data = self._post("unblock", payload, accepted=(200, 202), cookie_id=cookie_id).get("results") or {}
         cookies = data.get("cookies")
         if not isinstance(cookies, dict):
             return None
