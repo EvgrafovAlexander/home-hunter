@@ -151,6 +151,7 @@ class AvitoCollector(BaseCollector):
         audit = SpfaAudit(profile_code=self.profile_code or "avito", route_code=self.route.code if self.route else "")
         client = SpfaClient(api_key, base_url=settings.AVITO_SPFA_BASE_URL, timeout=120, audit=audit)
         proxy = ""
+        mobile_cookies = self.route is not None and self.route.kind == "mobile_proxy"
         if self.route is not None:
             options = self.route.resolved_proxy_options
             if options.get("username"):
@@ -167,12 +168,15 @@ class AvitoCollector(BaseCollector):
                     return
             except (OSError, ValueError, KeyError, SpfaError):
                 pass
-        # Для профиля SPFA используем тот же авторизованный мобильный маршрут,
-        # чтобы SPFA выдавал cookies под тем же выходным IP, что и Avito.
-        self._spfa_cookies = client.cookies(mobile=True, proxy=proxy)
+        # SPFA выдаёт мобильный набор только для мобильного маршрута; обычный
+        # серверный прокси использует стандартный набор cookies для Chromium.
+        if mobile_cookies:
+            self._spfa_cookies = client.cookies(mobile=True, proxy=proxy)
+        else:
+            self._spfa_cookies = client.cookies(mobile=False, full_format=True)
         self.state.write_json("spfa-cookies.json", {
             "id": self._spfa_cookies.cookie_id, "cookies": self._spfa_cookies.cookies,
-            "user_agent": self._spfa_cookies.user_agent, "mobile": True,
+            "user_agent": self._spfa_cookies.user_agent, "mobile": mobile_cookies,
         })
         audit.save_cookie(self._spfa_cookies)
 
