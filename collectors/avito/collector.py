@@ -150,22 +150,29 @@ class AvitoCollector(BaseCollector):
             raise ValueError("SPFA API key is not configured")
         audit = SpfaAudit(profile_code=self.profile_code or "avito", route_code=self.route.code if self.route else "")
         client = SpfaClient(api_key, base_url=settings.AVITO_SPFA_BASE_URL, timeout=120, audit=audit)
+        proxy = ""
+        if self.route is not None:
+            options = self.route.resolved_proxy_options
+            if options.get("username"):
+                proxy = f"{options['username']}:{options['password']}@{options['server'].split('://', 1)[-1]}"
         cached = self.state.directory / "spfa-cookies.json"
         if cached.exists():
             try:
                 data = json.loads(cached.read_text(encoding="utf-8"))
                 cookie_id = int(data["id"])
-                refreshed = client.unblock(cookie_id)
+                refreshed = client.unblock(cookie_id, proxy=proxy)
                 if refreshed:
                     self._spfa_cookies = SpfaCookies(cookie_id, refreshed.cookies, str(data.get("user_agent") or ""))
                     audit.save_cookie(self._spfa_cookies)
                     return
             except (OSError, ValueError, KeyError, SpfaError):
                 pass
-        self._spfa_cookies = client.cookies(mobile=False, full_format=True)
+        # Для профиля SPFA используем тот же авторизованный мобильный маршрут,
+        # чтобы SPFA выдавал cookies под тем же выходным IP, что и Avito.
+        self._spfa_cookies = client.cookies(mobile=True, proxy=proxy)
         self.state.write_json("spfa-cookies.json", {
             "id": self._spfa_cookies.cookie_id, "cookies": self._spfa_cookies.cookies,
-            "user_agent": self._spfa_cookies.user_agent, "mobile": False,
+            "user_agent": self._spfa_cookies.user_agent, "mobile": True,
         })
         audit.save_cookie(self._spfa_cookies)
 

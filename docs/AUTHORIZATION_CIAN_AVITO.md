@@ -103,6 +103,13 @@ SERVER_PROXY_HEALTHCHECK_URL=https://api.ipify.org
 старых переменных `AVITO_PROXY_URL`, `CIAN_PROXY_URL` или
 `DOMCLICK_PROXY_URL`. Это позволяет откатить базу профилей без потери маршрута.
 
+Если заданы `MOBILE_PROXY_URL`, `MOBILE_PROXY_USERNAME` и
+`MOBILE_PROXY_PASSWORD`, для Avito они имеют приоритет над историческим
+маршрутом `avito_default`. Учетные данные остаются в окружении, а выбранный
+маршрут получает тип `mobile_proxy`. Для профиля Avito со стратегией `SPFA`
+запрос выдачи cookies и последующий `unblock` передают тот же авторизованный
+мобильный маршрут в SPFA, чтобы cookies соответствовали выходному IP Avito.
+
 ## Avito
 
 ### Запуск браузера

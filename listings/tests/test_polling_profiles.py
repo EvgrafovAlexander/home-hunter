@@ -23,6 +23,25 @@ def test_source_profile_is_inherited_by_all_polling_modes():
 
 
 @pytest.mark.django_db
+def test_avito_uses_mobile_proxy_from_environment(monkeypatch):
+    route = NetworkRoute.objects.create(
+        code="shared_test", name="Shared test", kind="ssh_socks5", proxy_url="socks5://shared:1080",
+    )
+    PollingProfile.objects.create(
+        code="avito_env_test", name="Avito env", source="avito", mode="all", route=route,
+        is_default=True,
+    )
+    monkeypatch.setattr("django.conf.settings.MOBILE_PROXY_URL", "http://proxy.example:8080")
+    monkeypatch.setattr("django.conf.settings.MOBILE_PROXY_HEALTHCHECK_URL", "https://api.ipify.org")
+
+    resolved = resolve_profile("avito", "fast")
+
+    assert resolved.route.kind == "mobile_proxy"
+    assert resolved.route.code == "env_mobile_proxy"
+    assert resolved.route.secret_ref == "MOBILE_PROXY"
+
+
+@pytest.mark.django_db
 def test_explicit_profile_can_select_a_source_wide_profile():
     route = NetworkRoute.objects.create(
         code="server_test", name="Server test", kind="server_proxy", proxy_url="http://server:8080",

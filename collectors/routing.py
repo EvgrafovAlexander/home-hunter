@@ -168,12 +168,20 @@ def resolve_profile(source: str, mode: str, code: str | None = None) -> PollingP
     if profile is None:
         return _legacy_profile(source, mode)
     route = profile.route
-    return PollingProfileSpec(
-        code=profile.code,
-        name=profile.name,
-        source=profile.source,
-        mode=mode,
-        route=RouteSpec(
+    # Явный мобильный маршрут из окружения имеет приоритет над историческим
+    # профилем общего SSH/SOCKS-маршрута: это позволяет переключить стенд без
+    # записи логина и пароля в базу и без ручного редактирования профиля.
+    if source == "avito" and settings.MOBILE_PROXY_URL:
+        route_spec = RouteSpec(
+            code="env_mobile_proxy",
+            name="Мобильный прокси из окружения",
+            kind="mobile_proxy",
+            proxy_url=settings.MOBILE_PROXY_URL,
+            secret_ref="MOBILE_PROXY",
+            healthcheck_url=settings.MOBILE_PROXY_HEALTHCHECK_URL,
+        )
+    else:
+        route_spec = RouteSpec(
             code=route.code,
             name=route.name,
             kind=route.kind,
@@ -182,7 +190,13 @@ def resolve_profile(source: str, mode: str, code: str | None = None) -> PollingP
             secret_ref=route.secret_ref,
             healthcheck_url=route.healthcheck_url,
             settings=route.settings,
-        ),
+        )
+    return PollingProfileSpec(
+        code=profile.code,
+        name=profile.name,
+        source=profile.source,
+        mode=mode,
+        route=route_spec,
         session_mode=profile.session_mode,
         block_policy=profile.block_policy,
         transport=profile.transport,

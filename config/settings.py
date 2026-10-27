@@ -64,6 +64,10 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SHARED_PROXY_URL = os.getenv("SHARED_PROXY_URL", "socks5://shared-socks-tunnel:1080")
 AVITO_PROXY_URL = os.getenv("AVITO_PROXY_URL", "")
+MOBILE_PROXY_URL = os.getenv("MOBILE_PROXY_URL", "")
+MOBILE_PROXY_USERNAME = os.getenv("MOBILE_PROXY_USERNAME", "")
+MOBILE_PROXY_PASSWORD = os.getenv("MOBILE_PROXY_PASSWORD", "")
+MOBILE_PROXY_HEALTHCHECK_URL = os.getenv("MOBILE_PROXY_HEALTHCHECK_URL", "https://api.ipify.org")
 AVITO_PERSISTENT_PROFILE = os.getenv("AVITO_PERSISTENT_PROFILE", "true").lower() == "true"
 AVITO_FAST_SCAN_PAGES = int(os.getenv("AVITO_FAST_SCAN_PAGES", "1"))
 AVITO_MAX_PAGES = int(os.getenv("AVITO_MAX_PAGES", "50"))
