@@ -7,9 +7,10 @@ from django.utils import timezone
 from zipfile import ZipFile
 from io import BytesIO
 
-from listings.models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, Listing, ListingReview,
+from listings.models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, GeoZone, Listing, ListingReview,
                              ListingSearchQuery, ListingSnapshot, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery,
                              SourcePollingControl, UserListingHide)
+from listings.services.reviews import personal_candidate_queryset
 from listings.views import add_listing_score, add_market_position, next_poll_runs
 
 
@@ -93,6 +94,29 @@ class ListingViewsTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("listing_feed"), {"rooms": 2, "price_max": 7_000_000})
         self.assertContains(response, "6\u00a0500\u00a0000")
+
+    def test_personal_candidates_take_newest_records_before_zone_limit(self):
+        """Свежая карточка не теряется за пределами первых 1000 строк базы."""
+        GeoZone.objects.create(
+            user=self.user, name="Вся карта", tier=GeoZone.Tier.A,
+            geometry={"type": "Polygon", "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]]},
+        )
+        earlier = timezone.now() - timedelta(days=1)
+        Listing.objects.bulk_create([
+            Listing(
+                source="cian", external_id=f"old-{index}", url=f"https://example.test/old-{index}",
+                title="Старая квартира", area="60.00", first_seen_at=earlier, last_seen_at=earlier,
+            )
+            for index in range(1000)
+        ])
+        fresh = Listing.objects.create(
+            source="avito", external_id="fresh-avito", url="https://example.test/fresh-avito",
+            title="Свежая квартира", area="60.00", first_seen_at=timezone.now(),
+        )
+
+        candidates = personal_candidate_queryset(Listing.objects.all(), self.user)
+
+        self.assertIn(fresh.pk, [item.pk for item in candidates])
 
     def test_sub55_listings_are_not_candidates_or_review_queue_items(self):
         small = Listing.objects.create(

@@ -24,7 +24,9 @@ def personal_candidate_queryset(queryset, user):
     zones = list(GeoZone.objects.filter(user=user, is_active=True))
     if not zones:
         return queryset
-    return annotate_personal_filter(list(queryset[:1000]), user)
+    # Лимит применяем после SQL-сортировки, иначе новые объявления с большими id
+    # могут не попасть в ленту при включённых геозонах.
+    return annotate_personal_filter(list(queryset.order_by("-first_seen_at", "-id")[:1000]), user)
 
 
 def review_queue_queryset(user):
