@@ -19,7 +19,7 @@
 | `detail_progress.py` | Состояние циклов detail и список завершённых объявлений | ORM-транзакции над progress-моделями |
 | `cian_detail_persistence.py` | Применение CIAN detail, адрес, геокодирование и source-specific snapshot | `Listing`, CIAN payload/state, snapshots, `PriceHistory`, Telegram score после commit |
 | `avito_detail_persistence.py` | Применение Avito detail, фотографий и координат | `Listing`, Avito payload/state, snapshots |
-| `scans.py` | Жизненный цикл Scan и безопасная деактивация по результату `CollectionResult` | `Scan`, объявления и snapshots |
+| `scans.py` | Жизненный цикл Scan; накопление безопасности пакетов CIAN в checkpoint и деактивация только после безопасного цикла | `Scan`, объявления и snapshots |
 
 Collectors получают данные, а persistence-сервисы сохраняют их. Detail-команды
 не должны напрямую дублировать эти операции.

@@ -2,7 +2,7 @@ from dataclasses import replace
 import pytest
 from django.utils import timezone
 from collectors.base import BaseCollector, CollectionError, CollectionResult
-from listings.models import ListingSearchQuery, ListingSnapshot, Scan, SearchQuery
+from listings.models import CianFullScanCheckpoint, ListingSearchQuery, ListingSnapshot, Scan, SearchQuery
 from listings.services.persistence import process_listing
 from listings.services.scans import run_scan
 from listings.services.change_history import change_events
@@ -104,3 +104,42 @@ def test_failed_scan_keeps_observations_and_deduplicates(search, item):
     assert scan.status == "failed"
     assert scan.items_seen == 2 and scan.unique_items_seen == scan.new_items == 1
     assert "blocked" in scan.error
+
+
+@pytest.mark.parametrize("failed_batch", [False, True])
+def test_cian_unsafe_early_batch_blocks_reconciliation(item, failed_batch):
+    search = SearchQuery.objects.create(name="CIAN", source="cian", url="https://ufa.cian.ru/cat.php?region=1")
+    missing = process_listing(search, replace(item, source="cian"), timezone.now()).listing
+    relation = ListingSearchQuery.objects.get(listing=missing, search_query=search)
+    relation.missed_full_scans = 1
+    relation.save(update_fields=("missed_full_scans",))
+    damaged = CollectionResult(complete=False, next_page=3, expected_total=1,
+                               skipped_cards=1, safe_for_deactivation=False)
+    first = run_scan(search, FakeCollector(damaged, fail=failed_batch), mode="full")
+    assert first.status == ("failed" if failed_batch else "success")
+    assert not CianFullScanCheckpoint.objects.get(search_query=search).safe_for_deactivation
+
+    last = run_scan(search, FakeCollector(CollectionResult(complete=True, expected_total=1)), mode="full")
+    assert last.status == "success"
+    relation.refresh_from_db()
+    missing.refresh_from_db()
+    assert relation.missed_full_scans == 1
+    assert relation.is_active and missing.is_active
+    assert not ListingSnapshot.objects.filter(listing=missing, data__is_active=False).exists()
+    assert not CianFullScanCheckpoint.objects.filter(search_query=search).exists()
+
+    # Новый чистый цикл не наследует запрет завершённого повреждённого прохода.
+    run_scan(search, FakeCollector(CollectionResult(complete=True, expected_total=0)), mode="full")
+    relation.refresh_from_db()
+    assert relation.missed_full_scans == 2
+    assert not relation.is_active
+
+
+def test_cian_changed_url_resets_cycle_safety(item):
+    search = SearchQuery.objects.create(name="CIAN", source="cian", url="https://ufa.cian.ru/cat.php?region=1")
+    CianFullScanCheckpoint.objects.create(
+        search_query=search, search_url="https://ufa.cian.ru/cat.php?region=2",
+        next_page=3, safe_for_deactivation=False,
+    )
+    run_scan(search, FakeCollector(CollectionResult(complete=False, next_page=3)), mode="full")
+    assert CianFullScanCheckpoint.objects.get(search_query=search).safe_for_deactivation

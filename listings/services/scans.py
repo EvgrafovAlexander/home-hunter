@@ -94,6 +94,7 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str, profil
             if checkpoint.search_url != search.url:
                 checkpoint.search_url, checkpoint.next_page = search.url, 1
                 checkpoint.expected_total, checkpoint.external_ids = None, []
+                checkpoint.safe_for_deactivation = True
                 checkpoint.cycle_started_at, checkpoint.total_changes = timezone.now(), 0
                 checkpoint.save()
             start_page = checkpoint.next_page
@@ -110,6 +111,9 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str, profil
         except CollectionError as exc:
             result = exc.result
             collection_error = exc
+        if checkpoint and not result.safe_for_deactivation:
+            checkpoint.safe_for_deactivation = False
+            checkpoint.save(update_fields=("safe_for_deactivation",))
         scan.pages_scanned = result.pages_scanned
         scan.items_seen = result.items_seen
         seen_keys = set()
@@ -147,12 +151,11 @@ def run_scan(search: SearchQuery, collector: BaseCollector, *, mode: str, profil
                     listing__external_id__in=completed_keys,
                 ).values_list("listing_id", flat=True))
                 checkpoint.delete()
-                cian_full_completed = result.safe_for_deactivation
+                cian_full_completed = checkpoint.safe_for_deactivation and result.safe_for_deactivation
                 if not cian_full_completed:
                     logger.warning(
-                        "CIAN full cycle completed with %s skipped damaged cards; "
+                        "CIAN full cycle contains an unsafe batch; "
                         "disappearance reconciliation was skipped",
-                        result.skipped_cards,
                     )
             else:
                 checkpoint.next_page = result.next_page
