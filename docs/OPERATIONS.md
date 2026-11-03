@@ -220,4 +220,3 @@ docker compose run --rm -T collector python manage.py shell < collectors/tests/d
 ```
 Она запускает настоящий Chromium с перехватом URL и HTML fixture, выполняет fast/full,
 проверяет историю в PostgreSQL и удаляет созданные тестовые записи.
-
