@@ -65,65 +65,20 @@ frontend-сборки и формального API schema layer нет.
 
 ### Модели
 
-`Listing` и инфраструктурные модели пока остаются в `listings/models.py`, а review-домен и detail/polling state вынесены в `listings/models_reviews.py` и `listings/models_polling.py` с re-export из legacy-модуля. `Listing` остаётся центральной моделью; остальные группы будут выноситься постепенно без изменения схемы БД.
+`Listing` и инфраструктурные модели пока остаются в `listings/models.py`, а review-домен и detail/polling state вынесены в `listings/models_reviews.py` и `listings/models_polling.py` с re-export из legacy-модуля. `Listing` остаётся центральной моделью.
 
 ### Фоновые процессы и эксплуатация
 
 Сканирование, detail polling, геокодирование, Telegram polling/delivery и health checks запускаются через management-команды и `deploy/systemd`. Advisory locks PostgreSQL и filesystem `flock` защищают конкурирующие запуски. Docker разделяет web, collector, Telegram polling и proxy tunnel.
 
-## Известные архитектурные ограничения
+## Границы и ограничения
 
-- `listings/views.py` содержит общие HTTP-обработчики и совместимые импорты;
-  feed/detail находятся в `listings/views_listings.py`, review queue и consideration
-  workflow — в `listings/views_reviews.py`, а операции очереди и сохранения review —
-  в `listings/services/reviews.py`. Операционные страницы находятся в
-  `listings/views_operations.py`, географические обработчики — в
-  `listings/views_geo.py`, а выгрузки — в `listings/views_exports.py`.
-  Настройки scoring находятся в `listings/views_preferences.py`.
-- Правила отображения расписания опросов вынесены в
-  `listings/services/polling_schedule.py`; `views.py` сохраняет только
-  совместимые публичные импорты.
-- `listings/views.py` сохраняет thin wrappers для URL-совместимости; новые workflow-правила не должны возвращаться в этот модуль.
-- Market comparison находится в `listings/services/market.py`; выбор аналогов и
-  пороги сравнения едины для web-аннотации и Telegram/deal tuple. Форматы полей
-  веба, XLSX и кортеж уведомления остаются разными только на границе
-  представления. Агрегатные листы экспорта по микрорайонам и комнатам остаются
-  отдельной сводной аналитикой, а не per-listing сравнением.
-- scoring реализован в `listings/services/scoring.py` и используется web и Telegram; `views.py` сохраняет только thin wrapper для совместимости импортов.
-- CIAN и Avito detail commands используют общий orchestration-сервис
-  `listings/services/detail_polling.py`; source-specific fetch и persistence
-  остаются в командах, а выбор кандидатов и обработка ошибок унифицированы.
-- Общие операции detail payload и перехода в `unavailable` вынесены в `listings/services/detail_persistence.py`; source-specific enrichment остаётся в командах.
-- Сохранение CIAN detail, применение атрибутов и location enrichment вынесены в
-  `listings/services/cian_detail_persistence.py`; команда оставляет только
-  source-specific fetch и совместимый вызов сервиса.
-- Сохранение Avito detail, payload, фотографий, координат и snapshots вынесено в
-  `listings/services/avito_detail_persistence.py`; команда оставляет только
-  source-specific fetch, parsing и совместимый вызов сервиса.
-- Общая финализация опубликованного detail (snapshot при изменении, активность
-  Listing и состояние проверки) выполняется в `mark_detail_published()`;
-  source-specific сервисы сохраняют только собственное enrichment.
-- Lifecycle прогресса detail-циклов CIAN и Avito вынесен в `listings/services/detail_progress.py`; команды сохраняют только source-specific fetch и persistence.
-- Фильтрация feed/shortlist и поиск похожих объявлений вынесены в `listings/services/listing_queries.py`; `views.py` оставляет только совместимые wrappers.
-- Раздел «Лучшие варианты» дополнительно требует персональный score не ниже
-  60/100 («Стоит посмотреть») и положение цены ниже рынка; низкий score сам по
-  себе не превращает объявление в рекомендацию.
-- Медианная аналитика микрорайонов вынесена в `listings/services/market.py`; view только передаёт queryset и параметры периода.
-- Агрегаты dashboard (дневные ряды, районные медианы, изменения цен и распределения) готовит `listings/services/dashboard.py`.
-- Классификация состояния сканеров и контекст CIAN detail-цикла находятся в `listings/services/scan_dashboard.py`.
-- География, scoring и market calculations частично выполняются request-time в Python.
-- Telegram HTTP integration распределена между несколькими services.
+Review workflow находится в `views_reviews.py` и `services/reviews.py`. Доменное сравнение цен выполняет `services/market.py`, персональную оценку — `services/scoring.py`. Экспорт форматирует эти результаты на границе представления; агрегатные листы имеют отдельную статистическую семантику.
 
-## Целевые границы постепенного рефакторинга
+Detail-команды получают данные источника. Сохранение выполняют `cian_detail_persistence.py` и `avito_detail_persistence.py`, общий переход в опубликованное состояние — `mark_detail_published()`. Прогресс циклов обслуживает `detail_progress.py`, выбор кандидатов и общий цикл — `detail_polling.py`.
 
-1. Одна явно версионируемая market policy для web, Telegram и export; общий
-   результат сравнения используется web, Telegram и листом «Квартиры» в XLSX;
-   агрегатные листы сохраняют отдельную статистическую семантику.
-2. Views только принимают запрос, вызывают selectors/services и формируют response.
-3. Collectors возвращают DTO и не знают о ORM persistence.
-4. Detail polling использует общий persistence service.
-5. Тяжёлые market/scoring операции переводятся в materialized snapshots только после измерения нагрузки.
+Telegram-публикации проходят очередь `telegram_delivery.py`. Постоянный `telegram_send` запускается через systemd внутри контейнера web. Перед отправкой проверяются актуальные данные объявления и зоны пользователя; состояния доставки не заменяют географическую классификацию.
 
-Архитектурные import-проверки находятся в `listings/tests/test_architecture.py` и не требуют базы данных.
+Часть географических, рыночных и scoring-расчётов выполняется в Python во время запроса. Внешние Telegram-вызовы распределены по нескольким сервисам. Эти ограничения сами по себе не являются основанием вводить новую очередь или отдельный frontend.
 
-Полная перепись и немедленное введение новой очереди задач не требуются.
+Проверки границ импортов: `listings/tests/test_architecture.py`. Правила дальнейшей разработки: [AGENTS.md](../AGENTS.md).

@@ -9,10 +9,9 @@
 
 ## Сохранение и detail polling
 
-| `spfa_audit.py` | Fail-closed учёт вызовов SPFA и сохранение снимков cookies Avito | `AvitoSpfaRequest`, `AvitoSpfaCookie` |
-
 | Модуль | Назначение | Изменяет данные / side effects |
 |---|---|---|
+| `spfa_audit.py` | Учёт вызовов SPFA и снимков cookies; отказ при невозможности аудита | `AvitoSpfaRequest`, `AvitoSpfaCookie` |
 | `persistence.py` | Нормализация `NormalizedListing`, location rules, сохранение `Listing`, истории и snapshots | ORM-транзакции |
 | `avito_xlsx_import.py` | Проверка и ручной импорт XLSX Avito Parser | Сохраняет объявления через `persistence.py` |
 | `detail_persistence.py` | Общие операции payload, недоступности и финализации опубликованного detail | Payload-модели, `Listing`, `ListingSnapshot`, detail state |
