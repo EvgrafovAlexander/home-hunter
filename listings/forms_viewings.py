@@ -46,6 +46,19 @@ class MultiplePhotoField(forms.FileField):
         return [super(MultiplePhotoField, self).clean(item) for item in files]
 
 
+class ApartmentCreateForm(ApartmentForm):
+    photos = MultiplePhotoField(label="Фотографии", required=False,
+                                widget=MultiplePhotoInput(attrs={"accept": "image/jpeg,image/png,image/webp"}))
+
+    def clean(self):
+        data = super().clean()
+        try:
+            self.prepared_photos = prepare_viewing_photos(data.get("photos", []))
+        except ValidationError as exc:
+            self.add_error("photos", exc)
+        return data
+
+
 class EntryForm(forms.ModelForm):
     photos = MultiplePhotoField(label="Фотографии", required=False,
                                 widget=MultiplePhotoInput(attrs={"accept": "image/jpeg,image/png,image/webp"}))

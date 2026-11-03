@@ -96,6 +96,39 @@ def save_apartment(owner, cleaned, *, apartment_id=None, listing=None):
     return apartment
 
 
+def create_apartment(owner, cleaned, prepared_photos, *, listing=None):
+    """Создаёт карточку с фото одной транзакцией, удаляя новые файлы при ошибке."""
+    if not prepared_photos:
+        return save_apartment(owner, cleaned, listing=listing)
+    written = []
+    with viewing_media_lock():
+        try:
+            with transaction.atomic():
+                apartment = save_apartment(owner, cleaned, listing=listing)
+                entry = ViewingEntry.objects.create(apartment=apartment, kind="note", status="",
+                                                    body="Фотографии при создании карточки.")
+                _save_photos(apartment, prepared_photos, written, entry=entry)
+            return apartment
+        except Exception:
+            for storage, name in written:
+                storage.delete(name)
+            raise
+
+
+def _save_photos(apartment, prepared_photos, written, *, entry):
+    if apartment.photos.count() + len(prepared_photos) > MAX_PHOTOS:
+        raise ValidationError("В одной карточке можно хранить до 100 фотографий.")
+    for full_bytes, thumb_bytes in prepared_photos:
+        photo = ViewingPhoto(apartment=apartment, entry=entry)
+        for field, content, suffix in ((photo.image, full_bytes, ""), (photo.thumbnail, thumb_bytes, "-thumb")):
+            field.save(f"{uuid.uuid4().hex}{suffix}.jpg", ContentFile(content), save=False)
+            written.append((field.storage, field.name))
+        photo.save()
+        if apartment.cover_photo_id is None:
+            apartment.cover_photo = photo
+    apartment.save(update_fields=("cover_photo", "updated_at"))
+
+
 @transaction.atomic
 def change_listing_link(owner, apartment_id, listing, *, remove=False):
     """Идемпотентно добавляет или убирает связь, не изменяя сведения квартиры."""
@@ -129,15 +162,7 @@ def save_viewing_entry(owner, apartment_id, cleaned, prepared_photos, *, entry_i
                     setattr(entry, field, cleaned[field])
                 entry.full_clean()
                 entry.save()
-                for full_bytes, thumb_bytes in prepared_photos:
-                    photo = ViewingPhoto(apartment=apartment, entry=entry)
-                    for field, content, suffix in ((photo.image, full_bytes, ""), (photo.thumbnail, thumb_bytes, "-thumb")):
-                        field.save(f"{uuid.uuid4().hex}{suffix}.jpg", ContentFile(content), save=False)
-                        written.append((field.storage, field.name))
-                    photo.save()
-                    if apartment.cover_photo_id is None:
-                        apartment.cover_photo = photo
-                apartment.save(update_fields=("cover_photo", "updated_at"))
+                _save_photos(apartment, prepared_photos, written, entry=entry)
             return entry
         except Exception:
             for storage, name in written:

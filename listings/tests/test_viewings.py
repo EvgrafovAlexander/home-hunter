@@ -232,3 +232,62 @@ def test_navigation_moves_shortlist_into_more(client, owner):
     assert "Мои просмотры" in primary
     assert "Лучшие варианты" not in primary
     assert "Лучшие варианты" in menu
+
+
+def test_create_apartment_with_photos(client, owner, listing):
+    client.force_login(owner)
+    response = client.get(reverse("viewing_create"))
+    assert b'multipart/form-data' in response.content
+    assert b'name="photos"' in response.content
+    response = client.post(reverse("viewing_create"), {
+        "title": "С фотографиями", "decision": "thinking", "seed_listing": listing.pk,
+        "photos": [photo_upload(), photo_upload("second.jpg")],
+    })
+    apartment = ViewingApartment.objects.get(owner=owner)
+    assert response.status_code == 302
+    assert apartment.photos.count() == 2
+    assert apartment.cover_photo_id == apartment.photos.order_by("created_at").first().pk
+    assert apartment.listing_links.get().listing == listing
+    assert apartment.entries.get().photos.count() == 2
+    response = client.get(reverse("viewing_photo", args=[apartment.cover_photo_id, "full"]))
+    assert response.status_code == 200
+    response.close()
+
+
+def test_create_rejects_invalid_photo_without_partial_card(client, owner, listing, settings):
+    client.force_login(owner)
+    response = client.post(reverse("viewing_create"), {
+        "title": "Ошибка фото", "decision": "thinking", "seed_listing": listing.pk,
+        "photos": [photo_upload(), SimpleUploadedFile("bad.jpg", b"broken")],
+    })
+    assert response.status_code == 400
+    assert "photos" in response.context["form"].errors
+    assert not ViewingApartment.objects.exists()
+    assert not list(settings.MEDIA_ROOT.rglob("*.jpg"))
+
+
+def test_create_photo_storage_failure_rolls_back_everything(client, owner, listing, settings):
+    client.force_login(owner)
+    storage = ViewingPhoto._meta.get_field("image").storage
+    original_save = storage.save
+    calls = 0
+
+    def fail_second_file(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("storage unavailable")
+        return original_save(*args, **kwargs)
+
+    with patch.object(storage, "save", side_effect=fail_second_file):
+        response = client.post(reverse("viewing_create"), {
+            "title": "Ошибка хранилища", "decision": "thinking", "seed_listing": listing.pk,
+            "photos": [photo_upload()],
+        })
+    assert response.status_code == 400
+    assert "Карточка не создана" in response.content.decode()
+    assert not ViewingApartment.objects.exists()
+    assert not ViewingEntry.objects.exists()
+    assert not ViewingPhoto.objects.exists()
+    assert not listing.viewing_links.exists()
+    assert not list(settings.MEDIA_ROOT.rglob("*.jpg"))

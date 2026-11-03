@@ -7,8 +7,10 @@
     const kind = form.querySelector('[name="kind"]');
     const toggle = () => form.querySelectorAll('[data-visit-field]').forEach(field => {field.hidden = kind.value !== 'visit';});
     kind.addEventListener('change', toggle); toggle();
-    const input = form.querySelector('[type="file"]');
-    const preview = form.querySelector('[data-upload-preview]');
+  });
+  document.querySelectorAll('.vn-upload').forEach(upload => {
+    const input = upload.querySelector('[type="file"]');
+    const preview = upload.querySelector('[data-upload-preview]');
     let urls = [];
     input.addEventListener('change', () => {
       urls.forEach(url => URL.revokeObjectURL(url)); urls = []; preview.replaceChildren();

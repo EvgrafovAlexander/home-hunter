@@ -11,10 +11,10 @@ from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .forms_viewings import ApartmentForm, EntryForm, ListingReferenceForm, PhotoCaptionForm
+from .forms_viewings import ApartmentCreateForm, ApartmentForm, EntryForm, ListingReferenceForm, PhotoCaptionForm
 from .models import Listing, ViewingApartment, ViewingEntry, ViewingPhoto
 from .services.viewings import (
-    apartment_initial, apartment_queryset, change_listing_link, linked_apartments,
+    apartment_initial, apartment_queryset, change_listing_link, create_apartment, linked_apartments,
     resolve_viewing_listing, save_apartment, save_viewing_entry, update_viewing_photo,
 )
 
@@ -54,18 +54,20 @@ def viewing_create(request):
             listing = _listing(request, reference_form.cleaned_data["reference"])
         except ValidationError as exc:
             reference_form.add_error("reference", exc)
-    form = ApartmentForm(request.POST if request.method == "POST" else None,
-                         initial=apartment_initial(listing) if listing else None)
+    form = ApartmentCreateForm(request.POST if request.method == "POST" else None, request.FILES or None,
+                               initial=apartment_initial(listing) if listing else None)
     if request.method == "POST" and form.is_valid():
         if reference and not listing:
             form.add_error(None, "Не удалось привязать объявление. Проверьте его ID.")
         else:
             try:
-                apartment = save_apartment(request.user, form.cleaned_data, listing=listing)
+                apartment = create_apartment(request.user, form.cleaned_data, form.prepared_photos, listing=listing)
             except ValidationError as exc:
                 form.add_error(None, exc)
+            except OSError:
+                form.add_error(None, "Не удалось сохранить фотографии. Карточка не создана. Выберите файлы и попробуйте ещё раз.")
             else:
-                messages.success(request, "Квартира добавлена. Теперь можно записать впечатления и загрузить фотографии.")
+                messages.success(request, "Квартира добавлена. Теперь можно записать впечатления и запланировать просмотр.")
                 return redirect("viewing_detail", pk=apartment.pk)
     return render(request, "listings/viewings/apartment_form.html", {
         "form": form, "reference_form": reference_form, "listing": listing,

@@ -2,4 +2,4 @@
 <div class="vn-form-grid">{% include 'listings/viewings/_field.html' with field=form.kind %}{% include 'listings/viewings/_field.html' with field=form.status %}{% include 'listings/viewings/_field.html' with field=form.happened_at %}</div>
 <p class="vn-muted" data-visit-field>Время по Екатеринбургу.</p>
 {% include 'listings/viewings/_field.html' with field=form.body %}
-<div class="vn-upload">{% include 'listings/viewings/_field.html' with field=form.photos %}<p>До 12 фото за раз, каждое до 10 МБ. JPEG, PNG или WebP. Фото сжимаются до 1920 px; исходники и EXIF не сохраняются.</p><div class="vn-upload-preview" data-upload-preview></div></div>
+{% include 'listings/viewings/_photo_fields.html' %}
