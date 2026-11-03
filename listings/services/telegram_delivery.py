@@ -98,44 +98,57 @@ def enqueue_new_listing_alert(listing_id: int):
 
 @transaction.atomic
 def claim_listing_alerts(limit: int = 10, *, with_attempts: bool = False, alert_id: int | None = None):
-    """Забирает готовые и просроченные записи; with_attempts возвращает пары ID/попытка."""
+    """Забирает до limit готовых записей; with_attempts возвращает пары ID/попытка."""
     now = timezone.now()
-    rows = list(
+    if limit <= 0:
+        return []
+    # Ожидание координат не расходует места в пакете отправки. Успешная
+    # или неуспешная попытка геокодирования возвращает запись в кандидаты.
+    geocoded = (
+        Q(listing__latitude__isnull=False, listing__longitude__isnull=False)
+        | (Q(listing__geocode_status__isnull=False) & ~Q(listing__geocode_status=""))
+    )
+    candidates = (
         TelegramListingAlert.objects.select_for_update(skip_locked=True).select_related("listing")
-        .filter(Q(delivery_status__in=(
+        .filter(delivery_status__in=(
             TelegramListingAlert.DeliveryStatus.AWAITING_GEOCODE,
             TelegramListingAlert.DeliveryStatus.PENDING,
             TelegramListingAlert.DeliveryStatus.FAILED,
-        )) | Q(delivery_status=TelegramListingAlert.DeliveryStatus.SENDING))
+            TelegramListingAlert.DeliveryStatus.SENDING,
+        ))
+        .filter(~Q(delivery_status=TelegramListingAlert.DeliveryStatus.AWAITING_GEOCODE) | geocoded)
         .filter(Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now))
         .filter(Q(locked_until__isnull=True) | Q(locked_until__lte=now))
         .filter(Q(pk=alert_id) if alert_id is not None else Q())
-        .order_by("pk")[:limit]
     )
     claimed = []
-    for alert in rows:
-        if alert.locked_until and alert.locked_until > now:
-            continue
-        state, reason = telegram_listing_eligibility(alert.listing)
-        alert.filter_checked_at = now
-        alert.filter_reason = reason
-        if state == TelegramListingAlert.DeliveryStatus.AWAITING_GEOCODE:
-            alert.delivery_status = state
-            alert.next_attempt_at = now + timedelta(minutes=10)
-            alert.save(update_fields=("delivery_status", "filter_reason", "filter_checked_at", "next_attempt_at"))
-            continue
-        if state == TelegramListingAlert.DeliveryStatus.SKIPPED:
-            alert.delivery_status = state
+    last_pk = 0
+    while len(claimed) < limit:
+        rows = list(candidates.filter(pk__gt=last_pk).order_by("pk")[:limit - len(claimed)])
+        if not rows:
+            break
+        last_pk = rows[-1].pk
+        for alert in rows:
+            state, reason = telegram_listing_eligibility(alert.listing)
+            alert.filter_checked_at = now
+            alert.filter_reason = reason
+            if state == TelegramListingAlert.DeliveryStatus.AWAITING_GEOCODE:
+                alert.delivery_status = state
+                alert.next_attempt_at = now + timedelta(minutes=10)
+                alert.save(update_fields=("delivery_status", "filter_reason", "filter_checked_at", "next_attempt_at"))
+                continue
+            if state == TelegramListingAlert.DeliveryStatus.SKIPPED:
+                alert.delivery_status = state
+                alert.next_attempt_at = None
+                alert.locked_until = None
+                alert.save(update_fields=("delivery_status", "filter_reason", "filter_checked_at", "next_attempt_at", "locked_until"))
+                continue
+            alert.delivery_status = TelegramListingAlert.DeliveryStatus.SENDING
+            alert.delivery_attempts += 1
+            alert.locked_until = now + CLAIM_LEASE
             alert.next_attempt_at = None
-            alert.locked_until = None
-            alert.save(update_fields=("delivery_status", "filter_reason", "filter_checked_at", "next_attempt_at", "locked_until"))
-            continue
-        alert.delivery_status = TelegramListingAlert.DeliveryStatus.SENDING
-        alert.delivery_attempts += 1
-        alert.locked_until = now + CLAIM_LEASE
-        alert.next_attempt_at = None
-        alert.save(update_fields=("delivery_status", "delivery_attempts", "locked_until", "next_attempt_at", "filter_reason", "filter_checked_at"))
-        claimed.append((alert.pk, alert.delivery_attempts) if with_attempts else alert.pk)
+            alert.save(update_fields=("delivery_status", "delivery_attempts", "locked_until", "next_attempt_at", "filter_reason", "filter_checked_at"))
+            claimed.append((alert.pk, alert.delivery_attempts) if with_attempts else alert.pk)
     return claimed
 
 

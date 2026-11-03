@@ -112,3 +112,50 @@ def test_stale_attempt_does_not_send(settings, monkeypatch):
         pytest.fail("Устаревшая попытка не должна отправлять сообщение")
     monkeypatch.setattr("listings.services.deal_alerts._send_reviewable_listing", unexpected_send)
     assert not notify_new_listing(0, alert_id=alert.pk, attempt=1)
+
+
+@pytest.mark.parametrize("initial_state", ["awaiting_geocode", "pending", "failed", "sending"])
+def test_waiting_geocoding_does_not_block_ready_alert(settings, initial_state):
+    settings.TG_LISTING_ALERTS_ENABLED = True
+    settings.TG_CHANNEL_ID = "-100123"
+    waiting_ids = []
+    for index in range(10):
+        alert = enqueue_new_listing_alert(make_listing(external_id=f"waiting-{index}").pk)
+        waiting_ids.append(alert.pk)
+    # Проверяем также потерю координат после постановки в очередь и старый захват.
+    TelegramListingAlert.objects.filter(pk__in=waiting_ids).update(delivery_status=initial_state)
+    ready = enqueue_new_listing_alert(make_listing(external_id="ready", geocode_status="not_found").pk)
+    assert claim_listing_alerts(10, with_attempts=True) == [(ready.pk, 1)]
+    assert not TelegramListingAlert.objects.filter(pk__in=waiting_ids).exclude(
+        delivery_status="awaiting_geocode", delivery_attempts=0,
+    ).exists()
+
+
+@pytest.mark.parametrize("geocode_status,coordinates", [("success", False), ("not_found", False), ("error", False), (None, True)])
+def test_geocoded_waiting_alert_is_not_hidden_by_earlier_waiting_rows(settings, geocode_status, coordinates):
+    settings.TG_LISTING_ALERTS_ENABLED = True
+    settings.TG_CHANNEL_ID = "-100123"
+    for index in range(10):
+        enqueue_new_listing_alert(make_listing(external_id=f"waiting-{index}").pk)
+    listing = make_listing(external_id="resolved")
+    alert = enqueue_new_listing_alert(listing.pk)
+    listing.geocode_status = geocode_status
+    if coordinates:
+        listing.latitude, listing.longitude = 54.7, 55.9
+    listing.save()
+    assert claim_listing_alerts(1) == [alert.pk]
+
+
+def test_filtered_candidates_do_not_consume_delivery_limit(settings):
+    settings.TG_LISTING_ALERTS_ENABLED = True
+    settings.TG_CHANNEL_ID = "-100123"
+    hidden = make_listing(external_id="hidden", geocode_status="error")
+    skipped = enqueue_new_listing_alert(hidden.pk)
+    hidden.is_visible = False
+    hidden.save(update_fields=("is_visible",))
+    ready = [enqueue_new_listing_alert(make_listing(external_id=f"ready-{i}", geocode_status="error").pk) for i in range(3)]
+    assert claim_listing_alerts(2) == [row.pk for row in ready[:2]]
+    skipped.refresh_from_db()
+    assert skipped.delivery_status == "skipped"
+    ready[2].refresh_from_db()
+    assert ready[2].delivery_status == "pending"
