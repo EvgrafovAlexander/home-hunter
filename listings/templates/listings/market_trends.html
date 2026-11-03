@@ -1,0 +1,47 @@
+{% extends 'listings/base.html' %}
+{% load static humanize %}
+{% block title %}Динамика рынка · Home Hunter{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'listings/market_trends.css' %}">
+<section class="market-page">
+  <h1>Динамика рынка</h1>
+  <p>Цены предложения и изменения наблюдаемой базы. Источники показаны отдельно, личные скрытия и оценки не влияют на статистику.</p>
+  <form method="get" class="market-filters">
+    {{ form.non_field_errors }}
+    {% for field in form %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}
+    <button type="submit">Показать</button>
+  </form>
+  <datalist id="market-districts">{% for item in options.district %}<option value="{{ item }}">{% endfor %}</datalist>
+  <datalist id="market-microdistricts">{% for item in options.microdistrict %}<option value="{{ item }}">{% endfor %}</datalist>
+  {% if has_data %}
+    <p class="market-notice">Последний срез: {{ latest.captured_at|date:'d.m.Y H:i' }}. Полнота охвата не подтверждена: успешный опрос может читать только часть выдачи. Пропуски не заменяются нулями.</p>
+    <div class="market-charts">
+      <article><h2>Цена за м²</h2><p>Медиана и диапазон 25–75% активных предложений.</p><div data-market-chart="prices"></div></article>
+      <article><h2>Активное предложение</h2><p>Количество объявлений на дату среза.</p><div data-market-chart="active"></div></article>
+      <article><h2>Новые и снятые</h2><p>Новые обнаружения и переходы из активных в неактивные между концами семидневного интервала.</p><div data-market-chart="flows"></div></article>
+      <article><h2>Доля снижений цены</h2><p>Среди объявлений, активных на обе даты, с ценой и неизменными характеристиками сегмента.</p><div data-market-chart="reductions"></div></article>
+      <article><h2>Изменение цены у тех же объектов</h2><p>Медиана индивидуальных изменений за семь дней. Помогает отделить движение цен от смены состава предложения.</p><div data-market-chart="matched"></div></article>
+    </div>
+    <details class="market-method"><summary>Как читать графики</summary>
+      <p>Точка — воскресный срез; текущая неделя представлена последним доступным срезом. Это значения на дату, а не среднее за неделю. Цена за м² рассчитывается из цены и площади; неизвестные и неположительные значения исключаются.</p>
+      <p>Сравнение требует восьми последовательных дневных срезов с одинаковым охватом и методикой, а также успешного опроса каждого поиска в каждом срезе за предшествующие 24 часа. При смене охвата линии разрываются. Наличие ошибок опроса видно в таблице.</p>
+      <p>В выборку входят объявления, связанные с включёнными поисками. Активность учитывает статус публикации и активную связь с поиском. Дубли между площадками не объединяются; повторные публикации под новым ID могут считаться новыми объявлениями.</p>
+      <p>Снятие не означает продажу. Возвраты и кратковременные изменения между двумя конечными датами не входят в показатели переходов. Дата обнаружения может отличаться от даты публикации. Первый срез и пробелы в истории не заполняются задним числом.</p>
+    </details>
+    <div class="market-table-wrap"><table class="market-table">
+      <caption>Недельные наблюдения и качество данных</caption>
+      <thead><tr><th>Дата</th><th>Активных</th><th>С ценой/м²</th><th>Медиана, ₽/м²</th><th>Новых</th><th>Снятых</th><th>Снизили, %</th><th>Изменение у тех же, %</th><th>Пар для сравнения</th><th>Качество / сравнение</th></tr></thead>
+      <tbody>{% for point in points %}<tr>
+        <td>{{ point.day }}</td><td>{{ point.active|default_if_none:'—' }}</td><td>{{ point.samples|default_if_none:'—' }}</td>
+        <td>{{ point.median|default_if_none:'—' }}</td><td>{{ point.new|default_if_none:'—' }}</td><td>{{ point.removed|default_if_none:'—' }}</td>
+        <td>{{ point.reduced_pct|default_if_none:'—' }}</td><td>{{ point.matched_change|default_if_none:'—' }}</td><td>{{ point.matched_count|default_if_none:'—' }}</td>
+        <td>{% if point.quality %}Опросы: {{ point.quality.successful_searches }}/{{ point.quality.search_count }} поисков; ошибок {{ point.quality.failed_scans }}; выполняются {{ point.quality.running_scans }}.<br>{% endif %}{{ point.reason }}</td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    {{ points|json_script:'market-points' }}
+  {% elif not form.errors %}
+    <div class="market-notice"><h2>История ещё не накоплена</h2><p>Для этого источника и периода нет дневных срезов. После запуска ежедневного сбора здесь появятся первые точки; недельное сравнение станет доступно после восьми последовательных наблюдений.</p></div>
+  {% endif %}
+</section>
+<script src="{% static 'listings/market_trends.js' %}" defer></script>
+{% endblock %}

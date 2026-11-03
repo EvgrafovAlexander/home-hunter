@@ -5,7 +5,8 @@ from listings.models import NetworkRoute, PollingDiagnosticJob, PollingProfile, 
 
 
 @pytest.mark.django_db
-def test_source_profile_is_inherited_by_all_polling_modes():
+def test_source_profile_is_inherited_by_all_polling_modes(settings):
+    settings.MOBILE_PROXY_URL = ""
     route = NetworkRoute.objects.create(
         code="mobile_test", name="Mobile test", kind="mobile_proxy", proxy_url="socks5://mobile:1080",
     )

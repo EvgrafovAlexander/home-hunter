@@ -16,6 +16,10 @@ def test_cian_command_persists_and_deduplicates(settings, tmp_path):
     settings.CIAN_STATE_DIR=tmp_path/'cian'
     settings.CIAN_PROXY_URL='socks5://localhost:1080'
     settings.CIAN_PAGE_DELAY_SECONDS=0.01
+    # Проверка сохранения не должна зависеть от времени запуска тестов.
+    settings.CIAN_POLL_START_HOUR = 0
+    settings.CIAN_POLL_END_HOUR = 24
+    settings.TG_BOT_TOKEN = ""
     SearchQuery.objects.create(source='cian',name='CIAN fixture',url=URL)
     def factory(source, **kwargs):
         assert source=='cian' and kwargs['headless'] is False
@@ -25,7 +29,7 @@ def test_cian_command_persists_and_deduplicates(settings, tmp_path):
         return c
     with patch('listings.management.commands.collect_listings.get_collector',side_effect=factory):
         for _ in range(2):
-            call_command('collect_listings',source='cian',mode='fast',stdout=StringIO())
+            call_command('collect_listings',source='cian',mode='fast',headless=False,stdout=StringIO())
     assert Listing.objects.filter(source='cian').count()==1
     assert PriceHistory.objects.count()==1 and ListingSnapshot.objects.count()==1
     assert Scan.objects.filter(status='success').count()==2

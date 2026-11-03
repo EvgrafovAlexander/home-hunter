@@ -227,7 +227,11 @@ def test_proxy_options_strip_embedded_credentials():
     }
 
 
-@pytest.mark.parametrize('proxy', ['localhost:1080', 'socks5://host',
+def test_proxy_options_accept_host_and_port_without_scheme():
+    assert build_proxy_options("localhost:1080") == {"server": "http://localhost:1080"}
+
+
+@pytest.mark.parametrize('proxy', ['localhost', 'socks5://host',
                                   'http://host:1080/path', 'http://host:99999'])
 def test_invalid_proxy_does_not_start_browser(settings, proxy):
     from unittest.mock import patch

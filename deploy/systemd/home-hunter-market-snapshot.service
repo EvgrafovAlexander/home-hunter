@@ -1,0 +1,11 @@
+[Unit]
+Description=Home Hunter daily market observation
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/home_hunter
+ExecStart=/usr/bin/docker compose exec -T web python manage.py capture_market_snapshot
+TimeoutStartSec=5min

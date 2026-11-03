@@ -1,0 +1,10 @@
+[Unit]
+Description=Home Hunter daily market observation at 23:55 Yekaterinburg
+
+[Timer]
+OnCalendar=*-*-* 23:55:00 Asia/Yekaterinburg
+Persistent=true
+Unit=home-hunter-market-snapshot.service
+
+[Install]
+WantedBy=timers.target
