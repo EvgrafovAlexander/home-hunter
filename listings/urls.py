@@ -6,6 +6,7 @@ urlpatterns = [
     path("viewings/", views_viewings.viewing_list, name="viewing_list"),
     path("viewings/new/", views_viewings.viewing_create, name="viewing_create"),
     path("viewings/<int:pk>/", views_viewings.viewing_detail, name="viewing_detail"),
+    path("viewings/<int:pk>/delete/", views_viewings.viewing_delete, name="viewing_delete"),
     path("viewings/<int:pk>/edit/", views_viewings.viewing_edit, name="viewing_edit"),
     path("viewings/<int:pk>/entries/<int:entry_id>/edit/", views_viewings.viewing_entry_edit, name="viewing_entry_edit"),
     path("viewings/photos/<uuid:photo_id>/<str:variant>/", views_viewings.viewing_photo, name="viewing_photo"),

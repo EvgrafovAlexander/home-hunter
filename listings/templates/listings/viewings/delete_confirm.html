@@ -1,0 +1,8 @@
+{% extends 'listings/viewings/base.html' %}
+{% block viewing_content %}
+<a class="vn-back" href="{% url 'viewing_list' %}">← Мои просмотры</a>
+<section class="vn-panel"><h1>Удалить карточку?</h1><h2>{{ apartment.title }}</h2>
+<p>Будут удалены карточка, все её комментарии, записи просмотров и фотографии. Отменить удаление нельзя.</p>
+<p class="vn-muted">Объявления HomeHunter и объявления на площадках останутся.</p>
+<form method="post">{% csrf_token %}{{ form.as_p }}<div class="vn-actions"><a class="vn-button secondary" href="{% url 'viewing_list' %}">Отмена</a><button class="vn-button danger">Да, удалить карточку</button></div></form></section>
+{% endblock %}

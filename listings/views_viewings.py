@@ -11,11 +11,11 @@ from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .forms_viewings import ApartmentCreateForm, ApartmentForm, EntryForm, ListingReferenceForm, PhotoCaptionForm
+from .forms_viewings import ApartmentDeleteForm, ApartmentPhotoForm, EntryForm, ListingReferenceForm, PhotoCaptionForm
 from .models import Listing, ViewingApartment, ViewingEntry, ViewingPhoto
 from .services.viewings import (
-    apartment_initial, apartment_queryset, change_listing_link, create_apartment, linked_apartments,
-    resolve_viewing_listing, save_apartment, save_viewing_entry, update_viewing_photo,
+    apartment_initial, apartment_queryset, change_listing_link, create_apartment, delete_apartment, linked_apartments,
+    resolve_viewing_listing, save_apartment_with_photos, save_viewing_entry, update_viewing_photo,
 )
 
 
@@ -54,7 +54,7 @@ def viewing_create(request):
             listing = _listing(request, reference_form.cleaned_data["reference"])
         except ValidationError as exc:
             reference_form.add_error("reference", exc)
-    form = ApartmentCreateForm(request.POST if request.method == "POST" else None, request.FILES or None,
+    form = ApartmentPhotoForm(request.POST if request.method == "POST" else None, request.FILES or None,
                                initial=apartment_initial(listing) if listing else None)
     if request.method == "POST" and form.is_valid():
         if reference and not listing:
@@ -79,14 +79,16 @@ def viewing_create(request):
 @require_http_methods(["GET", "POST"])
 def viewing_edit(request, pk):
     apartment = _owned(request, pk)
-    form = ApartmentForm(request.POST if request.method == "POST" else None, instance=apartment)
+    form = ApartmentPhotoForm(request.POST if request.method == "POST" else None, request.FILES or None, instance=apartment)
     if request.method == "POST" and form.is_valid():
         try:
-            save_apartment(request.user, form.cleaned_data, apartment_id=pk)
+            save_apartment_with_photos(request.user, form.cleaned_data, form.prepared_photos, apartment_id=pk)
         except ValidationError as exc:
             form.add_error(None, exc)
+        except OSError:
+            form.add_error(None, "Не удалось сохранить фотографии. Изменения не сохранены. Выберите файлы и попробуйте ещё раз.")
         else:
-            messages.success(request, "Сведения сохранены.")
+            messages.success(request, "Сведения и фотографии сохранены.")
             return redirect("viewing_detail", pk=pk)
     return render(request, "listings/viewings/apartment_form.html", {"form": form, "apartment": apartment},
                   status=400 if request.method == "POST" else 200)
@@ -195,3 +197,21 @@ def viewing_photo_update(request, photo_id):
     else:
         messages.error(request, "Подпись должна быть не длиннее 200 символов.")
     return redirect("viewing_detail", pk=photo.apartment_id)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def viewing_delete(request, pk):
+    apartment = _owned(request, pk)
+    form = ApartmentDeleteForm(request.POST if request.method == "POST" else None,
+                               initial={"version": apartment.version})
+    if request.method == "POST" and form.is_valid():
+        try:
+            delete_apartment(request.user, pk, form.cleaned_data["version"])
+        except ValidationError as exc:
+            form.add_error(None, exc)
+        else:
+            messages.success(request, "Карточка удалена.")
+            return redirect("viewing_list")
+    return render(request, "listings/viewings/delete_confirm.html", {"apartment": apartment, "form": form},
+                  status=400 if request.method == "POST" else 200)

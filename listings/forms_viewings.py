@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 from django import forms
 from django.core.exceptions import ValidationError
 
-from .models import ViewingApartment, ViewingEntry
+from .models import ViewingApartment, ViewingEntry, ViewingPhoto
 from .services.viewing_photos import prepare_viewing_photos
 
 
@@ -56,7 +56,15 @@ class MultiplePhotoField(forms.FileField):
         return [super(MultiplePhotoField, self).clean(item) for item in files]
 
 
-class ApartmentCreateForm(ApartmentForm):
+class ApartmentPhotoForm(ApartmentForm):
+    delete_photos = forms.ModelMultipleChoiceField(queryset=ViewingPhoto.objects.none(), required=False,
+                                                   widget=forms.CheckboxSelectMultiple, label="Удалить фотографии")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["delete_photos"].queryset = self.instance.photos.all()
+
     photos = MultiplePhotoField(label="Фотографии", required=False,
                                 widget=MultiplePhotoInput(attrs={"accept": "image/jpeg,image/png,image/webp"}))
 
@@ -117,3 +125,7 @@ class ListingReferenceForm(forms.Form):
 
 class PhotoCaptionForm(forms.Form):
     caption = forms.CharField(label="Подпись", max_length=200, required=False)
+
+
+class ApartmentDeleteForm(forms.Form):
+    version = forms.IntegerField(min_value=1, widget=forms.HiddenInput)

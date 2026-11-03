@@ -98,16 +98,28 @@ def save_apartment(owner, cleaned, *, apartment_id=None, listing=None):
 
 def create_apartment(owner, cleaned, prepared_photos, *, listing=None):
     """Создаёт карточку с фото одной транзакцией, удаляя новые файлы при ошибке."""
-    if not prepared_photos:
-        return save_apartment(owner, cleaned, listing=listing)
+    return save_apartment_with_photos(owner, cleaned, prepared_photos, listing=listing)
+
+
+def save_apartment_with_photos(owner, cleaned, prepared_photos, *, apartment_id=None, listing=None):
+    """Сохраняет сведения и новые фото атомарно, проверяя версию и сохраняя прежнюю галерею."""
+    removed_ids = {photo.pk for photo in cleaned.get("delete_photos", [])}
+    if not prepared_photos and not removed_ids:
+        return save_apartment(owner, cleaned, apartment_id=apartment_id, listing=listing)
     written = []
     with viewing_media_lock():
         try:
             with transaction.atomic():
-                apartment = save_apartment(owner, cleaned, listing=listing)
-                entry = ViewingEntry.objects.create(apartment=apartment, kind="note", status="",
-                                                    body="Фотографии при создании карточки.")
-                _save_photos(apartment, prepared_photos, written, entry=entry)
+                apartment = save_apartment(owner, cleaned, apartment_id=apartment_id, listing=listing)
+                if apartment.photos.filter(pk__in=removed_ids).count() != len(removed_ids):
+                    raise ValidationError("Список фотографий изменился. Обновите страницу.")
+                for photo_id in removed_ids:
+                    update_viewing_photo(owner, photo_id, action="delete")
+                apartment.refresh_from_db(fields=["cover_photo"])
+                if prepared_photos:
+                    entry = ViewingEntry.objects.create(apartment=apartment, kind="note", status="",
+                                                        body="Фотографии добавлены при редактировании." if apartment_id else "Фотографии при создании карточки.")
+                    _save_photos(apartment, prepared_photos, written, entry=entry)
             return apartment
         except Exception:
             for storage, name in written:
@@ -195,3 +207,19 @@ def update_viewing_photo(owner, photo_id, *, action, caption=""):
             transaction.on_commit(remove_files, robust=True)
         else:
             raise ValidationError("Неизвестное действие с фотографией.")
+
+
+def delete_apartment(owner, apartment_id, version):
+    """Удаляет личную карточку и записи; файлы удаляет после commit, объявления сохраняет."""
+    with viewing_media_lock(), transaction.atomic():
+        apartment = ViewingApartment.objects.select_for_update().get(pk=apartment_id, owner=owner)
+        if apartment.version != version:
+            raise ValidationError("Карточка изменилась. Откройте подтверждение удаления заново.")
+        files = [(field.storage, field.name) for photo in apartment.photos.all()
+                 for field in (photo.image, photo.thumbnail)]
+        apartment.delete()
+        def remove_files():
+            with viewing_media_lock():
+                for storage, name in files:
+                    storage.delete(name)
+        transaction.on_commit(remove_files, robust=True)

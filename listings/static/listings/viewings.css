@@ -4,3 +4,5 @@
 .vn-page input:not([type="hidden"]),.vn-page select{height:auto;min-height:44px;line-height:1.4}.vn-mobile-summary{display:none}@media(max-width:760px){.vn-mobile-summary{display:flex;flex-wrap:wrap;gap:8px 18px;margin:-8px 0 20px;color:#53665c}.vn-mobile-summary strong{color:#173c2e}}
 
 .vn-sidebar .vn-actions{flex-wrap:wrap;margin-bottom:14px}
+
+.vn-card-delete{border-top:1px solid #e8eee9;margin-top:14px;padding-top:12px;text-align:right}.vn-card-delete a{font-size:12px;color:#a54337}.vn-button.danger{background:#a54337}.vn-photo-remove span{display:flex;align-items:center;gap:8px;font-size:13px}.vn-page .vn-photo-remove input[type="checkbox"]{width:18px;min-height:18px;height:18px}

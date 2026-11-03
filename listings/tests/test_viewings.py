@@ -347,3 +347,96 @@ def test_comments_and_visits_have_separate_lists_and_errors(client, owner, apart
     assert response.status_code == 400
     assert "happened_at" in response.context["entry_form"].errors
     assert not response.context["comment_form"].is_bound
+
+
+def test_edit_adds_photos_and_preserves_cover(client, owner, apartment):
+    original = saved_photo(owner, apartment)
+    client.force_login(owner)
+    url = reverse("viewing_edit", args=[apartment.pk])
+    response = client.get(url)
+    assert b'name="photos"' in response.content
+    assert b'multipart/form-data' in response.content
+    data = {"title": "Обновлённая карточка", "decision": "thinking", "version": apartment.version}
+    assert client.post(url, {**data, "photos": [photo_upload()]}).status_code == 302
+    apartment.refresh_from_db()
+    assert apartment.title == data["title"]
+    assert apartment.photos.count() == 2
+    assert apartment.cover_photo_id == original.pk
+    assert original.image.storage.exists(original.image.name)
+    assert client.post(url, {**data, "photos": [photo_upload()]}).status_code == 400
+    assert apartment.photos.count() == 2
+
+
+def test_edit_photo_failure_preserves_card_and_existing_files(client, owner, apartment, settings):
+    original = saved_photo(owner, apartment)
+    apartment.refresh_from_db()
+    title, version = apartment.title, apartment.version
+    before_files = set(settings.MEDIA_ROOT.rglob("*.jpg"))
+    client.force_login(owner)
+    with patch.object(ViewingPhoto, "save", side_effect=OSError("storage failure")):
+        response = client.post(reverse("viewing_edit", args=[apartment.pk]), {
+            "title": "Не должно сохраниться", "decision": "thinking", "version": version, "photos": [photo_upload()],
+            "delete_photos": [str(original.pk)],
+        })
+    assert response.status_code == 400
+    apartment.refresh_from_db()
+    assert (apartment.title, apartment.version) == (title, version)
+    assert apartment.photos.get().pk == original.pk
+    assert set(settings.MEDIA_ROOT.rglob("*.jpg")) == before_files
+
+
+def test_edit_removes_selected_photo_after_commit(client, owner, apartment, django_capture_on_commit_callbacks):
+    first = saved_photo(owner, apartment)
+    second = saved_photo(owner, apartment)
+    client.force_login(owner)
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(reverse("viewing_edit", args=[apartment.pk]), {
+            "title": apartment.title, "decision": "thinking", "version": apartment.version,
+            "delete_photos": [str(first.pk)], "photos": [photo_upload()],
+        })
+        assert response.status_code == 302
+        assert first.image.storage.exists(first.image.name)
+    apartment.refresh_from_db()
+    assert apartment.photos.count() == 2
+    assert apartment.cover_photo_id == second.pk
+    assert not first.image.storage.exists(first.image.name)
+    assert second.image.storage.exists(second.image.name)
+
+
+def test_delete_confirmation_and_owner_access(client, owner, apartment, listing, django_capture_on_commit_callbacks):
+    photo = saved_photo(owner, apartment)
+    change_listing_link(owner, apartment.pk, listing)
+    url = reverse("viewing_delete", args=[apartment.pk])
+    client.force_login(owner)
+    response = client.get(url)
+    assert response.status_code == 200
+    assert "Да, удалить карточку" in response.content.decode()
+    assert ViewingApartment.objects.filter(pk=apartment.pk).exists()
+    assert client.post(url, {}).status_code == 400
+    assert client.post(url, {"version": apartment.version + 1}).status_code == 400
+    stranger = get_user_model().objects.create_user(username="delete-stranger")
+    client.force_login(stranger)
+    assert client.get(url).status_code == 404
+    assert client.post(url, {"version": apartment.version}).status_code == 404
+    client.force_login(owner)
+    with django_capture_on_commit_callbacks(execute=True):
+        assert client.post(url, {"version": apartment.version}).status_code == 302
+        assert photo.image.storage.exists(photo.image.name)
+    assert not ViewingApartment.objects.filter(pk=apartment.pk).exists()
+    assert not ViewingEntry.objects.filter(apartment_id=apartment.pk).exists()
+    assert not photo.image.storage.exists(photo.image.name)
+    assert Listing.objects.filter(pk=listing.pk).exists()
+
+
+def test_edit_cannot_delete_another_apartments_photo(client, owner, apartment):
+    other = ViewingApartment.objects.create(owner=owner, title="Другая квартира")
+    photo = saved_photo(owner, other)
+    client.force_login(owner)
+    response = client.post(reverse("viewing_edit", args=[apartment.pk]), {
+        "title": "Подмена", "decision": "thinking", "version": apartment.version, "delete_photos": [str(photo.pk)],
+    })
+    assert response.status_code == 400
+    assert "delete_photos" in response.context["form"].errors
+    assert ViewingPhoto.objects.filter(pk=photo.pk).exists()
+    apartment.refresh_from_db()
+    assert apartment.title != "Подмена"
