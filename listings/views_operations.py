@@ -321,3 +321,53 @@ def avito_manual_checks(request):
         "page": page, "days": days, "day_options": (3, 7, 14, 30), "tab": tab,
         "error": error, "saved": request.GET.get("saved") == "1",
     }, status=status)
+
+
+@staff_member_required
+def market_exclusions(request):
+    """Показывает общий список текущих исключений с причиной и ссылкой на управление."""
+    from django.core.paginator import Paginator
+    from .models import MarketExclusion
+    if request.method != "GET":
+        return HttpResponse(status=405)
+    exclusions = MarketExclusion.objects.filter(is_active=True).select_related("listing", "excluded_by")
+    return render(request, "listings/market_exclusions.html", {
+        "page": Paginator(exclusions, 50).get_page(request.GET.get("page")),
+    })
+
+
+@staff_member_required
+def market_exclusion_edit(request, listing_id):
+    """Применяет исключение или возврат только по POST с отдельной формы."""
+    from django.contrib import messages
+    from django.core.exceptions import ValidationError
+    from .forms_market_exclusions import MarketExclusionForm
+    from .models import MarketExclusion
+    from .services.market_exclusions import exclude_from_market, restore_to_market
+    if request.method not in {"GET", "POST"}:
+        return HttpResponse(status=405)
+    listing = get_object_or_404(Listing, pk=listing_id)
+    active = MarketExclusion.objects.filter(listing=listing, is_active=True).first()
+    form = MarketExclusionForm(request.POST if request.method == "POST" else None)
+    error = ""
+    if request.method == "POST":
+        try:
+            action = request.POST.get("action")
+            if action == "exclude" and form.is_valid():
+                exclude_from_market(request.user, listing.pk, **form.cleaned_data)
+                messages.success(request, "Объявление исключено из рыночной статистики.")
+                return redirect("market_exclusion_edit", listing_id=listing.pk)
+            elif action == "restore":
+                exclusion_id = request.POST.get("exclusion_id", "")
+                if not exclusion_id.isdigit():
+                    raise ValidationError("Некорректное исключение.")
+                restore_to_market(request.user, listing.pk, int(exclusion_id))
+                messages.success(request, "Объявление возвращено в рыночную статистику.")
+                return redirect("market_exclusion_edit", listing_id=listing.pk)
+            elif action != "exclude":
+                raise ValidationError("Неизвестное действие.")
+        except ValidationError as exc:
+            error = " ".join(exc.messages)
+    return render(request, "listings/market_exclusion_edit.html", {
+        "item": listing, "exclusion": active, "form": form, "error": error,
+    }, status=400 if request.method == "POST" else 200)

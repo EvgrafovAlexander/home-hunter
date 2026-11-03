@@ -8,6 +8,7 @@
 
 | Документ | Назначение |
 |---|---|
+| [`MARKET_EXCLUSIONS.md`](MARKET_EXCLUSIONS.md) | Общие исключения рынка, Telegram и перенос оценок. |
 | [`VIEWINGS.md`](VIEWINGS.md) | Личные квартиры, фото, полный backup и перенос на ноутбук. |
 | [`DEVELOPMENT.md`](DEVELOPMENT.md) | Локальный запуск, тесты и правила разработки. |
 | [`OPERATIONS.md`](OPERATIONS.md) | Развёртывание, резервные копии, Telegram и диагностика. |

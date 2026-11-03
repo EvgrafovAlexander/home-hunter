@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from listings.models import GeoZone, Listing, TelegramListingAlert
 from listings.services.personal_filters import zone_for_listing
+from listings.services.market_exclusions import is_market_excluded
 
 MIN_TARGET_AREA = Decimal("55")
 CLAIM_LEASE = timedelta(minutes=2)
@@ -51,6 +52,8 @@ def telegram_listing_eligibility(listing: Listing):
     """Возвращает состояние и причину допуска объявления к публикации в Telegram."""
     if not settings.TG_LISTING_ALERTS_ENABLED or not getattr(settings, "TG_CHANNEL_ID", ""):
         return TelegramListingAlert.DeliveryStatus.SKIPPED, "Telegram listing alerts disabled"
+    if is_market_excluded(listing):
+        return TelegramListingAlert.DeliveryStatus.SKIPPED, "excluded from market statistics"
     if not listing.is_visible:
         return TelegramListingAlert.DeliveryStatus.SKIPPED, "hidden location"
     if listing.area is None or Decimal(str(listing.area)) < MIN_TARGET_AREA:
@@ -192,3 +195,14 @@ def mark_listing_alert_failed(alert_id: int, error: str, *, attempt: int):
         next_attempt_at=timezone.now() + timedelta(seconds=delay),
         locked_until=None,
     ))
+
+
+def skip_excluded_claim(listing, alert_id, attempt):
+    """Перед отправкой повторно проверяет исключение и закрывает только свою попытку."""
+    if not is_market_excluded(listing):
+        return False
+    TelegramListingAlert.objects.filter(pk=alert_id, delivery_status="sending", delivery_attempts=attempt).update(
+        delivery_status="skipped", filter_reason="excluded from market statistics", filter_checked_at=timezone.now(),
+        next_attempt_at=None, locked_until=None,
+    )
+    return True

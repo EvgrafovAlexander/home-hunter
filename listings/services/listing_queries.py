@@ -106,6 +106,8 @@ def similar_listings(listing, limit=6):
     candidates = (Listing.objects.filter(is_visible=True, is_active=True, district=listing.district,
                                          rooms=listing.rooms)
                   .exclude(pk=listing.pk).exclude(area__isnull=True))
+    from .market_exclusions import eligible_market_queryset
+    candidates = eligible_market_queryset(candidates)
     if listing.microdistrict:
         candidates = candidates.filter(microdistrict=listing.microdistrict)
     else:

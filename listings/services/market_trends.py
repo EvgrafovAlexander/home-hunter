@@ -15,6 +15,8 @@ from django.utils import timezone
 
 from listings.models import Listing, ListingSearchQuery, MarketDailySnapshot, Scan, SearchQuery
 
+from .market_exclusions import excluded_listing_ids
+
 VERSION = 1
 SEGMENT_FIELDS = ("district", "microdistrict", "rooms", "area")
 
@@ -65,6 +67,8 @@ def capture_market_snapshot():
 
 
 def _matches(row, filters):
+    if row["id"] in filters.get("_excluded_ids", ()):
+        return False
     for key in ("district", "microdistrict", "rooms"):
         if filters.get(key) not in (None, "") and str(row.get(key)) != str(filters[key]):
             return False
@@ -134,6 +138,9 @@ def _weekly_point(day, snapshots, filters):
 
 def market_trends_context(filters, *, today=None):
     """Возвращает недельные точки и исторические варианты фильтров без личных скрытий."""
+    filters = dict(filters)
+    excluded = set(excluded_listing_ids())
+    filters["_excluded_ids"] = set() if filters.get("include_excluded") else excluded
     today = today or timezone.localdate()
     weeks = filters.get("weeks", 12)
     start = today - timedelta(weeks=weeks)
@@ -143,6 +150,8 @@ def market_trends_context(filters, *, today=None):
     options = {key: set() for key in ("district", "microdistrict", "rooms")}
     for snapshot in snapshots:
         for row in snapshot.listings:
+            if row["id"] in filters["_excluded_ids"]:
+                continue
             for key in options:
                 if row.get(key) not in (None, ""):
                     options[key].add(row[key])
@@ -155,4 +164,6 @@ def market_trends_context(filters, *, today=None):
     points = [_weekly_point(day, by_day, filters) for day in days]
     return {"points": points, "options": {key: sorted(values) for key, values in options.items()},
             "latest": snapshots[-1] if snapshots else None, "filters": filters,
-            "sources": SearchQuery.Source.choices, "has_data": bool(snapshots)}
+            "sources": SearchQuery.Source.choices, "has_data": bool(snapshots),
+            "excluded_count": len({row["id"] for snapshot in snapshots for row in snapshot.listings
+                                   if row["id"] in excluded}), "include_excluded": bool(filters.get("include_excluded"))}

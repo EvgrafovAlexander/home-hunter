@@ -593,3 +593,5 @@ from .models_avito_checks import AvitoManualCheck
 
 from .models_market import MarketDailySnapshot
 from .models_viewings import ViewingApartment, ViewingEntry, ViewingListingLink, ViewingPhoto
+
+from .models_market_exclusions import MarketExclusion  # noqa: E402,F401

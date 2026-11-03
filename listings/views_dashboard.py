@@ -10,6 +10,7 @@ from django.shortcuts import render
 from django.utils import timezone
 
 from .models import Listing
+from .services.market_exclusions import eligible_market_queryset, excluded_listing_ids
 from .services.dashboard import (
     build_daily_series,
     build_district_stats,
@@ -34,6 +35,14 @@ def dashboard(request):
     listings, filters = filtered_listings(request)
     # KPI используют видимую выборку, а медианы рынка — полный baseline.
     market_listings, _ = filtered_listings(request, visible=None)
+    include_excluded = request.GET.get("include_excluded") == "1"
+    excluded_count = market_listings.filter(pk__in=excluded_listing_ids()).count()
+    filters["include_excluded"] = include_excluded
+    if not include_excluded:
+        listings = eligible_market_queryset(listings)
+        market_listings = eligible_market_queryset(market_listings)
+    toggle_query = request.GET.copy()
+    toggle_query["include_excluded"] = "0" if include_excluded else "1"
     period_days = _integer(request.GET.get("stats_days", 30))
     if period_days not in (7, 30, 90):
         period_days = 30
@@ -72,6 +81,7 @@ def dashboard(request):
     total_rooms = rooms_two + rooms_three
     return render(request, "listings/dashboard.html", {
         "filters": filters, "filter_options": filter_options(), "total": listings.count(),
+        "excluded_count": excluded_count, "include_excluded": include_excluded, "market_toggle_query": toggle_query.urlencode(),
         "median_price": int(median(prices)) if prices else None,
         "median_sqm_price": int(median(sqm_prices)) if sqm_prices else None,
         "period_days": period_days, "daily": daily,

@@ -9,6 +9,7 @@ from .services.market_trends import market_trends_context
 
 
 class MarketFiltersForm(forms.Form):
+    include_excluded = forms.BooleanField(label="Полный рынок, включая исключённые", required=False)
     source = forms.ChoiceField(label="Источник", choices=SearchQuery.Source.choices, initial="cian")
     district = forms.CharField(label="Район", required=False, max_length=255)
     microdistrict = forms.CharField(label="Микрорайон", required=False, max_length=255)

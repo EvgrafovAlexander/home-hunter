@@ -5,6 +5,8 @@ import logging
 import re
 
 from django.conf import settings
+from listings.services.market_exclusions import is_market_excluded
+from listings.services.telegram_delivery import skip_excluded_claim
 from django.db import IntegrityError
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -105,6 +107,8 @@ def refresh_telegram_listing_score(listing_id: int) -> bool:
     try:
         alert = TelegramListingAlert.objects.select_related("listing").get(listing_id=listing_id)
     except TelegramListingAlert.DoesNotExist:
+        return False
+    if is_market_excluded(alert.listing):
         return False
     score, reasons = _telegram_fit_score(alert.listing)
     if score is None or not alert.message_id or not alert.message_text:
@@ -288,6 +292,8 @@ def notify_new_listing(listing_id: int, *, alert_id: int | None = None, attempt:
     lines.extend(["", f"Источник: {html.escape(source)}"])
     text = "\n".join(line for line in lines if line is not None)
     if not renew_listing_alert_claim(alert.pk, attempt):
+        return False
+    if skip_excluded_claim(listing, alert.pk, attempt):
         return False
     result = _send_reviewable_listing(listing, text)
     if not result:

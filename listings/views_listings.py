@@ -16,6 +16,8 @@ from .models import (
     SearchQuery,
 )
 from .services.change_history import change_events
+from .models import MarketExclusion
+from .services.market_exclusions import eligible_market_queryset
 from .services.market import MIN_TARGET_AREA
 from .services.personal_filters import annotate_personal_filter
 from .services.scoring import SHORTLIST_MIN_SCORE
@@ -33,6 +35,7 @@ from .views import (
 @login_required
 def listing_feed(request):
     listings, filters = filtered_listings(request)
+    listings = eligible_market_queryset(listings)
     # Малые площади остаются в рыночной статистике, но не показываются кандидатами.
     listings = listings.filter(area__gte=MIN_TARGET_AREA)
     preferences = scoring_preference_for(request.user)
@@ -227,7 +230,7 @@ def listing_detail(request, listing_id: int):
         ("Мусоропровод", yes_no(listing.has_garbage_chute) if listing.has_garbage_chute is not None else None),
     ]
     return render(request, "listings/detail.html", {
-        "item": listing, "price_history": price_history, "chart_points": chart_points,
+        "item": listing, "market_exclusion": MarketExclusion.objects.filter(listing=listing, is_active=True).first(), "price_history": price_history, "chart_points": chart_points,
         "price_low": min((entry.price for entry in price_history), default=None),
         "price_high": max((entry.price for entry in price_history), default=None),
         "change_events": change_events(snapshots), "similar_listings": similar_listings(listing),

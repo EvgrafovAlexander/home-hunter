@@ -5,6 +5,7 @@ from statistics import median
 from decimal import Decimal
 
 from listings.models import Listing, ListingSnapshot, Microdistrict
+from listings.services.market_exclusions import eligible_market_queryset, excluded_listing_ids, is_market_excluded
 from listings.services.microdistrict_polygons import canonical_microdistrict_name, normalized_microdistrict_label
 
 
@@ -34,7 +35,7 @@ class MarketComparison:
 
 
 def _comparable_queryset():
-    return (Listing.objects.filter(is_active=True, is_visible=True, price_per_sqm__isnull=False)
+    return (eligible_market_queryset(Listing.objects.filter(is_active=True, is_visible=True, price_per_sqm__isnull=False))
             .exclude(district__isnull=True).exclude(district="")
             .exclude(rooms__isnull=True).exclude(area__isnull=True))
 
@@ -86,6 +87,7 @@ def _comparison_for_rows(listing, rows):
 def annotate_market_position(listings):
     """Добавляет объявлениям единые поля сравнения с рынком."""
     """Добавляет объявлениям поля сравнения с рынком для web-ленты."""
+    excluded = set(excluded_listing_ids())
     comparable = _comparable_queryset().values(
         "id", "district", "microdistrict", "rooms", "area", "price_per_sqm",
     )
@@ -106,6 +108,10 @@ def annotate_market_position(listings):
         listing.market_confidence = "none"
         listing.market_state = ""
         listing.market_label = ""
+        listing.market_excluded = listing.pk in excluded
+        if listing.market_excluded:
+            listing.market_label = "Исключено из рыночной статистики"
+            continue
         if (listing.price_per_sqm is None or not listing.district
                 or listing.rooms is None or listing.area is None):
             continue
@@ -142,6 +148,8 @@ def market_position_details(listing: Listing):
     if (listing.price_per_sqm is None or not listing.district
             or listing.rooms is None or listing.area is None):
         return None
+    if is_market_excluded(listing):
+        return None
     rows = (_comparable_queryset().filter(district=listing.district).exclude(pk=listing.pk)
             .values("microdistrict", "rooms", "area", "price_per_sqm"))
     if listing.microdistrict:
@@ -157,6 +165,8 @@ def market_position_details(listing: Listing):
 
 def microdistrict_market_stats(listings, period_since, filters):
     """Считает медианные показатели рынка по микрорайонам."""
+    if not filters.get("include_excluded"):
+        listings = eligible_market_queryset(listings)
     rows = (listings.exclude(district__isnull=True).exclude(district="")
             .exclude(microdistrict__isnull=True).exclude(microdistrict="")
             .exclude(price_per_sqm__isnull=True)
@@ -179,6 +189,8 @@ def microdistrict_market_stats(listings, period_since, filters):
     removed_counts = {}
     removals = (ListingSnapshot.objects.filter(observed_at__gte=period_since, listing__is_visible=True)
                 .select_related("listing").only("data", "listing__source", "listing__district", "listing__microdistrict"))
+    if not filters.get("include_excluded"):
+        removals = removals.exclude(listing_id__in=excluded_listing_ids())
     for snapshot in removals:
         if snapshot.data.get("is_active") is not False:
             continue

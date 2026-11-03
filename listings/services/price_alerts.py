@@ -7,6 +7,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import IntegrityError
 
+from listings.services.market_exclusions import is_market_excluded
 from listings.models import Listing, TelegramListingAlert, TelegramPriceAlert
 from listings.services.scan_health import edit_telegram_message, send_telegram_message
 
@@ -57,6 +58,8 @@ def notify_price_change(listing_id: int, old_price: int | None, new_price: int |
     if not settings.TG_PRICE_ALERTS_ENABLED or not old_price or not new_price or old_price == new_price:
         return False
     listing = Listing.objects.get(pk=listing_id)
+    if is_market_excluded(listing):
+        return False
     min_area = Decimal(str(getattr(settings, "TG_PRICE_ALERT_MIN_AREA", 55)))
     if not listing.is_visible or listing.area is None or listing.area < min_area:
         return False

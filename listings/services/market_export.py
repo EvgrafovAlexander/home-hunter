@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from ..models import CianDetailPollState, Consideration, Listing, ListingReview, ListingSearchQuery, PriceHistory, SearchQuery
 from .market import MIN_TARGET_AREA, annotate_market_position
+from ..models import MarketExclusion
 
 
 TARGET_MIN_AREA = MIN_TARGET_AREA
@@ -19,6 +20,8 @@ TARGET_MIN_AREA = MIN_TARGET_AREA
 
 def _data_layer(listing):
     """Определяет слой записи, не исключая её из аналитической выгрузки."""
+    if getattr(listing, "market_excluded", False):
+        return "Исключено из рынка", getattr(listing, "market_exclusion_reason", "Ручное исключение"), False
     if listing.area is None:
         return "Вне рабочей выборки", "Нет площади", False
     area = Decimal(str(listing.area))
@@ -101,7 +104,14 @@ def build_market_xlsx(user):
     listings = list(Listing.objects.all().order_by("id"))
     # Расчёт сравнения должен совпадать с вебом и Telegram.
     annotate_market_position(listings)
+    exclusions = {item.listing_id: item for item in MarketExclusion.objects.filter(is_active=True)}
+    for item in listings:
+        item.market_exclusion_reason = exclusions[item.pk].get_reason_display() if item.pk in exclusions else ""
+    market_listings = [item for item in listings if not item.market_excluded]
     reviews = list(ListingReview.objects.filter(author=user).select_related("listing", "author").prefetch_related("tags").order_by("id"))
+    for review in reviews:
+        review.listing.market_excluded = review.listing_id in exclusions
+        review.listing.market_exclusion_reason = exclusions[review.listing_id].get_reason_display() if review.listing_id in exclusions else ""
     considerations = {item.review_id: item for item in Consideration.objects.filter(review__author=user)}
     own_reviews = {item.listing_id: item for item in reviews if item.author_id == user.id}
     histories = list(PriceHistory.objects.select_related("listing").order_by("listing_id", "observed_at", "id"))
@@ -147,7 +157,7 @@ def build_market_xlsx(user):
 
     market_rows = [["Район", "Микрорайон", "Все активные", "Кандидаты 55+", "Резерв 45–54", "Видимых", "Скрытых", "Медиана цены, ₽ (55+)", "Медиана за м², ₽ (55+)", "Медиана за м², ₽ (45–54)", "Медиана площади, м² (55+)"]]
     market_groups = {}
-    for item in listings:
+    for item in market_listings:
         if not item.is_active or not item.district or not item.microdistrict or item.price_per_sqm is None:
             continue
         market_groups.setdefault((item.district, item.microdistrict), []).append(item)
@@ -164,7 +174,7 @@ def build_market_xlsx(user):
 
     rooms_rows = [["Комнат", "Все активные", "Кандидаты 55+", "Резерв 45–54", "Видимых", "Скрытых", "Медиана цены, ₽ (55+)", "Медиана за м², ₽ (55+)", "Медиана за м², ₽ (45–54)", "Медиана площади, м² (55+)"]]
     for rooms in (2, 3):
-        entries = [item for item in listings if item.is_active and item.rooms == rooms and item.price_per_sqm is not None]
+        entries = [item for item in market_listings if item.is_active and item.rooms == rooms and item.price_per_sqm is not None]
         candidates = [item for item in entries if item.area is not None and item.area >= TARGET_MIN_AREA]
         reserve = [item for item in entries if item.area is not None and Decimal("45") <= item.area < TARGET_MIN_AREA]
         candidate_prices = [item.price for item in candidates if item.price is not None]
@@ -173,11 +183,13 @@ def build_market_xlsx(user):
         candidate_areas = [float(item.area) for item in candidates]
         rooms_rows.append([rooms, len(entries), len(candidates), len(reserve), sum(item.is_visible for item in entries), sum(not item.is_visible for item in entries), int(median(candidate_prices)) if candidate_prices else None, int(median(candidate_sqm)) if candidate_sqm else None, int(median(reserve_sqm)) if reserve_sqm else None, median(candidate_areas) if candidate_areas else None])
 
-    candidate_total = sum(item.is_active and item.area is not None and item.area >= TARGET_MIN_AREA for item in listings)
-    reserve_total = sum(item.is_active and item.area is not None and Decimal("45") <= item.area < TARGET_MIN_AREA for item in listings)
+    candidate_total = sum(item.is_active and item.area is not None and item.area >= TARGET_MIN_AREA for item in market_listings)
+    reserve_total = sum(item.is_active and item.area is not None and Decimal("45") <= item.area < TARGET_MIN_AREA for item in market_listings)
     historical_reviews_total = sum(review.listing.area is not None and review.listing.area < TARGET_MIN_AREA for review in reviews)
     summary_rows = [["Home Hunter — выгрузка рынка квартир"], [], ["Показатель", "Значение"], ["Дата выгрузки", timezone.now()], ["Квартир", len(listings)], ["Активных", sum(item.is_active for item in listings)], ["Рабочие кандидаты — от 55 м²", candidate_total], ["Резервные аналоги — 45–54 м²", reserve_total], ["Видимых", sum(item.is_visible for item in listings)], ["Скрытых", sum(not item.is_visible for item in listings)], ["Оценок пользователя", len(reviews)], ["Оценок вне текущего критерия", historical_reviews_total], ["Готов рассмотреть", len(considerations)], ["Историй цен", len(histories)], ["CIAN detail записей", len(states)], ["Источники", ", ".join(sorted({source_names.get(item.source, item.source) for item in listings}))]]
     methodology_rows = [["Правила использования выгрузки"], ["Рабочая выборка", "Только активные квартиры площадью от 55 м². Только их можно ранжировать и рекомендовать к просмотру."], ["Резервные аналоги", "Активные квартиры 45–54 м². Используются только при недостатке строгих аналогов; не являются кандидатами."], ["Строгие аналоги", "Тот же микрорайон, та же комнатность и близкая площадь. Основной ориентир — минимум 5 аналогов от 55 м²."], ["Низкая уверенность", "Если строгих аналогов меньше 5, вывод должен явно указывать размер выборки и использование резервных аналогов."], ["Цена", "Это цена предложения, а не подтверждённая цена сделки. Медиана — основной агрегат; среднее — только дополнительный."], ["Исторические оценки", "Оценки квартир меньше 55 м² сохранены для истории, но не являются текущим сигналом выбора."]]
+    summary_rows.append(["Исключено из рыночной статистики", len(exclusions)])
+    methodology_rows.append(["Ручные исключения", "Рыночные сводки и сравнения очищены от текущих исключений. Исходные квартиры, цены и оценки сохранены; причина указана в листе Квартиры."])
     sheets = [("Обзор", summary_rows, [34, 30]), ("Методика", methodology_rows, [26, 108]), ("Квартиры", listing_rows, [10, 14, 18, 42, 52, 52, 14, 14, 10, 12, 28, 16, 28, 12, 12, 9, 10, 12, 36, 18, 18, 16, 18, 10, 10, 14, 14, 16, 16, 16, 20, 10, 10, 20, 20, 20, 14, 22, 22, 28, 28, 18, 20, 42, 48]), ("Оценки", review_rows, [12, 12, 52, 52, 14, 36, 10, 12, 14, 28, 22, 16, 12, 22, 22, 30, 30, 30, 20, 20]), ("Цены", price_rows, [12, 12, 14, 20, 14, 14, 14, 16, 14, 24]), ("CIAN статусы", cian_rows, [12, 12, 14, 18, 18, 20, 36]), ("Рынок микрорайонов", market_rows, [18, 24, 14, 16, 16, 12, 12, 22, 22, 24, 24]), ("Рынок по комнатам", rooms_rows, [10, 14, 16, 16, 12, 12, 22, 22, 24, 24])]
     output = BytesIO()
     with ZipFile(output, "w", ZIP_DEFLATED) as archive:

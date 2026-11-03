@@ -5,6 +5,7 @@
 <link rel="stylesheet" href="{% static 'listings/market_trends.css' %}">
 <section class="market-page">
   <h1>Динамика рынка</h1>
+  <p>{% if include_excluded %}Полный рынок, включая исключённые объявления.{% else %}Расчёт с учётом текущих исключений на всех датах.{% endif %} Помечено в истории источника: {{ excluded_count }}. Исходные срезы не изменяются.</p>
   <p>Цены предложения и изменения наблюдаемой базы. Источники показаны отдельно, личные скрытия и оценки не влияют на статистику.</p>
   <form method="get" class="market-filters">
     {{ form.non_field_errors }}
