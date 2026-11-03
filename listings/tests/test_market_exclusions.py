@@ -191,3 +191,30 @@ def test_ingestion_does_not_remove_exclusion(staff):
     item.refresh_from_db()
     assert item.title == 'Обновлённое объявление'
     assert MarketExclusion.objects.filter(listing=item, is_active=True).exists()
+
+
+@pytest.mark.parametrize('available', [True, False])
+def test_avito_checkbox_is_independent_of_availability(client, staff, available):
+    item = flat()
+    item.source = 'avito'
+    item.is_active = available
+    item.publication_status = 'published' if available else 'unavailable'
+    item.last_seen_at = timezone.now()-timedelta(days=20)
+    item.save()
+    original = (item.is_active, item.publication_status, item.last_seen_at, item.price, item.updated_at)
+    client.force_login(staff)
+    return_to = reverse('avito_manual_checks') + ('?tab=queue&days=14&page=1' if available else '?tab=unavailable&days=14&page=1')
+    html = client.get(return_to).content.decode()
+    assert f'id="market-excluded-{item.pk}"' in html
+    endpoint = reverse('market_exclusion_edit', args=[item.pk])
+    response = client.post(endpoint, {'action':'set_excluded','excluded':'1','return_to':return_to})
+    assert response.status_code == 302 and response.url == return_to
+    exclusion = MarketExclusion.objects.get(listing=item,is_active=True)
+    assert exclusion.reason == 'unfinished'
+    assert 'checked' in client.get(return_to).content.decode().split(f'id="market-excluded-{item.pk}"')[1].split('>')[0]
+    assert client.post(endpoint, {'action':'set_excluded','exclusion_id':exclusion.pk,'return_to':return_to}).url == return_to
+    item.refresh_from_db()
+    assert (item.is_active, item.publication_status, item.last_seen_at, item.price, item.updated_at) == original
+    assert not MarketExclusion.objects.filter(listing=item,is_active=True).exists()
+    response = client.post(endpoint, {'action':'set_excluded','excluded':'1','return_to':'//evil.test/avito-checks/'})
+    assert response.url == endpoint

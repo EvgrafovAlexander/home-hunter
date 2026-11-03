@@ -1,9 +1,9 @@
 {% extends 'listings/base.html' %}{% load static %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'listings/market_exclusions.css' %}"><section class="market-exclusions">
-<a href="{% url 'market_exclusions' %}">← Все исключения</a><h1>Участие в рыночной статистике</h1><div class="market-exclusion-panel"><h2>#{{ item.pk }} · {{ item.address|default:item.title }}</h2><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Открыть на площадке ↗</a>
+{% if return_to %}<a href="{{ return_to }}">← Проверка Avito</a>{% else %}<a href="{% url 'market_exclusions' %}">← Все исключения</a>{% endif %}<h1>Участие в рыночной статистике</h1><div class="market-exclusion-panel"><h2>#{{ item.pk }} · {{ item.address|default:item.title }}</h2><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">Открыть на площадке ↗</a>
 {% if item.area >= 55 %}<a href="{% url 'listing_detail' item.pk %}">Карточка HomeHunter</a>{% endif %}
 {% if error %}<p role="alert">{{ error }}</p>{% endif %}
-{% if exclusion %}<p><strong>Исключено: {{ exclusion.get_reason_display }}</strong></p><p>{{ exclusion.comment|linebreaksbr }}</p><p>Пометка: {{ exclusion.excluded_by }} · {{ exclusion.created_at|date:'d.m.Y H:i' }}</p><form method="post">{% csrf_token %}<input type="hidden" name="exclusion_id" value="{{ exclusion.pk }}"><button name="action" value="restore">Вернуть в статистику</button></form>
-{% else %}<p>Пометка исключает объявление из расчётов и аналогов на всех датах, сохраняя само объявление и историю. Повторный сбор данных её не сбросит.</p><form method="post">{% csrf_token %}{{ form.as_p }}<button name="action" value="exclude">Исключить из статистики</button></form>{% endif %}
+{% if exclusion %}<p><strong>Исключено: {{ exclusion.get_reason_display }}</strong></p><p>{{ exclusion.comment|linebreaksbr }}</p><p>Пометка: {{ exclusion.excluded_by }} · {{ exclusion.created_at|date:'d.m.Y H:i' }}</p><form method="post">{% csrf_token %}<input type="hidden" name="return_to" value="{{ return_to }}"><input type="hidden" name="exclusion_id" value="{{ exclusion.pk }}"><button name="action" value="restore">Вернуть в статистику</button></form>
+{% else %}<p>Пометка исключает объявление из расчётов и аналогов на всех датах, сохраняя само объявление и историю. Повторный сбор данных её не сбросит.</p><form method="post">{% csrf_token %}<input type="hidden" name="return_to" value="{{ return_to }}">{{ form.as_p }}<button name="action" value="exclude">Исключить из статистики</button></form>{% endif %}
 </div></section>{% endblock %}

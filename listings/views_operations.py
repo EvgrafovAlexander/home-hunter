@@ -312,7 +312,11 @@ def avito_manual_checks(request):
         else:
             return redirect(f"{reverse('avito_manual_checks')}?days={days}&tab={tab}&saved=1")
     page = Paginator(avito_check_queue(days=days, unavailable=tab == "unavailable"), 20).get_page(request.GET.get("page"))
+    from .models import MarketExclusion
+    exclusions = {exclusion.listing_id: exclusion for exclusion in
+                  MarketExclusion.objects.filter(is_active=True, listing_id__in=[item.pk for item in page])}
     for item in page:
+        item.market_exclusion = exclusions.get(item.pk)
         item.manual_check_token = signing.dumps({
             "listing": item.pk, "user": request.user.pk,
             "version": item.updated_at.isoformat(), "operation": str(uuid4()),
@@ -350,24 +354,44 @@ def market_exclusion_edit(request, listing_id):
     active = MarketExclusion.objects.filter(listing=listing, is_active=True).first()
     form = MarketExclusionForm(request.POST if request.method == "POST" else None)
     error = ""
+    from urllib.parse import urlsplit
+    return_to = request.POST.get("return_to", request.GET.get("return_to", ""))
+    try:
+        parsed_return = urlsplit(return_to)
+        if parsed_return.scheme or parsed_return.netloc or parsed_return.path != reverse("avito_manual_checks"):
+            return_to = ""
+    except ValueError:
+        return_to = ""
     if request.method == "POST":
         try:
             action = request.POST.get("action")
+            if action == "set_excluded":
+                checked = request.POST.get("excluded", "")
+                if checked not in {"", "1"}:
+                    raise ValidationError("Некорректная отметка исключения.")
+                if checked == "1":
+                    exclude_from_market(request.user, listing.pk, MarketExclusion.Reason.UNFINISHED)
+                else:
+                    exclusion_id = request.POST.get("exclusion_id", "")
+                    if not exclusion_id.isdigit():
+                        raise ValidationError("Форма устарела. Обновите страницу.")
+                    restore_to_market(request.user, listing.pk, int(exclusion_id))
+                return redirect(return_to or reverse("market_exclusion_edit", args=[listing.pk]))
             if action == "exclude" and form.is_valid():
                 exclude_from_market(request.user, listing.pk, **form.cleaned_data)
                 messages.success(request, "Объявление исключено из рыночной статистики.")
-                return redirect("market_exclusion_edit", listing_id=listing.pk)
+                return redirect(return_to or reverse("market_exclusion_edit", args=[listing.pk]))
             elif action == "restore":
                 exclusion_id = request.POST.get("exclusion_id", "")
                 if not exclusion_id.isdigit():
                     raise ValidationError("Некорректное исключение.")
                 restore_to_market(request.user, listing.pk, int(exclusion_id))
                 messages.success(request, "Объявление возвращено в рыночную статистику.")
-                return redirect("market_exclusion_edit", listing_id=listing.pk)
+                return redirect(return_to or reverse("market_exclusion_edit", args=[listing.pk]))
             elif action != "exclude":
                 raise ValidationError("Неизвестное действие.")
         except ValidationError as exc:
             error = " ".join(exc.messages)
     return render(request, "listings/market_exclusion_edit.html", {
-        "item": listing, "exclusion": active, "form": form, "error": error,
+        "item": listing, "exclusion": active, "form": form, "error": error, "return_to": return_to,
     }, status=400 if request.method == "POST" else 200)
