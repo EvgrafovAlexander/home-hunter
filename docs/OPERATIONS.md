@@ -12,6 +12,11 @@
 - `DJANGO_ALLOWED_HOSTS=SERVER_IP` — реальный IP;
 - `POSTGRES_DB=home_hunter`, POSTGRES_USER и сильный POSTGRES_PASSWORD;
 - `POSTGRES_HOST=db`, `POSTGRES_PORT=5432`.
+- `SHARED_SSH_DESTINATION=user@host` — обязательный адрес SSH-сервера туннеля;
+- `PUBLIC_BASE_URL` — внешний URL приложения для ссылок в уведомлениях.
+
+Адреса конкретной установки хранятся только в `.env`. Без непустой
+`SHARED_SSH_DESTINATION` Compose завершает проверку с ошибкой.
 
 Права .env: `chmod 600 .env`. Секреты не входят в Docker image и git.
 Compose принудительно выставляет DEBUG=false и адрес db внутри контейнеров.

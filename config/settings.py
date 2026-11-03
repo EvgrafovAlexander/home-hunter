@@ -145,6 +145,6 @@ TG_PRICE_ALERT_MIN_AREA = float(os.getenv("TG_PRICE_ALERT_MIN_AREA", "55"))
 TELEGRAM_PROXY_URL = os.getenv("TELEGRAM_PROXY_URL", "")
 TG_DEAL_ALERTS_ENABLED = os.getenv("TG_DEAL_ALERTS_ENABLED", "false").lower() == "true"
 TG_DEAL_MIN_DISCOUNT_PERCENT = int(os.getenv("TG_DEAL_MIN_DISCOUNT_PERCENT", "7"))
-PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://188.120.244.43").rstrip("/")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 DOMCLICK_AGENT_TOKEN = os.getenv("DOMCLICK_AGENT_TOKEN", "")
 DOMCLICK_AGENT_POLL_SECONDS = max(2, int(os.getenv("DOMCLICK_AGENT_POLL_SECONDS", "5")))

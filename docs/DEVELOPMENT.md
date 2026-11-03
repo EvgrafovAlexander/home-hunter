@@ -6,6 +6,8 @@
 
 ```bash
 cp .env.example .env
+# Укажите SHARED_SSH_DESTINATION=user@host своего SSH-сервера в .env.
+# Compose требует эту переменную даже для запуска отдельного сервиса db.
 # Задайте DJANGO_SECRET_KEY в .env, например с помощью:
 python3.12 -c 'import secrets; print(secrets.token_urlsafe(48))'
 

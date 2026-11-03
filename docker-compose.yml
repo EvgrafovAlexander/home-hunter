@@ -143,7 +143,7 @@ services:
       - ServerAliveCountMax=3
       - -o
       - ConnectTimeout=15
-      - ${SHARED_SSH_DESTINATION:-cian-tunnel@185.161.251.49}
+      - ${SHARED_SSH_DESTINATION:?Set SHARED_SSH_DESTINATION in .env}
     volumes:
       - ${SHARED_SSH_DIR:-/etc/home-hunter/cian-ssh}:/run/cian-ssh:ro
     healthcheck:

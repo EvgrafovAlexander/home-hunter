@@ -15,7 +15,8 @@ def seed_default_polling_profiles(apps, schema_editor):
             "name": "Общий SSH/SOCKS-маршрут",
             "kind": "ssh_socks5",
             "proxy_url": settings.SHARED_PROXY_URL,
-            "endpoint": "185.161.251.49",
+            # Адрес подключения задаётся окружением туннеля, а не начальной записью БД.
+            "endpoint": "",
             "secret_ref": "home-hunter-shared-tunnel",
             "healthcheck_url": "https://api.ipify.org",
         },
