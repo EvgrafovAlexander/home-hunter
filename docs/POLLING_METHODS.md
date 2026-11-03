@@ -55,3 +55,26 @@ systemctl disable --now home-hunter-cian-fast.timer home-hunter-cian-detail.time
 systemctl enable --now home-hunter-cian-fast.timer home-hunter-cian-detail.timer home-hunter-cian-full.timer
 systemctl list-timers --all | grep home-hunter-cian
 ```
+
+## Единый источник планового расписания
+
+Меняйте календарь в `deploy/systemd/*.timer`; интерфейс и Telegram читают эти
+файлы через `polling_schedule.py`. Все календарные правила явно используют
+`Europe/Moscow`; в интерфейсе время переводится в Екатеринбург.
+
+Поддерживаемое подмножество: дата `*-*-день`, необязательный одиночный день недели
+Mon–Sun, время часы:минуты:секунды, числовые значения, `*`, диапазон `a..b`
+или шаг `a/n`. Зоны: Europe/Moscow, Asia/Yekaterinburg, UTC. Несколько OnCalendar
+объединяются; пустой OnCalendar сбрасывает предыдущие правила. Задержка — целое
+число секунд, s/sec или min. Остальные форматы требуют расширения парсера и тестов.
+Неизвестные правила и отсутствующие файлы показываются как «Расписание неизвестно».
+Относительный scan-health timer не имеет календарного слота и в список опросов
+площадок не входит. Тесты проверяют все timer-файлы репозитория.
+
+После изменения нужны пересборка web/collector и установка обновлённых units
+на хост с `systemctl daemon-reload`. До включения проверьте правила командой
+`systemd-analyze calendar 'ВЫРАЖЕНИЕ OnCalendar'`. Сверьте установленные units
+через `systemctl cat ИМЯ.timer`, состояние — через `systemctl list-timers --all`.
+План из образа не доказывает, что установленный timer совпадает с ним или включён.
+
+Синтаксис календаря: [systemd.time](https://www.freedesktop.org/software/systemd/man/latest/systemd.time.html).

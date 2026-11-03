@@ -9,6 +9,7 @@ COPY listings listings
 COPY collectors collectors
 COPY templates templates
 COPY data data
+COPY deploy/systemd/*.timer deploy/systemd/
 COPY manage.py .
 RUN DJANGO_SECRET_KEY=build-only-static-key python manage.py collectstatic --noinput
 

@@ -31,10 +31,10 @@ def send_full_scan_summary(source: str, started_at, *, command_error: str = "",
             + (f"; ошибка: {scan.error[:240]}" if scan.error else "")
         )
     next_run = next((run for run in next_poll_runs(source, timezone.now()) if run[0] == mode), None)
-    if next_run:
-        lines.append(f"Следующий {mode_label.lower()} опрос: {next_run[2].strftime('%d.%m.%Y %H:%M %Z')}")
+    if next_run and next_run[2]:
+        lines.append(f"Плановый {mode_label.lower()} опрос: {next_run[2].strftime('%d.%m.%Y %H:%M %Z')}{"; " + next_run[3] if next_run[3] else ""}")
     else:
-        lines.append("Следующий полный опрос: расписание не определено")
+        lines.append(f"Плановый {mode_label.lower()} опрос: расписание неизвестно")
     text = "\n".join(lines)
     for chat_id in getattr(settings, "TG_FULL_SCAN_CHAT_IDS", ()):
         send_telegram_message(text, chat_id=chat_id)

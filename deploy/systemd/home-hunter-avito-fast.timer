@@ -3,10 +3,10 @@ Description=Home Hunter Avito fast scan every four hours during daytime
 
 [Timer]
 # Запускаем только дневные слоты; случайная задержка не переносит опрос на ночь.
-OnCalendar=*-*-* 08:15:00
-OnCalendar=*-*-* 12:15:00
-OnCalendar=*-*-* 16:15:00
-OnCalendar=*-*-* 20:15:00
+OnCalendar=*-*-* 08:15:00 Europe/Moscow
+OnCalendar=*-*-* 12:15:00 Europe/Moscow
+OnCalendar=*-*-* 16:15:00 Europe/Moscow
+OnCalendar=*-*-* 20:15:00 Europe/Moscow
 Persistent=false
 RandomizedDelaySec=10min
 Unit=home-hunter-avito-fast.service

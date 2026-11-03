@@ -2,7 +2,7 @@
 Description=Home Hunter full scan approximately every three days
 
 [Timer]
-OnCalendar=*-*-01/3 03:30:00
+OnCalendar=*-*-01/3 03:30:00 Europe/Moscow
 Persistent=true
 
 [Install]

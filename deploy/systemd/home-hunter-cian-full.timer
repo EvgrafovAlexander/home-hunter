@@ -2,7 +2,7 @@
 Description=Home Hunter weekly cautious CIAN full batch scan
 
 [Timer]
-OnCalendar=Sun *-*-* 08:10:00
+OnCalendar=Sun *-*-* 08:10:00 Europe/Moscow
 RandomizedDelaySec=1200
 Persistent=false
 Unit=home-hunter-cian-full.service

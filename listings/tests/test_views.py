@@ -682,7 +682,7 @@ class ListingViewsTests(TestCase):
     def test_next_poll_time_is_shown_in_yekaterinburg_time(self):
         runs = next_poll_runs("avito", datetime(2026, 9, 8, 7, 0, tzinfo=datetime_timezone.utc))
         fast_run = runs[0][2]
-        self.assertEqual((fast_run.hour, fast_run.minute), (12, 15))
+        self.assertEqual((fast_run.hour, fast_run.minute), (14, 15))
         self.assertEqual(fast_run.tzinfo.key, "Asia/Yekaterinburg")
 
     def test_map_shows_only_visible_listings_with_coordinates(self):

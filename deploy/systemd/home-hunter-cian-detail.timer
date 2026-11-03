@@ -2,10 +2,10 @@
 Description=Home Hunter CIAN detail polling every 15 minutes during daytime
 
 [Timer]
-OnCalendar=*-*-* 08..22:10:00
-OnCalendar=*-*-* 08..22:25:00
-OnCalendar=*-*-* 08..22:40:00
-OnCalendar=*-*-* 08..22:55:00
+OnCalendar=*-*-* 08..22:10:00 Europe/Moscow
+OnCalendar=*-*-* 08..22:25:00 Europe/Moscow
+OnCalendar=*-*-* 08..22:40:00 Europe/Moscow
+OnCalendar=*-*-* 08..22:55:00 Europe/Moscow
 RandomizedDelaySec=60
 Persistent=false
 Unit=home-hunter-cian-detail.service

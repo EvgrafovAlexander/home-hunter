@@ -20,3 +20,7 @@
 !data/**
 **/__pycache__
 **/tests
+
+!deploy/
+!deploy/systemd/
+!deploy/systemd/*.timer

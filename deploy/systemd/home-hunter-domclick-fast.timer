@@ -2,7 +2,7 @@
 Description=Home Hunter Domclick hourly scan at quarter past the hour
 
 [Timer]
-OnCalendar=*-*-* *:15:00
+OnCalendar=*-*-* *:15:00 Europe/Moscow
 Persistent=true
 RandomizedDelaySec=0
 Unit=home-hunter-domclick-fast.service
