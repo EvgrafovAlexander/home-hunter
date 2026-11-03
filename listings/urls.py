@@ -12,6 +12,7 @@ urlpatterns = [
     path("my-reviews/export.xlsx", views.market_export_xlsx, name="market_export_xlsx"),
     path("my-reviews/export.<str:format>", views.review_export, name="review_export"),
     path("admin/backups/", views.database_backup, name="database_backup"),
+    path("admin/avito-import/", views.avito_xlsx_import, name="avito_xlsx_import"),
     path("listings/<int:listing_id>/", views.listing_detail, name="listing_detail"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("scans/", views.scan_statistics, name="scan_statistics"),

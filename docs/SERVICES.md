@@ -14,6 +14,7 @@
 | Модуль | Назначение | Изменяет данные / side effects |
 |---|---|---|
 | `persistence.py` | Нормализация `NormalizedListing`, location rules, сохранение `Listing`, истории и snapshots | ORM-транзакции |
+| `avito_xlsx_import.py` | Проверка и ручной импорт XLSX Avito Parser | Сохраняет объявления через `persistence.py` |
 | `detail_persistence.py` | Общие операции payload, недоступности и финализации опубликованного detail | Payload-модели, `Listing`, `ListingSnapshot`, detail state |
 | `detail_polling.py` | Выбор кандидатов и общий последовательный цикл detail-опроса | Обновляет progress/state через переданные callbacks |
 | `detail_progress.py` | Состояние циклов detail и список завершённых объявлений | ORM-транзакции над progress-моделями |

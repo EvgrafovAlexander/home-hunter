@@ -21,6 +21,18 @@ from .models import (
 from .services.database_backup import BackupError, create_database_backup
 from .services.enrichment import parse_address
 from .services.location_directory import location_is_visible_with_rules
+from .services.avito_xlsx_import import import_avito_xlsx
+
+@staff_member_required
+def avito_xlsx_import(request):
+    """Загрузить XLSX Avito Parser и показать журнал обработки."""
+    searches = SearchQuery.objects.filter(source=SearchQuery.Source.AVITO, enabled=True)
+    if request.method == "GET": return render(request, "listings/avito_xlsx_import.html", {"searches": searches})
+    upload, search = request.FILES.get("file"), searches.filter(pk=request.POST.get("search_id")).first()
+    if not upload or not search: return render(request, "listings/avito_xlsx_import.html", {"searches": searches, "error": "Выберите поиск и файл."}, status=400)
+    try: result = import_avito_xlsx(upload, search)
+    except (ValueError, OSError) as exc: return render(request, "listings/avito_xlsx_import.html", {"searches": searches, "error": str(exc)}, status=400)
+    return render(request, "listings/avito_xlsx_import.html", {"searches": searches, "result": result})
 
 
 @staff_member_required

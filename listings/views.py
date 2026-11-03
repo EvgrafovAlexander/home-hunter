@@ -133,7 +133,7 @@ from .views_listings import hidden_listing_feed, listing_detail
 
 
 
-from .views_operations import data_quality, database_backup, disappeared_listings, unavailable_cian_listings
+from .views_operations import avito_xlsx_import, data_quality, database_backup, disappeared_listings, unavailable_cian_listings
 from .views_scan_statistics import scan_statistics
 from .views_geo import geo_zones, listing_map, location_directory, microdistrict_map
 from .views_preferences import scoring_settings
