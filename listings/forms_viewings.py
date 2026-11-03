@@ -1,5 +1,7 @@
 """Формы личных квартир, просмотров и фотографий."""
 
+from urllib.parse import urlsplit
+
 from django import forms
 from django.core.exceptions import ValidationError
 
@@ -14,8 +16,8 @@ class ApartmentForm(forms.ModelForm):
         model = ViewingApartment
         fields = ("title", "address", "district", "rooms", "area", "floor", "floors_total", "asking_price",
                   "negotiated_price", "price_note", "contact_name", "contact_phone", "contact_role", "decision",
-                  "rating", "pros", "cons", "questions")
-        widgets = {name: forms.Textarea(attrs={"rows": 3}) for name in ("price_note", "pros", "cons", "questions")}
+                  "rating", "pros", "cons", "questions", "description", "cian_url", "avito_url", "domclick_url")
+        widgets = {name: forms.Textarea(attrs={"rows": 3}) for name in ("price_note", "pros", "cons", "questions", "description")}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -23,7 +25,7 @@ class ApartmentForm(forms.ModelForm):
             self.fields["version"].initial = self.instance.version
             self.fields["version"].required = True
         self.fields["title"].widget.attrs["placeholder"] = "Например, квартира с террасой на Ленина"
-        for name in ("price_note", "pros", "cons", "questions"):
+        for name in ("price_note", "pros", "cons", "questions", "description"):
             self.fields[name].max_length = 10000
 
     def clean(self):
@@ -31,6 +33,14 @@ class ApartmentForm(forms.ModelForm):
         if data.get("floor") is not None and data.get("floors_total") is not None:
             if data["floor"] > data["floors_total"]:
                 self.add_error("floor", "Этаж не может быть выше этажности дома.")
+        for name, domain in (("cian_url", "cian.ru"), ("avito_url", "avito.ru"), ("domclick_url", "domclick.ru")):
+            value = data.get(name)
+            if value:
+                parsed = urlsplit(value)
+                host = (parsed.hostname or "").lower()
+                if (parsed.scheme not in {"http", "https"} or parsed.username or parsed.password
+                        or not (host == domain or host.endswith("." + domain))):
+                    self.add_error(name, f"Укажите ссылку на {domain} или его поддомен.")
         return data
 
 
@@ -70,8 +80,12 @@ class EntryForm(forms.ModelForm):
         widgets = {"body": forms.Textarea(attrs={"rows": 4, "placeholder": "Что понравилось, что нужно проверить…"}),
                    "happened_at": forms.DateTimeInput(format="%Y-%m-%dT%H:%M", attrs={"type": "datetime-local"})}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, fixed_kind=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if fixed_kind:
+            self.fields["kind"].choices = [(fixed_kind, ViewingEntry.Kind(fixed_kind).label)]
+            self.fields["kind"].initial = fixed_kind
+            self.fields["kind"].widget = forms.HiddenInput()
         self.fields["body"].max_length = 20000
         self.fields["happened_at"].input_formats = ["%Y-%m-%dT%H:%M"]
         if self.instance.pk:

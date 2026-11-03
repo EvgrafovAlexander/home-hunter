@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.utils import timezone
 
 from listings.forms_viewings import ApartmentForm, EntryForm
 from listings.models import Listing, ViewingApartment, ViewingEntry, ViewingPhoto
@@ -291,3 +292,58 @@ def test_create_photo_storage_failure_rolls_back_everything(client, owner, listi
     assert not ViewingPhoto.objects.exists()
     assert not listing.viewing_links.exists()
     assert not list(settings.MEDIA_ROOT.rglob("*.jpg"))
+
+
+def test_description_and_external_links_create_edit_and_escape(client, owner):
+    client.force_login(owner)
+    data = {"title": "Своя карточка", "decision": "thinking", "description": "<script>bad</script>\nВид во двор",
+            "cian_url": "https://ufa.cian.ru/sale/flat/332349477/", "avito_url": "https://www.avito.ru/ufa/kvartiry/123",
+            "domclick_url": "https://ufa.domclick.ru/card/sale__flat__123"}
+    assert client.post(reverse("viewing_create"), data).status_code == 302
+    apartment = ViewingApartment.objects.get(owner=owner)
+    assert apartment.description == data["description"]
+    assert apartment.cian_url == data["cian_url"]
+    assert not apartment.listing_links.exists()
+    html = client.get(reverse("viewing_detail", args=[apartment.pk])).content.decode()
+    assert "&lt;script&gt;bad&lt;/script&gt;" in html
+    assert '<script>bad</script>' not in html
+    assert all(f'href="{data[name]}"' in html for name in ("cian_url", "avito_url", "domclick_url"))
+    assert 'rel="noopener noreferrer"' in html
+    data.update(version=apartment.version, description="Обновлённое описание", cian_url="", avito_url="", domclick_url="")
+    assert client.post(reverse("viewing_edit", args=[apartment.pk]), data).status_code == 302
+    apartment.refresh_from_db()
+    assert apartment.description == "Обновлённое описание"
+    assert not apartment.cian_url and not apartment.avito_url and not apartment.domclick_url
+
+
+@pytest.mark.parametrize("field,value", [
+    ("cian_url", "https://cian.ru.evil.test/123"), ("cian_url", "https://evilcian.ru/123"),
+    ("avito_url", "https://cian.ru/123"), ("domclick_url", "javascript:alert(1)"),
+    ("avito_url", "ftp://avito.ru/123"), ("cian_url", "https://user:secret@cian.ru/123"),
+])
+def test_rejects_wrong_or_unsafe_source_links(field, value):
+    form = ApartmentForm({"title": "Квартира", "decision": "thinking", field: value})
+    assert not form.is_valid()
+    assert field in form.errors
+
+
+def test_comments_and_visits_have_separate_lists_and_errors(client, owner, apartment):
+    client.force_login(owner)
+    url = reverse("viewing_detail", args=[apartment.pk])
+    for index in range(21):
+        ViewingEntry.objects.create(apartment=apartment, kind="note", body=f"Заметка {index}")
+    visit = ViewingEntry.objects.create(apartment=apartment, kind="visit", status="planned", body="Просмотр",
+                                       happened_at=timezone.now())
+    response = client.get(url, {"comments_page": 2})
+    assert response.context["comments"].paginator.count == 21
+    assert len(response.context["comments"]) == 1
+    assert list(response.context["entries"]) == [visit]
+    assert all(entry.kind == "note" for entry in response.context["comments"])
+    response = client.post(url, {"action": "entry", "kind": "note", "body": ""})
+    assert response.status_code == 400
+    assert "body" in response.context["comment_form"].errors
+    assert not response.context["entry_form"].is_bound
+    response = client.post(url, {"action": "entry", "kind": "visit", "status": "planned"})
+    assert response.status_code == 400
+    assert "happened_at" in response.context["entry_form"].errors
+    assert not response.context["comment_form"].is_bound

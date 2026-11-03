@@ -96,7 +96,8 @@ def viewing_edit(request, pk):
 @require_http_methods(["GET", "POST"])
 def viewing_detail(request, pk):
     apartment = _owned(request, pk)
-    entry_form = EntryForm()
+    entry_form = EntryForm(fixed_kind="visit", auto_id="id_visit_%s")
+    comment_form = EntryForm(fixed_kind="note", auto_id="id_comment_%s")
     reference_form = ListingReferenceForm(request.GET if "reference" in request.GET else None)
     listing = None
     error = ""
@@ -109,9 +110,15 @@ def viewing_detail(request, pk):
         action = request.POST.get("action")
         try:
             if action == "entry":
-                entry_form = EntryForm(request.POST, request.FILES)
-                if entry_form.is_valid():
-                    save_viewing_entry(request.user, pk, entry_form.cleaned_data, entry_form.prepared_photos)
+                is_comment = request.POST.get("kind") == "note"
+                submitted_form = EntryForm(request.POST, request.FILES, fixed_kind="note" if is_comment else "visit",
+                                           auto_id="id_comment_%s" if is_comment else "id_visit_%s")
+                if is_comment:
+                    comment_form = submitted_form
+                else:
+                    entry_form = submitted_form
+                if submitted_form.is_valid():
+                    save_viewing_entry(request.user, pk, submitted_form.cleaned_data, submitted_form.prepared_photos)
                     messages.success(request, "Запись сохранена.")
                     return redirect("viewing_detail", pk=pk)
             elif action in {"link", "unlink"}:
@@ -129,10 +136,11 @@ def viewing_detail(request, pk):
             error = "Не удалось сохранить фотографии. Попробуйте ещё раз; запись не была изменена."
     entries = apartment.entries.prefetch_related("photos")
     return render(request, "listings/viewings/detail.html", {
-        "apartment": apartment, "entry_form": entry_form, "reference_form": reference_form,
+        "apartment": apartment, "entry_form": entry_form, "comment_form": comment_form, "reference_form": reference_form,
         "listing": listing, "linked": linked_apartments(request.user, listing) if listing else [],
         "links": apartment.listing_links.select_related("listing"), "photos": apartment.photos.all(),
-        "entries": Paginator(entries, 20).get_page(request.GET.get("page")), "error": error,
+        "entries": Paginator(entries.filter(kind="visit"), 20).get_page(request.GET.get("page")),
+        "comments": Paginator(entries.filter(kind="note"), 20).get_page(request.GET.get("comments_page")), "error": error,
     }, status=400 if request.method == "POST" else 200)
 
 

@@ -16,6 +16,10 @@ class ViewingApartment(models.Model):
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="viewing_apartments")
     title = models.CharField("Название", max_length=200)
+    description = models.TextField("Описание квартиры", blank=True, db_default="")
+    cian_url = models.URLField("Ссылка на ЦИАН", max_length=2000, blank=True, db_default="")
+    avito_url = models.URLField("Ссылка на Авито", max_length=2000, blank=True, db_default="")
+    domclick_url = models.URLField("Ссылка на Домклик", max_length=2000, blank=True, db_default="")
     address = models.CharField("Адрес", max_length=500, blank=True)
     district = models.CharField("Район", max_length=255, blank=True)
     rooms = models.PositiveSmallIntegerField("Комнат", null=True, blank=True)

@@ -1,5 +1,5 @@
 {{ form.non_field_errors }}{{ form.version }}
-<div class="vn-form-grid">{% include 'listings/viewings/_field.html' with field=form.kind %}{% include 'listings/viewings/_field.html' with field=form.status %}{% include 'listings/viewings/_field.html' with field=form.happened_at %}</div>
+<div class="vn-form-grid">{% if form.kind.is_hidden %}{{ form.kind }}{{ form.kind.errors }}{% else %}{% include 'listings/viewings/_field.html' with field=form.kind %}{% endif %}{% include 'listings/viewings/_field.html' with field=form.status %}{% include 'listings/viewings/_field.html' with field=form.happened_at %}</div>
 <p class="vn-muted" data-visit-field>Время по Екатеринбургу.</p>
 {% include 'listings/viewings/_field.html' with field=form.body %}
 {% include 'listings/viewings/_photo_fields.html' %}

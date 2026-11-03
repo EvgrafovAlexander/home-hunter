@@ -19,7 +19,7 @@ from .viewing_photos import viewing_media_lock
 
 APARTMENT_FIELDS = ("title", "address", "district", "rooms", "area", "floor", "floors_total", "asking_price",
                     "negotiated_price", "price_note", "contact_name", "contact_phone", "contact_role", "decision",
-                    "rating", "pros", "cons", "questions")
+                    "rating", "pros", "cons", "questions", "description", "cian_url", "avito_url", "domclick_url")
 MAX_PHOTOS = 100
 
 
