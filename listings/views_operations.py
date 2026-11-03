@@ -269,3 +269,50 @@ def data_quality(request):
         "districts": District.objects.all(),
         "microdistricts": Microdistrict.objects.select_related("district").all(),
     })
+
+
+@staff_member_required
+def avito_manual_checks(request):
+    """Показать очередь ручных проверок Avito и сохранить ответ из подписанной формы."""
+    from uuid import uuid4
+    from django.core import signing
+    from django.core.paginator import Paginator
+    from .services.avito_manual_checks import avito_check_queue, save_avito_manual_check, StaleAvitoCheck
+
+    if request.method not in ("GET", "POST"):
+        return HttpResponse(status=405)
+    params = request.POST if request.method == "POST" else request.GET
+    days_value = params.get("days", "7")
+    days = int(days_value) if days_value in ("3", "7", "14", "30") else 7
+    tab = "unavailable" if params.get("tab") == "unavailable" else "queue"
+    error, status = "", 200
+    if request.method == "POST":
+        try:
+            payload = signing.loads(request.POST.get("token", ""), salt="avito-manual-check", max_age=86400)
+            if payload["user"] != request.user.pk:
+                raise signing.BadSignature("Другой пользователь")
+            save_avito_manual_check(
+                listing_id=payload["listing"], author=request.user,
+                action=request.POST.get("action"), operation_id=payload["operation"],
+                expected_version=payload["version"], price=request.POST.get("price"),
+            )
+        except signing.BadSignature:
+            error, status = "Форма устарела или недействительна. Обновите страницу и повторите проверку.", 400
+        except Listing.DoesNotExist:
+            error, status = "Объявление Avito не найдено.", 404
+        except StaleAvitoCheck as exc:
+            error, status = str(exc), 409
+        except ValueError as exc:
+            error, status = str(exc), 400
+        else:
+            return redirect(f"{reverse('avito_manual_checks')}?days={days}&tab={tab}&saved=1")
+    page = Paginator(avito_check_queue(days=days, unavailable=tab == "unavailable"), 20).get_page(request.GET.get("page"))
+    for item in page:
+        item.manual_check_token = signing.dumps({
+            "listing": item.pk, "user": request.user.pk,
+            "version": item.updated_at.isoformat(), "operation": str(uuid4()),
+        }, salt="avito-manual-check")
+    return render(request, "listings/avito_manual_checks.html", {
+        "page": page, "days": days, "day_options": (3, 7, 14, 30), "tab": tab,
+        "error": error, "saved": request.GET.get("saved") == "1",
+    }, status=status)

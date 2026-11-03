@@ -1,8 +1,9 @@
 from django.urls import path
 
-from . import agent_views, views
+from . import agent_views, views, views_operations
 
 urlpatterns = [
+    path("avito-checks/", views_operations.avito_manual_checks, name="avito_manual_checks"),
     path("", views.listing_feed, name="listing_feed"),
     path("hidden/", views.hidden_listing_feed, name="hidden_listing_feed"),
     path("shortlist/", views.shortlist, name="shortlist"),

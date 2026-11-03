@@ -587,3 +587,6 @@ class ManualDomclickJob(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+
+
+from .models_avito_checks import AvitoManualCheck
