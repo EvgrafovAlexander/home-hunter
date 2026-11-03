@@ -3,7 +3,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements-web.txt .
 RUN pip install --no-cache-dir -r requirements-web.txt
-RUN useradd --create-home --uid 10001 app
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /app/media && chown app:app /app/media && chmod 700 /app/media
 COPY config config
 COPY listings listings
 COPY collectors collectors

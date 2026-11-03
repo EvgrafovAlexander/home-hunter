@@ -235,3 +235,6 @@ staticfiles/
 .avito-state/
 
 .cian-state/
+
+# Личные фотографии пользователей
+media/

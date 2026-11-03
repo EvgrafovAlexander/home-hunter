@@ -18,6 +18,8 @@ services:
       timeout: 5s
       retries: 10
   web:
+    volumes:
+      - viewing_media:/app/media
     build:
       context: .
       target: web
@@ -27,6 +29,7 @@ services:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       DJANGO_DEBUG: "false"
+      MEDIA_ROOT: /app/media
       TELEGRAM_PROXY_URL: socks5h://shared-socks-tunnel:1080
     depends_on:
       db:
@@ -202,6 +205,7 @@ services:
         condition: service_healthy
 
 volumes:
+  viewing_media:
   postgres_data:
   caddy_data:
   caddy_config:

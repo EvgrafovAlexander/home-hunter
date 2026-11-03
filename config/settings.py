@@ -148,3 +148,6 @@ TG_DEAL_MIN_DISCOUNT_PERCENT = int(os.getenv("TG_DEAL_MIN_DISCOUNT_PERCENT", "7"
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 DOMCLICK_AGENT_TOKEN = os.getenv("DOMCLICK_AGENT_TOKEN", "")
 DOMCLICK_AGENT_POLL_SECONDS = max(2, int(os.getenv("DOMCLICK_AGENT_POLL_SECONDS", "5")))
+
+# Личные фото выдаются только через авторизованные views, без публичного MEDIA_URL.
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", str(BASE_DIR / "media")))

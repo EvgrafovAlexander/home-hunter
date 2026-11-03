@@ -592,3 +592,4 @@ class ManualDomclickJob(models.Model):
 from .models_avito_checks import AvitoManualCheck
 
 from .models_market import MarketDailySnapshot
+from .models_viewings import ViewingApartment, ViewingEntry, ViewingListingLink, ViewingPhoto

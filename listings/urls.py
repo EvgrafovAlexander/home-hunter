@@ -1,8 +1,15 @@
 from django.urls import path
 
-from . import agent_views, views, views_operations, views_market
+from . import agent_views, views, views_operations, views_market, views_viewings
 
 urlpatterns = [
+    path("viewings/", views_viewings.viewing_list, name="viewing_list"),
+    path("viewings/new/", views_viewings.viewing_create, name="viewing_create"),
+    path("viewings/<int:pk>/", views_viewings.viewing_detail, name="viewing_detail"),
+    path("viewings/<int:pk>/edit/", views_viewings.viewing_edit, name="viewing_edit"),
+    path("viewings/<int:pk>/entries/<int:entry_id>/edit/", views_viewings.viewing_entry_edit, name="viewing_entry_edit"),
+    path("viewings/photos/<uuid:photo_id>/<str:variant>/", views_viewings.viewing_photo, name="viewing_photo"),
+    path("viewings/photos/<uuid:photo_id>/", views_viewings.viewing_photo_update, name="viewing_photo_update"),
     path("market-trends/", views_market.market_trends, name="market_trends"),
     path("avito-checks/", views_operations.avito_manual_checks, name="avito_manual_checks"),
     path("", views.listing_feed, name="listing_feed"),

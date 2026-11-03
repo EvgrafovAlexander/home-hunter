@@ -1,13 +1,14 @@
 {% extends "listings/base.html" %}
 {% block content %}
-<main class="page-shell">
-  <h1>Резервная копия базы</h1>
-  <p>Дамп создаётся на сервере и сразу скачивается на ноутбук. Не закрывайте страницу до окончания загрузки.</p>
+<section class="page-shell" style="max-width:760px;margin:auto">
+  <p class="eyebrow">Хранить на своём компьютере</p><h1>Резервная копия Home Hunter</h1>
+  <p>Полный backup скачивается одним архивом: база данных, личные фотографии и контрольные суммы файлов.</p>
   {% if error %}<p role="alert">{{ error }}</p>{% endif %}
-  <form method="post">
-    {% csrf_token %}
-    <button class="button" type="submit">Создать и скачать backup</button>
+  <form method="post">{% csrf_token %}
+    <button class="button" type="submit" name="kind" value="full">Скачать полный backup — БД и фотографии</button>
+    <p>Дождитесь завершения загрузки. Пока архив создаётся, добавление и удаление фотографий временно недоступны.</p>
+    <details><summary>Только база данных</summary><p>Дамп PostgreSQL не содержит фотографии. Для переноса всей системы используйте полный backup.</p><button class="button" name="kind" value="database" type="submit">Скачать только БД</button></details>
   </form>
-  <p><small>Открывайте этот раздел через SSH-туннель. Файл содержит данные HomeHunter и должен храниться в безопасном месте.</small></p>
-</main>
+  <p><small>Полный архив включает данные всех пользователей. Открывайте этот раздел через SSH-туннель или HTTPS и храните скачанный файл в безопасном месте.</small></p>
+</section>
 {% endblock %}

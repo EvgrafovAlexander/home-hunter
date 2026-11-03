@@ -1,0 +1,3 @@
+<div class="vn-field"{% if field.name == 'status' or field.name == 'happened_at' %} data-visit-field{% endif %}>
+<label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<span aria-label="обязательное поле"> *</span>{% endif %}</label>{{ field }}{{ field.errors }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+</div>

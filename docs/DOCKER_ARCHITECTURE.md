@@ -81,3 +81,11 @@ systemctl list-timers 'home-hunter-*'
 Если `polling-diagnostics` или `shared-socks-tunnel` есть в `docker ps`, но не
 показываются в `docker compose config --services`, значит они запущены из
 профиля. Это ожидаемое поведение Compose.
+
+### Личные фотографии
+
+Контейнер `web` монтирует `viewing_media` в `/app/media`. Volume сохраняет
+пользовательские JPEG, миниатюры и lock для согласования полного backup.
+Файлы выдаёт Django после проверки владельца; Caddy передаёт запросы в web.
+Полный backup содержит PostgreSQL и media; порядок переноса описан в
+[VIEWINGS.md](VIEWINGS.md). Удаление Docker volumes уничтожает и фотографии.

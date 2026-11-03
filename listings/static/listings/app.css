@@ -8,3 +8,5 @@
 
 /* Меню «Ещё» остаётся доступным на узком экране без горизонтальной прокрутки. */
 @media(max-width:760px){.topbar{height:auto;min-height:58px;flex-wrap:wrap;gap:8px;padding:10px 16px}.topbar>.primary-nav{order:3;flex-basis:100%;min-width:0}.topbar>form{margin-left:auto}.primary-nav details{display:block;margin-left:auto}.primary-nav>a:nth-child(n+4){display:none}.primary-nav>a,.primary-nav summary{padding:8px}.nav-menu{max-width:calc(100vw - 32px)}}
+
+@media(max-width:760px){.primary-nav>a.nav-viewings{display:block}.primary-nav>a:nth-child(3){display:none}}

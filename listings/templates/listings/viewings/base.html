@@ -1,0 +1,11 @@
+{% extends 'listings/base.html' %}{% load static %}
+{% block title %}Мои просмотры · Home Hunter{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'listings/viewings.css' %}">
+<div class="vn-page">
+{% for message in messages %}<div class="vn-message {{ message.tags }}" role="status">{{ message }}</div>{% endfor %}
+{% block viewing_content %}{% endblock %}
+</div>
+<dialog class="vn-lightbox" id="viewing-lightbox"><button type="button" data-close aria-label="Закрыть">×</button><div class="vn-lightbox-stage"><button type="button" data-prev aria-label="Предыдущее фото">‹</button><img alt=""><button type="button" data-next aria-label="Следующее фото">›</button></div><p data-lightbox-caption></p></dialog>
+<script src="{% static 'listings/viewings.js' %}" defer></script>
+{% endblock %}

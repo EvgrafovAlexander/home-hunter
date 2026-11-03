@@ -1,0 +1,2 @@
+{% extends 'listings/viewings/base.html' %}
+{% block viewing_content %}<a class="vn-back" href="{% url 'viewing_detail' apartment.pk %}">← {{ apartment.title }}</a><header class="vn-hero"><div><p class="eyebrow">История квартиры</p><h1>Редактировать запись</h1></div></header><form method="post" enctype="multipart/form-data" class="vn-panel vn-entry-form">{% csrf_token %}{% include 'listings/viewings/_entry_fields.html' %}<button class="vn-button">Сохранить запись</button></form>{% endblock %}

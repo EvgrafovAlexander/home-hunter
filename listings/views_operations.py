@@ -19,6 +19,7 @@ from .models import (
     SearchQuery,
 )
 from .services.database_backup import BackupError, create_database_backup
+from .services.project_backup import create_project_backup
 from .services.enrichment import parse_address
 from .services.location_directory import location_is_visible_with_rules
 from .services.avito_xlsx_import import import_avito_xlsx
@@ -37,13 +38,16 @@ def avito_xlsx_import(request):
 
 @staff_member_required
 def database_backup(request):
-    """Сформировать резервную копию базы данных по запросу администратора."""
+    """Сформировать полный архив или отдельный дамп БД по запросу администратора."""
     if request.method == "GET":
         return render(request, "listings/database_backup.html")
     if request.method != "POST":
         return HttpResponse(status=405)
+    kind = request.POST.get("kind", "full")
+    if kind not in {"full", "database"}:
+        return HttpResponse(status=400)
     try:
-        file_obj, filename, size = create_database_backup()
+        file_obj, filename, size = create_project_backup() if kind == "full" else create_database_backup()
     except BackupError as exc:
         return render(request, "listings/database_backup.html", {"error": str(exc)}, status=503)
     response = FileResponse(
@@ -53,6 +57,7 @@ def database_backup(request):
         content_type="application/octet-stream",
     )
     response["Content-Length"] = str(size)
+    response["Cache-Control"] = "private, no-store"
     return response
 
 
