@@ -3,7 +3,6 @@
 import html
 import logging
 import re
-from datetime import timedelta
 
 from django.conf import settings
 from django.db import IntegrityError
@@ -16,6 +15,7 @@ from listings.services.scan_health import (edit_telegram_message, edit_telegram_
                                            send_telegram_photo_result)
 from listings.services.telegram_delivery import (
     enqueue_new_listing_alert, mark_listing_alert_failed, mark_listing_alert_sent,
+    claim_listing_alerts, renew_listing_alert_claim,
 )
 from listings.services.market import market_position_details
 
@@ -207,24 +207,20 @@ def _brief_description(title):
     return html.escape(value[:180]) if len(value) >= 4 else None
 
 
-def notify_new_listing(listing_id: int, *, alert_id: int | None = None) -> bool:
-    """Публикует новое объявление в Telegram с объяснимой оценкой."""
-    if alert_id:
-        alert = TelegramListingAlert.objects.select_related("listing").filter(pk=alert_id).first()
-        if not alert or alert.delivery_status != TelegramListingAlert.DeliveryStatus.SENDING:
-            return False
-        listing = alert.listing
-    else:
+def notify_new_listing(listing_id: int, *, alert_id: int | None = None, attempt: int | None = None) -> bool:
+    """Отправляет публикацию только при действующем захвате указанной попытки."""
+    if alert_id is None:
         alert = enqueue_new_listing_alert(listing_id)
-        if alert.delivery_status != TelegramListingAlert.DeliveryStatus.PENDING:
+        claims = claim_listing_alerts(1, with_attempts=True, alert_id=alert.pk)
+        if not claims:
             return False
-        alert.delivery_status = TelegramListingAlert.DeliveryStatus.SENDING
-        alert.delivery_attempts += 1
-        alert.locked_until = timezone.now() + timedelta(minutes=2)
-        alert.next_attempt_at = None
-        alert.save(update_fields=("delivery_status", "delivery_attempts", "locked_until", "next_attempt_at"))
-        listing = alert.listing
+        alert_id, attempt = claims[0]
+    if attempt is None or not renew_listing_alert_claim(alert_id, attempt):
+        return False
+    alert = TelegramListingAlert.objects.select_related("listing").get(pk=alert_id)
+    listing = alert.listing
     if not settings.TG_LISTING_ALERTS_ENABLED or not getattr(settings, "TG_CHANNEL_ID", ""):
+        mark_listing_alert_failed(alert_id, "Telegram listing alerts disabled", attempt=attempt)
         return False
     score, discount, reasons = _listing_score(listing)
     market = market_position_details(listing)
@@ -291,17 +287,18 @@ def notify_new_listing(listing_id: int, *, alert_id: int | None = None) -> bool:
     lines.extend(reason_blocks)
     lines.extend(["", f"Источник: {html.escape(source)}"])
     text = "\n".join(line for line in lines if line is not None)
+    if not renew_listing_alert_claim(alert.pk, attempt):
+        return False
     result = _send_reviewable_listing(listing, text)
     if not result:
-        mark_listing_alert_failed(alert.pk, "Telegram send returned no result")
+        mark_listing_alert_failed(alert.pk, "Telegram send returned no result", attempt=attempt)
         return False
-    alert.score = None
-    alert.is_deal = is_deal
-    alert.reasons = reasons
-    alert.filter_reason = ""
-    alert.filter_checked_at = timezone.now()
-    alert.save(update_fields=("score", "is_deal", "reasons", "filter_reason", "filter_checked_at"))
-    mark_listing_alert_sent(alert.pk, result=result, message_text=text)
+    if not mark_listing_alert_sent(
+        alert.pk, attempt=attempt, result=result, message_text=text,
+        score=None, is_deal=is_deal, reasons=reasons, filter_reason="",
+        filter_checked_at=timezone.now(),
+    ):
+        return False
     refresh_telegram_listing_score(listing.pk)
     return True
 

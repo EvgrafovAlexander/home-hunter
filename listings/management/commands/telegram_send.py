@@ -22,12 +22,12 @@ class Command(BaseCommand):
         interval = max(60, options["interval"])
         batch_size = max(1, options["batch_size"])
         while True:
-            claimed = claim_listing_alerts(batch_size)
-            for alert_id in claimed:
+            claimed = claim_listing_alerts(batch_size, with_attempts=True)
+            for alert_id, attempt in claimed:
                 try:
-                    notify_new_listing(0, alert_id=alert_id)
+                    notify_new_listing(0, alert_id=alert_id, attempt=attempt)
                 except Exception as exc:  # одна плохая карточка не должна остановить очередь
-                    mark_listing_alert_failed(alert_id, f"{type(exc).__name__}: {exc}")
+                    mark_listing_alert_failed(alert_id, f"{type(exc).__name__}: {exc}", attempt=attempt)
                     self.stderr.write(f"Telegram listing alert {alert_id} failed: {type(exc).__name__}")
             if options["once"]:
                 return

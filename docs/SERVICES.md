@@ -62,7 +62,7 @@ Collectors получают данные, а persistence-сервисы сохр
 |---|---|---|
 | `deal_alerts.py` | Оценка и публикация новых выгодных объявлений | Telegram API, очереди и модели alert |
 | `price_alerts.py` | Обновление сообщений при изменении цены | Telegram API и модели alert |
-| `telegram_delivery.py` | Идемпотентная очередь доставки публикаций | Claims, статусы и Telegram API через delivery workflow |
+| `telegram_delivery.py` | Очередь доставки с восстановлением просроченных захватов и защитой результатов номером попытки; при потере ответа возможен дубль | Claims, статусы и Telegram API через delivery workflow |
 | `scan_summary.py` | Личные сводки CIAN/Avito-опросов | Итоги Scan и время следующего запуска через Telegram |
 | `telegram_reviews.py` | Интерактивная review-сессия в Telegram | Telegram API и review-модели |
 

@@ -97,18 +97,19 @@ def enqueue_new_listing_alert(listing_id: int):
 
 
 @transaction.atomic
-def claim_listing_alerts(limit: int = 10):
-    """Атомарно забирает готовые уведомления для одного worker-процесса."""
+def claim_listing_alerts(limit: int = 10, *, with_attempts: bool = False, alert_id: int | None = None):
+    """Забирает готовые и просроченные записи; with_attempts возвращает пары ID/попытка."""
     now = timezone.now()
     rows = list(
         TelegramListingAlert.objects.select_for_update(skip_locked=True).select_related("listing")
-        .filter(delivery_status__in=(
+        .filter(Q(delivery_status__in=(
             TelegramListingAlert.DeliveryStatus.AWAITING_GEOCODE,
             TelegramListingAlert.DeliveryStatus.PENDING,
             TelegramListingAlert.DeliveryStatus.FAILED,
-        ))
+        )) | Q(delivery_status=TelegramListingAlert.DeliveryStatus.SENDING))
         .filter(Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now))
         .filter(Q(locked_until__isnull=True) | Q(locked_until__lte=now))
+        .filter(Q(pk=alert_id) if alert_id is not None else Q())
         .order_by("pk")[:limit]
     )
     claimed = []
@@ -134,13 +135,25 @@ def claim_listing_alerts(limit: int = 10):
         alert.locked_until = now + CLAIM_LEASE
         alert.next_attempt_at = None
         alert.save(update_fields=("delivery_status", "delivery_attempts", "locked_until", "next_attempt_at", "filter_reason", "filter_checked_at"))
-        claimed.append(alert.pk)
+        claimed.append((alert.pk, alert.delivery_attempts) if with_attempts else alert.pk)
     return claimed
 
 
-def mark_listing_alert_sent(alert_id: int, *, result: dict, message_text: str):
-    """Фиксирует успешную доставку объявления и идентификатор сообщения."""
-    TelegramListingAlert.objects.filter(pk=alert_id).update(
+def renew_listing_alert_claim(alert_id: int, attempt: int) -> bool:
+    """Продлевает только ещё действующий захват данной попытки перед отправкой."""
+    now = timezone.now()
+    return bool(TelegramListingAlert.objects.filter(
+        pk=alert_id, delivery_status=TelegramListingAlert.DeliveryStatus.SENDING,
+        delivery_attempts=attempt, locked_until__gt=now,
+    ).update(locked_until=now + CLAIM_LEASE))
+
+
+def mark_listing_alert_sent(alert_id: int, *, attempt: int, result: dict, message_text: str, **metadata):
+    """Сохраняет результат только своей попытки; устаревший worker не меняет запись."""
+    return bool(TelegramListingAlert.objects.filter(
+        pk=alert_id, delivery_status=TelegramListingAlert.DeliveryStatus.SENDING,
+        delivery_attempts=attempt,
+    ).update(
         delivery_status=TelegramListingAlert.DeliveryStatus.SENT,
         chat_id=str(settings.TG_CHANNEL_ID),
         message_id=result.get("message_id"),
@@ -150,15 +163,19 @@ def mark_listing_alert_sent(alert_id: int, *, result: dict, message_text: str):
         locked_until=None,
         next_attempt_at=None,
         last_delivery_error="",
-    )
+        **metadata,
+    ))
 
 
-def mark_listing_alert_failed(alert_id: int, error: str):
-    """Фиксирует ошибку доставки и переводит alert в повторную обработку."""
-    alert = TelegramListingAlert.objects.get(pk=alert_id)
-    delay = min(3600, 60 * (2 ** min(alert.delivery_attempts, 5)))
-    alert.delivery_status = TelegramListingAlert.DeliveryStatus.FAILED
-    alert.last_delivery_error = error[:2000]
-    alert.next_attempt_at = timezone.now() + timedelta(seconds=delay)
-    alert.locked_until = None
-    alert.save(update_fields=("delivery_status", "last_delivery_error", "next_attempt_at", "locked_until"))
+def mark_listing_alert_failed(alert_id: int, error: str, *, attempt: int):
+    """Назначает повтор только для своей незавершённой попытки доставки."""
+    delay = min(3600, 60 * (2 ** min(attempt, 5)))
+    return bool(TelegramListingAlert.objects.filter(
+        pk=alert_id, delivery_status=TelegramListingAlert.DeliveryStatus.SENDING,
+        delivery_attempts=attempt,
+    ).update(
+        delivery_status=TelegramListingAlert.DeliveryStatus.FAILED,
+        last_delivery_error=error[:2000],
+        next_attempt_at=timezone.now() + timedelta(seconds=delay),
+        locked_until=None,
+    ))
