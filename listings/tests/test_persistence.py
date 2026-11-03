@@ -200,3 +200,70 @@ def test_source_mismatch_is_atomic(search, item):
     with pytest.raises(ValueError):
         process_listing(search, replace(item, source="cian"), timezone.now())
     assert not Listing.objects.exists()
+
+
+@pytest.mark.parametrize("enabled,area,address,expected", [
+    (True, "58.60", "Уфа, ул. Ленина, 1", "awaiting_geocode"),
+    (False, "58.60", "Уфа, ул. Ленина, 1", "skipped"),
+    (True, "40.00", "Уфа, ул. Ленина, 1", "skipped"),
+    (True, "58.60", None, "skipped"),
+])
+def test_initial_telegram_decision_is_atomic_and_idempotent(
+    search, item, settings, monkeypatch, enabled, area, address, expected,
+):
+    from django.db import transaction
+    from listings.models import TelegramListingAlert
+
+    settings.TG_LISTING_ALERTS_ENABLED = enabled
+    settings.TG_CHANNEL_ID = "-100123"
+    def unexpected_send(*args, **kwargs):
+        pytest.fail("Сохранение объявления не должно отправлять сообщение")
+    monkeypatch.setattr("listings.services.deal_alerts._send_reviewable_listing", unexpected_send)
+    normalized = replace(item, area=Decimal(area), address=address)
+    with transaction.atomic():
+        first = process_listing(search, normalized, timezone.now())
+        # Запись уже существует до commit, включая решение не отправлять.
+        alert = TelegramListingAlert.objects.get(listing=first.listing)
+        assert alert.delivery_status == expected
+        assert alert.delivery_attempts == 0
+        second = process_listing(search, normalized, timezone.now())
+        assert not second.created
+        assert TelegramListingAlert.objects.filter(listing=first.listing).count() == 1
+
+
+def test_listing_and_telegram_decision_rollback_together(search, item):
+    from django.db import transaction
+    from listings.models import TelegramListingAlert
+
+    with pytest.raises(RuntimeError, match="outer rollback"):
+        with transaction.atomic():
+            result = process_listing(search, item, timezone.now())
+            assert TelegramListingAlert.objects.filter(listing=result.listing).exists()
+            raise RuntimeError("outer rollback")
+    assert not Listing.objects.exists()
+    assert not TelegramListingAlert.objects.exists()
+    assert not PriceHistory.objects.exists()
+    assert not ListingSnapshot.objects.exists()
+    assert not ListingSearchQuery.objects.exists()
+
+
+def test_queue_failure_rolls_back_listing_and_retry_creates_one_alert(search, item, monkeypatch):
+    from listings.models import TelegramListingAlert
+    from listings.services import telegram_delivery
+
+    original_enqueue = telegram_delivery.enqueue_new_listing_alert
+    def fail_after_enqueue(listing_id):
+        original_enqueue(listing_id)
+        raise RuntimeError("queue failure")
+    with monkeypatch.context() as patch:
+        patch.setattr(telegram_delivery, "enqueue_new_listing_alert", fail_after_enqueue)
+        with pytest.raises(RuntimeError, match="queue failure"):
+            process_listing(search, item, timezone.now())
+    assert not Listing.objects.exists()
+    assert not TelegramListingAlert.objects.exists()
+    assert not PriceHistory.objects.exists()
+    assert not ListingSnapshot.objects.exists()
+    assert not ListingSearchQuery.objects.exists()
+    result = process_listing(search, item, timezone.now())
+    assert result.created
+    assert TelegramListingAlert.objects.filter(listing=result.listing).count() == 1

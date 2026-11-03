@@ -1,4 +1,7 @@
-"""Транзакционное сохранение нормализованных объявлений и истории изменений."""
+"""Сохранение объявлений, истории и записи Telegram в одной транзакции.
+
+Сетевую публикацию новых объявлений выполняет отдельный worker.
+"""
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
@@ -55,7 +58,7 @@ class PersistenceResult:
 def process_listing(
     search_query: SearchQuery, normalized_listing: NormalizedListing, observed_at: datetime,
 ) -> PersistenceResult:
-    """Идемпотентно сохраняет объявление и его историю изменений."""
+    """Сохраняет объявление, историю и первичное решение Telegram атомарно, без дублей."""
     item = normalized_listing
     if item.source != search_query.source or not item.external_id:
         raise ValueError("Listing source/id does not match search")
@@ -179,7 +182,8 @@ def process_listing(
     )
     if created:
         from listings.services.telegram_delivery import enqueue_new_listing_alert
-        transaction.on_commit(lambda listing_id=listing.pk: enqueue_new_listing_alert(listing_id))
+        # Запись очереди должна откатиться вместе с объявлением; сети здесь нет.
+        enqueue_new_listing_alert(listing.pk)
     elif price_changed:
         from listings.services.price_alerts import notify_price_change
         transaction.on_commit(lambda listing_id=listing.pk, old=old_price, new=values["price"]:

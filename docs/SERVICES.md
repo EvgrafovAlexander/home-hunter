@@ -12,7 +12,7 @@
 | Модуль | Назначение | Изменяет данные / side effects |
 |---|---|---|
 | `spfa_audit.py` | Учёт вызовов SPFA и снимков cookies; отказ при невозможности аудита | `AvitoSpfaRequest`, `AvitoSpfaCookie` |
-| `persistence.py` | Нормализация `NormalizedListing`, location rules, сохранение `Listing`, истории и snapshots | ORM-транзакции |
+| `persistence.py` | Нормализация `NormalizedListing`, location rules, сохранение `Listing`, истории, snapshots и первичного решения Telegram | Общая ORM-транзакция для объявления и записи очереди |
 | `avito_xlsx_import.py` | Проверка и ручной импорт XLSX Avito Parser | Сохраняет объявления через `persistence.py` |
 | `detail_persistence.py` | Общие операции payload, недоступности и финализации опубликованного detail | Payload-модели, `Listing`, `ListingSnapshot`, detail state |
 | `detail_polling.py` | Выбор кандидатов и общий последовательный цикл detail-опроса | Обновляет progress/state через переданные callbacks |
