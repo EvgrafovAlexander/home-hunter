@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from listings.models import Listing, ListingReview, ListingReviewRevision, ReviewTag, TelegramReviewSession, Consideration
+from .market_exclusions import eligible_market_queryset, is_market_excluded
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ def _show_category(session):
 
 
 def _start_session(user_id, listing_id, channel_chat_id="", channel_message_id=None):
-    listing = Listing.objects.filter(pk=listing_id, is_active=True, is_visible=True).first()
+    listing = eligible_market_queryset(Listing.objects.filter(pk=listing_id, is_active=True, is_visible=True)).first()
     user = _reviewer(user_id)
     if not listing or not user:
         return False
@@ -119,6 +120,9 @@ def _start(user_id, listing_id, callback):
 
 def _save(session):
     with transaction.atomic():
+        Listing.objects.select_for_update().get(pk=session.listing_id)
+        if is_market_excluded(session.listing):
+            return False
         review, _ = ListingReview.objects.update_or_create(
             listing=session.listing, author=session.user,
             defaults={"rating": session.rating, "decision": session.decision, "comment": session.comment,
@@ -132,10 +136,13 @@ def _save(session):
             Consideration.objects.get_or_create(review=review)
         else:
             Consideration.objects.filter(review=review).delete()
+    return True
 
 
 def _finish(session):
-    _save(session)
+    if not _save(session):
+        _send(session.telegram_chat_id, "Объявление исключено из подбора. Оценка не сохранена.")
+        return
     if session.channel_chat_id and session.channel_message_id:
         _edit_markup(session.channel_chat_id, session.channel_message_id, {"inline_keyboard": [[{"text": "✅ Оценено вами", "callback_data": "review:done"}], [{"text": "Открыть объявление", "url": session.listing.url}]]})
     _send(session.telegram_chat_id, f"✅ Оценка сохранена\n{session.listing.title}\nВаша оценка: {session.rating}/10\nРешение: {dict(ListingReview.Decision.choices)[session.decision]}")
@@ -157,6 +164,9 @@ def handle_update(update):
         session = TelegramReviewSession.objects.filter(telegram_user_id=str(user_id)).select_related("listing", "user").first()
         if not session:
             _answer(callback["id"], "Начните оценку кнопкой в канале")
+            return
+        if is_market_excluded(session.listing):
+            _answer(callback["id"], "Объявление исключено из подбора")
             return
         _answer(callback["id"])
         if data.startswith("review:rating:"):
@@ -192,6 +202,9 @@ def handle_update(update):
         _send(user_id, "Текущая оценка отменена."); return
     if not session:
         _send(user_id, "Откройте объявление в канале и нажмите «Оценить квартиру»."); return
+    if is_market_excluded(session.listing):
+        _send(user_id, "Объявление исключено из подбора. Начните оценку другой квартиры.")
+        return
     value = "" if text == "-" else text
     if session.state == TelegramReviewSession.State.INTEREST:
         session.interest_reason = value; session.state = TelegramReviewSession.State.DEAL_BREAKER; session.save(); _send(user_id, "Что является стоп-фактором? Или отправьте «-»."); return

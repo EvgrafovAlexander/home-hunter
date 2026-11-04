@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from listings.models import Listing, SearchQuery
+from .market_exclusions import eligible_market_queryset
 
 
 def _integer(value):
@@ -27,9 +28,11 @@ def _decimal(value):
         return None
 
 
-def filtered_listings(request, *, visible=True):
+def filtered_listings(request, *, visible=True, include_excluded=False):
     """Применяет единый набор фильтров к списку объявлений."""
     listings = Listing.objects.exclude(global_hides__is_active=True)
+    if not include_excluded:
+        listings = eligible_market_queryset(listings)
     if request.user.is_authenticated:
         listings = listings.exclude(user_hides__user=request.user)
     if visible is not None:
@@ -85,7 +88,7 @@ def filtered_listings(request, *, visible=True):
 
 def filter_options(*, visible=True):
     """Возвращает значения фильтров, доступные в текущем наборе данных."""
-    listings = Listing.objects.filter(is_visible=visible)
+    listings = eligible_market_queryset(Listing.objects.filter(is_visible=visible))
     return {
         "sources": SearchQuery.Source.choices,
         "districts": list(listings.exclude(district__isnull=True).exclude(district="")
@@ -106,7 +109,6 @@ def similar_listings(listing, limit=6):
     candidates = (Listing.objects.filter(is_visible=True, is_active=True, district=listing.district,
                                          rooms=listing.rooms)
                   .exclude(pk=listing.pk).exclude(area__isnull=True))
-    from .market_exclusions import eligible_market_queryset
     candidates = eligible_market_queryset(candidates)
     if listing.microdistrict:
         candidates = candidates.filter(microdistrict=listing.microdistrict)

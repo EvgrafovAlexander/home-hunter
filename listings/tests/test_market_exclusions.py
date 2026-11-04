@@ -211,10 +211,95 @@ def test_avito_checkbox_is_independent_of_availability(client, staff, available)
     assert response.status_code == 302 and response.url == return_to
     exclusion = MarketExclusion.objects.get(listing=item,is_active=True)
     assert exclusion.reason == 'unfinished'
-    assert 'checked' in client.get(return_to).content.decode().split(f'id="market-excluded-{item.pk}"')[1].split('>')[0]
+    assert f'id="market-excluded-{item.pk}"' not in client.get(return_to).content.decode()
     assert client.post(endpoint, {'action':'set_excluded','exclusion_id':exclusion.pk,'return_to':return_to}).url == return_to
     item.refresh_from_db()
     assert (item.is_active, item.publication_status, item.last_seen_at, item.price, item.updated_at) == original
     assert not MarketExclusion.objects.filter(listing=item,is_active=True).exists()
     response = client.post(endpoint, {'action':'set_excluded','excluded':'1','return_to':'//evil.test/avito-checks/'})
     assert response.url == endpoint
+
+
+@pytest.mark.parametrize("source", ["avito", "cian"])
+def test_exclusion_removes_working_queues_and_restore_returns_candidate(client, staff, source):
+    from listings.models import Consideration, CianDetailPollProgress, AvitoDetailPollProgress
+    from listings.services.avito_manual_checks import avito_check_queue
+    from listings.services.detail_polling import select_detail_candidates
+    from listings.services.detail_progress import prepare_detail_cycle
+    from listings.services.reviews import review_queue_queryset
+
+    item = flat("excluded-queues")
+    item.source = source
+    item.latitude, item.longitude = "54.73", "55.96"
+    item.last_seen_at = timezone.now() - timedelta(days=20)
+    item.save()
+    progress_model = CianDetailPollProgress if source == "cian" else AvitoDetailPollProgress
+    client.force_login(staff)
+    assert review_queue_queryset(staff).filter(pk=item.pk).exists()
+    exclusion, _ = exclude_from_market(staff, item.pk, "unfinished")
+    original = (item.is_active, item.publication_status, item.last_seen_at)
+    assert not review_queue_queryset(staff).filter(pk=item.pk).exists()
+    for name in ["listing_feed", "listing_map", "shortlist"]:
+        response = client.get(reverse(name), {"listing": item.pk})
+        assert response.status_code == 200
+        assert item.pk not in [entry.pk for entry in response.context["listings"]]
+    response = client.get(reverse("review_queue"), {"listing": item.pk})
+    assert response.context["item"] is None
+    assert response.context["queue_count"] == 0
+    assert client.post(reverse("review_queue"), {"listing_id": item.pk, "rating": "8", "decision": "consider"}).status_code == 409
+    assert select_detail_candidates(source, f"{source}_detail_state", [], 10) == []
+    progress_id, _ = prepare_detail_cycle(progress_model, Listing, source)
+    assert progress_model.objects.get(pk=progress_id).cycle_total == 0
+    if source == "avito":
+        assert not avito_check_queue().filter(pk=item.pk).exists()
+    review = ListingReview.objects.create(listing=item, author=staff, rating=8, decision="consider")
+    consideration = Consideration.objects.create(review=review)
+    assert client.get(reverse("consideration_list")).context["total_considerations"] == 0
+    assert client.get(reverse("my_reviews")).context["evaluated_count"] == 1
+    assert client.get(reverse("listing_detail", args=[item.pk])).status_code == 200
+    restore_to_market(staff, item.pk, exclusion.pk)
+    assert client.get(reverse("consideration_list")).context["total_considerations"] == 1
+    assert Consideration.objects.filter(pk=consideration.pk).exists()
+    assert [entry.pk for entry in select_detail_candidates(source, f"{source}_detail_state", [], 10)] == [item.pk]
+    item.refresh_from_db()
+    assert (item.is_active, item.publication_status, item.last_seen_at) == original
+
+
+def test_stale_avito_check_cannot_change_excluded_listing(staff):
+    from uuid import uuid4
+    from listings.services.avito_manual_checks import save_avito_manual_check, StaleAvitoCheck
+    item = flat("stale-check")
+    item.source = "avito"
+    item.save()
+    version = item.updated_at.isoformat()
+    exclude_from_market(staff, item.pk, "unfinished")
+    with pytest.raises(StaleAvitoCheck):
+        save_avito_manual_check(listing_id=item.pk, author=staff, action="unavailable",
+                               operation_id=uuid4(), expected_version=version)
+    item.refresh_from_db()
+    assert item.is_active
+
+
+def test_old_telegram_link_cannot_start_or_save_excluded_review(staff):
+    from listings.models import TelegramReviewSession
+    from listings.services.telegram_reviews import _start_session, _save
+    item = flat("telegram-excluded")
+    session = TelegramReviewSession.objects.create(listing=item, user=staff, telegram_user_id="123",
+        telegram_chat_id="123", rating=8, decision="consider")
+    exclude_from_market(staff, item.pk, "unfinished")
+    with patch("listings.services.telegram_reviews._send") as send:
+        assert not _start_session("123", item.pk)
+        send.assert_not_called()
+    assert not _save(session)
+    assert not ListingReview.objects.filter(listing=item).exists()
+
+
+def test_excluded_cian_does_not_trigger_stale_detail_alarm(staff):
+    from listings.models import CianDetailPollProgress, CianDetailPollState
+    from listings.services.scan_health import cian_detail_health
+    item = flat("excluded-health")
+    CianDetailPollProgress.objects.create(source="cian", cycle_total=1)
+    CianDetailPollState.objects.create(listing=item, last_error="Старая ошибка")
+    exclude_from_market(staff, item.pk, "unfinished")
+    health = cian_detail_health()
+    assert health.state == "healthy" and health.label == "Очередь пуста"

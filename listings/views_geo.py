@@ -18,6 +18,7 @@ from .models import (
     MicrodistrictBoundary,
     StreetAssignment,
 )
+from .services.market_exclusions import eligible_market_queryset
 from .services.location_directory import apply_location_rules_for_assignments
 from .services.market import MIN_TARGET_AREA
 from .services.microdistrict_polygons import load_polygons
@@ -166,7 +167,7 @@ def listing_map(request):
     selected_listing = None
     if selected_listing_id:
         selected_listing = (
-            Listing.objects.filter(pk=selected_listing_id)
+            eligible_market_queryset(Listing.objects.filter(pk=selected_listing_id))
             .filter(area__gte=MIN_TARGET_AREA)
             .exclude(latitude__isnull=True)
             .exclude(longitude__isnull=True)

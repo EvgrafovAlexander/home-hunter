@@ -89,9 +89,9 @@ def personal_candidate_queryset(queryset, user):
     return _service_personal_candidate_queryset(queryset, user)
 
 
-def filtered_listings(request, *, visible: bool | None = True):
+def filtered_listings(request, *, visible: bool | None = True, include_excluded=False):
     """Вызывает сервис фильтрации для совместимости view-импортов."""
-    return _service_filtered_listings(request, visible=visible)
+    return _service_filtered_listings(request, visible=visible, include_excluded=include_excluded)
 
 
 def filter_options(*, visible: bool = True):

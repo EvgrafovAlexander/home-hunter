@@ -17,6 +17,7 @@ from .models import (
     SearchQuery,
     SourcePollingControl,
 )
+from .services.market_exclusions import eligible_market_queryset
 from .services.polling import default_polling_enabled
 from .services.scan_dashboard import build_cian_detail_cycle, classify_scan_health
 from .services.scan_health import cian_detail_health
@@ -56,7 +57,7 @@ def scan_statistics(request):
     cian_candidate_count = ListingSearchQuery.objects.filter(
         search_query__source=SearchQuery.Source.CIAN, missed_full_scans__gt=0,
     ).count()
-    active_cian = Listing.objects.filter(source=SearchQuery.Source.CIAN, is_active=True)
+    active_cian = eligible_market_queryset(Listing.objects.filter(source=SearchQuery.Source.CIAN, is_active=True))
     cian_active_ids = set(active_cian.values_list("pk", flat=True))
     cian_progress = CianDetailPollProgress.objects.select_related("current_listing").filter(source="cian").first()
     detail_health = cian_detail_health()

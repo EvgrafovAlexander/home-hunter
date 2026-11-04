@@ -17,7 +17,6 @@ from .models import (
 )
 from .services.change_history import change_events
 from .models import MarketExclusion
-from .services.market_exclusions import eligible_market_queryset
 from .services.market import MIN_TARGET_AREA
 from .services.personal_filters import annotate_personal_filter
 from .services.scoring import SHORTLIST_MIN_SCORE
@@ -35,7 +34,6 @@ from .views import (
 @login_required
 def listing_feed(request):
     listings, filters = filtered_listings(request)
-    listings = eligible_market_queryset(listings)
     # Малые площади остаются в рыночной статистике, но не показываются кандидатами.
     listings = listings.filter(area__gte=MIN_TARGET_AREA)
     preferences = scoring_preference_for(request.user)

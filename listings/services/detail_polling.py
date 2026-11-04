@@ -4,12 +4,13 @@ from asgiref.sync import sync_to_async
 from django.db.models import F
 
 from listings.models import Listing
+from .market_exclusions import eligible_market_queryset, is_market_excluded
 
 
 def select_detail_candidates(source, state_relation, completed_ids, limit):
     """Выбирает ещё не обработанные активные объявления источника."""
     return list(
-        Listing.objects.filter(source=source, is_active=True)
+        eligible_market_queryset(Listing.objects.filter(source=source, is_active=True))
         .exclude(pk__in=completed_ids)
         .select_related(state_relation)
         .order_by(F(f"{state_relation}__last_checked_at").asc(nulls_first=True), "pk")[:limit]
@@ -36,6 +37,9 @@ async def run_detail_batch(
 ):
     """Последовательно выполняет общий цикл detail с обработкой ошибок."""
     for listing in candidates:
+        # Пометку могли поставить после формирования пакета.
+        if await sync_to_async(is_market_excluded)(listing):
+            continue
         if continue_polling and not continue_polling():
             if stdout and continue_stop_message:
                 stdout.write(continue_stop_message)

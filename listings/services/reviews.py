@@ -15,6 +15,7 @@ from ..models import (
 from .market import MIN_TARGET_AREA
 from .personal_filters import annotate_personal_filter, apply_scalar_hard_filters
 from .scoring import scoring_preference_for
+from .market_exclusions import eligible_market_queryset, is_market_excluded
 
 
 def personal_candidate_queryset(queryset, user):
@@ -31,7 +32,7 @@ def personal_candidate_queryset(queryset, user):
 
 def review_queue_queryset(user):
     """Возвращает объявления, ожидающие пользовательской оценки."""
-    return Listing.objects.filter(is_active=True, is_visible=True).exclude(
+    return eligible_market_queryset(Listing.objects.filter(is_active=True, is_visible=True)).exclude(
         global_hides__is_active=True,
     ).exclude(
         user_hides__user=user,
@@ -91,6 +92,9 @@ def save_review(request, listing):
         return "Поставьте оценку от 1 до 10 и выберите решение."
     tags = list(ReviewTag.objects.filter(is_active=True, pk__in=request.POST.getlist("tags")))
     with transaction.atomic():
+        Listing.objects.select_for_update().get(pk=listing.pk)
+        if is_market_excluded(listing):
+            return "Объявление исключено из подбора. Обновите очередь."
         review, _ = ListingReview.objects.update_or_create(
             listing=listing,
             author=request.user,

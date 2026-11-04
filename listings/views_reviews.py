@@ -21,6 +21,7 @@ from .services.reviews import (
     save_review,
 )
 from .services.scoring import add_listing_score, scoring_preference_for
+from .services.market_exclusions import eligible_market_queryset, excluded_listing_ids
 
 
 def _integer(value):
@@ -38,7 +39,7 @@ def review_queue(request):
     requested_id = _integer(request.POST.get("listing_id") if request.method == "POST" else request.GET.get("listing"))
     listing = None
     if requested_id:
-        listing = (Listing.objects.filter(pk=requested_id, is_active=True, is_visible=True)
+        listing = (eligible_market_queryset(Listing.objects.filter(pk=requested_id, is_active=True, is_visible=True))
                    .filter(area__gte=MIN_TARGET_AREA)
                    .exclude(global_hides__is_active=True)
                    .exclude(user_hides__user=request.user).first())
@@ -108,6 +109,7 @@ def consideration_list(request):
             consideration.save(update_fields=("stage", "updated_at"))
         return redirect("consideration_list")
     considerations = (Consideration.objects.filter(review__author=request.user)
+                      .exclude(review__listing_id__in=excluded_listing_ids())
                       .select_related("review__listing").order_by("stage", "-updated_at"))
     grouped = [(value, label, [item for item in considerations if item.stage == value])
                for value, label in Consideration.Stage.choices]

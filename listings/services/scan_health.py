@@ -9,7 +9,8 @@ import requests
 from django.conf import settings
 from django.utils import timezone
 
-from listings.models import CianDetailHealthAlert, CianDetailPollProgress, CianDetailPollState, Scan, SearchQuery, SourceHealthAlert
+from listings.models import CianDetailHealthAlert, CianDetailPollProgress, CianDetailPollState, Listing, Scan, SearchQuery, SourceHealthAlert
+from .market_exclusions import eligible_market_queryset, excluded_listing_ids
 from listings.services.polling import polling_enabled
 
 logger = logging.getLogger(__name__)
@@ -222,10 +223,12 @@ def check_source_health(source: str) -> SourceHealth:
 def cian_detail_health() -> SourceHealth:
     """Возвращает состояние detail-worker без сохранения и уведомлений."""
     progress = CianDetailPollProgress.objects.filter(source="cian").first()
-    latest_error = CianDetailPollState.objects.exclude(last_error="").order_by("-updated_at").first()
+    latest_error = CianDetailPollState.objects.exclude(listing_id__in=excluded_listing_ids()).exclude(last_error="").order_by("-updated_at").first()
     now = timezone.now()
     if not progress:
         health = SourceHealth("unknown", "Нет данных", "Detail-опрос ещё не запускался")
+    elif not eligible_market_queryset(Listing.objects.filter(source="cian", is_active=True)).exists():
+        health = SourceHealth("healthy", "Очередь пуста", "Нет доступных объявлений для detail-проверки")
     elif latest_error and (
         progress.last_completed_at is None
         or latest_error.updated_at >= progress.last_completed_at

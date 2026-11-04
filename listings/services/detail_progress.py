@@ -2,13 +2,14 @@
 
 from django.db import transaction
 from django.utils import timezone
+from .market_exclusions import eligible_market_queryset
 
 
 @transaction.atomic
 def prepare_detail_cycle(progress_model, listing_model, source):
     """Готовит новый проход и сохраняет только активные объявления."""
     active_ids = list(
-        listing_model.objects.filter(source=source, is_active=True).values_list("pk", flat=True)
+        eligible_market_queryset(listing_model.objects.filter(source=source, is_active=True)).values_list("pk", flat=True)
     )
     progress, _ = progress_model.objects.select_for_update().get_or_create(source=source)
     active_set = set(active_ids)

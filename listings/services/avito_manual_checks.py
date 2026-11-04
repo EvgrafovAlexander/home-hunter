@@ -13,6 +13,7 @@ from listings.models import AvitoManualCheck, Listing, ListingSearchQuery, Listi
 from listings.services.enrichment import calculate_price_per_sqm
 from listings.services.persistence import snapshot_data_from_listing
 from listings.services.price_alerts import notify_price_change
+from listings.services.market_exclusions import eligible_market_queryset, is_market_excluded
 
 
 class StaleAvitoCheck(ValueError):
@@ -20,10 +21,10 @@ class StaleAvitoCheck(ValueError):
 
 
 def avito_check_queue(*, days=7, unavailable=False):
-    """Возвращает старые активные объявления либо снятые, включая скрытые и малые площади."""
+    """Возвращает старые активные либо снятые объявления без исключённых из подбора."""
     if days not in (3, 7, 14, 30):
         raise ValueError("Выберите срок 3, 7, 14 или 30 дней.")
-    queryset = Listing.objects.filter(source="avito")
+    queryset = eligible_market_queryset(Listing.objects.filter(source="avito"))
     if unavailable:
         queryset = queryset.filter(Q(is_active=False) | Q(publication_status="unavailable"))
     else:
@@ -59,6 +60,8 @@ def save_avito_manual_check(*, listing_id, author, action, operation_id, expecte
         if existing.listing_id != listing.pk or existing.author_id != author.pk:
             raise ValueError("Операция относится к другой проверке.")
         return existing, False
+    if is_market_excluded(listing):
+        raise StaleAvitoCheck("Объявление исключено из подбора. Обновите очередь.")
     if listing.updated_at.isoformat() != expected_version:
         raise StaleAvitoCheck("Объявление уже изменилось. Проверьте актуальные данные и повторите выбор.")
     old_price = listing.price

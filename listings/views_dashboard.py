@@ -32,9 +32,9 @@ def _integer(value):
 @login_required
 def dashboard(request):
     """Показать агрегаты объявлений и рыночную статистику."""
-    listings, filters = filtered_listings(request)
+    listings, filters = filtered_listings(request, include_excluded=True)
     # KPI используют видимую выборку, а медианы рынка — полный baseline.
-    market_listings, _ = filtered_listings(request, visible=None)
+    market_listings, _ = filtered_listings(request, visible=None, include_excluded=True)
     include_excluded = request.GET.get("include_excluded") == "1"
     excluded_count = market_listings.filter(pk__in=excluded_listing_ids()).count()
     filters["include_excluded"] = include_excluded

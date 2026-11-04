@@ -379,14 +379,14 @@ def market_exclusion_edit(request, listing_id):
                 return redirect(return_to or reverse("market_exclusion_edit", args=[listing.pk]))
             if action == "exclude" and form.is_valid():
                 exclude_from_market(request.user, listing.pk, **form.cleaned_data)
-                messages.success(request, "Объявление исключено из рыночной статистики.")
+                messages.success(request, "Объявление исключено из подбора, проверок и статистики.")
                 return redirect(return_to or reverse("market_exclusion_edit", args=[listing.pk]))
             elif action == "restore":
                 exclusion_id = request.POST.get("exclusion_id", "")
                 if not exclusion_id.isdigit():
                     raise ValidationError("Некорректное исключение.")
                 restore_to_market(request.user, listing.pk, int(exclusion_id))
-                messages.success(request, "Объявление возвращено в рыночную статистику.")
+                messages.success(request, "Объявление возвращено в подбор и статистику.")
                 return redirect(return_to or reverse("market_exclusion_edit", args=[listing.pk]))
             elif action != "exclude":
                 raise ValidationError("Неизвестное действие.")
