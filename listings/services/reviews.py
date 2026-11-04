@@ -48,6 +48,38 @@ def review_tag_groups():
     return [(value, label, list(tags.filter(category=value))) for value, label in ReviewTag.Category.choices]
 
 
+def review_form_tag_groups():
+    """Группирует признаки веб-формы, сохраняя коды и историю справочника."""
+    groups = {
+        "condition": ("Отделка", "Текущее состояние квартиры"),
+        "work": ("Ремонт и заселение", "Какие работы понадобятся"),
+        "layout": ("Планировка и свет", "Удобство пространства"),
+        "building": ("Дом и окружение", "Что известно о доме и районе"),
+        "money": ("Цена", "Ваше впечатление о стоимости"),
+        "risk": ("Нужно уточнить", "Отмечайте вопросы, а не подтверждённые факты"),
+        "plus": ("Другие плюсы", "Что ещё привлекает"),
+    }
+    buckets = {code: [] for code in groups}
+    hints = {
+        "rough-finish": "Есть черновая подготовка, нужна чистовая отделка.",
+        "no-finish": "Отделки нет, квартиру предстоит обустраивать с нуля.",
+        "poor-repair": "Оценка качества существующего ремонта; объём работ отметьте отдельно.",
+        "bad-area": "Не подходит район в целом.",
+        "questionable-location": "Есть сомнения в конкретном месте: двор, соседство или подъезд к дому.",
+    }
+    for tag in ReviewTag.objects.filter(is_active=True):
+        category = tag.category
+        if tag.code in {"cosmetic-repair", "major-repair", "move-in-ready"}:
+            category = "work"
+        elif tag.code in {"good-layout", "bright", "spacious"}:
+            category = "layout"
+        buckets[category].append({"pk": tag.pk, "name": tag.name, "hint": hints.get(tag.code, "")})
+    return [
+        {"label": label, "hint": hint, "tags": buckets[code]}
+        for code, (label, hint) in groups.items() if buckets[code]
+    ]
+
+
 def save_review(request, listing):
     """Сохраняет оценку, теги и этап рассмотрения из формы пользователя."""
     try:

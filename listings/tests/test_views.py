@@ -9,7 +9,7 @@ from io import BytesIO
 
 from listings.models import (CianDetailPollProgress, CianDetailPollState, CianFullScanCheckpoint, Consideration, GeoZone, Listing, ListingReview,
                              ListingSearchQuery, ListingSnapshot, PriceHistory, ReviewTag, Scan, ScoringPreference, SearchQuery,
-                             SourcePollingControl, UserListingHide)
+                             SourcePollingControl, UserListingHide, GlobalListingHide)
 from listings.services.reviews import personal_candidate_queryset
 from listings.views import add_listing_score, add_market_position, next_poll_runs
 
@@ -495,19 +495,68 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "Карточка объявления")
         self.assertContains(response, self.match.get_source_display())
         response = self.client.post(reverse("review_queue"), {
+            "listing_id": self.match.pk,
             "rating": "9", "decision": "consider", "tags": [tag.pk], "comment": "Подходит",
-            "interest_reason": "Хорошая цена", "deal_breaker": "", "hide_personally": "on",
+            "interest_reason": "Хорошая цена", "deal_breaker": "",
         })
         self.assertRedirects(response, reverse("review_queue"))
         review = ListingReview.objects.get(author=self.user)
         self.assertEqual(review.rating, 9)
         self.assertEqual(list(review.tags.all()), [tag])
         self.assertTrue(Consideration.objects.filter(review=review, stage="new").exists())
-        self.assertTrue(UserListingHide.objects.filter(listing=review.listing, user=self.user).exists())
+        self.assertFalse(UserListingHide.objects.filter(listing=review.listing, user=self.user).exists())
         self.assertEqual(review.revisions.count(), 1)
         response = self.client.get(reverse("consideration_list"))
         self.assertContains(response, "Новое")
         self.assertContains(response, "Ваша оценка: 9/10")
+
+    def test_review_hiding_is_separate_from_rating_and_requires_staff_for_global_hide(self):
+        self.client.force_login(self.user)
+        payload = {"listing_id": self.match.pk, "action": "hide_globally", "global_reason": "Дубликат"}
+        response = self.client.post(reverse("review_queue"), payload)
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(GlobalListingHide.objects.exists())
+        response = self.client.post(reverse("review_queue"), {
+            "listing_id": self.match.pk, "action": "hide_personally", "comment": "Не сохранять",
+        })
+        self.assertRedirects(response, reverse("review_queue"))
+        self.assertTrue(UserListingHide.objects.filter(listing=self.match, user=self.user).exists())
+        self.assertFalse(ListingReview.objects.exists())
+
+    def test_global_review_hide_requires_reason_and_does_not_create_review(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=["is_staff"])
+        self.client.force_login(self.user)
+        payload = {"listing_id": self.match.pk, "action": "hide_globally"}
+        response = self.client.post(reverse("review_queue"), payload)
+        self.assertContains(response, "Укажите причину скрытия")
+        self.assertFalse(GlobalListingHide.objects.exists())
+        response = self.client.post(reverse("review_queue"), {**payload, "global_reason": "Дубликат"})
+        self.assertRedirects(response, reverse("review_queue"))
+        self.assertEqual(GlobalListingHide.objects.get().reason, "Дубликат")
+        self.assertFalse(ListingReview.objects.exists())
+
+    def test_review_error_preserves_notes_tags_and_does_not_replace_unavailable_listing(self):
+        tag = ReviewTag.objects.create(code="review-error-tag", name="Особенность", category="plus")
+        self.client.force_login(self.user)
+        payload = {"listing_id": self.match.pk, "decision": "consider", "comment": "Моя заметка", "tags": [tag.pk]}
+        response = self.client.post(reverse("review_queue"), payload)
+        self.assertContains(response, "Моя заметка")
+        self.assertEqual(response.context["selected_tags"], [str(tag.pk)])
+        response = self.client.post(reverse("review_queue"), {**payload, "listing_id": self.hidden.pk, "rating": "8"})
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(ListingReview.objects.exists())
+
+    def test_review_form_groups_keep_tag_identity_and_custom_tags(self):
+        from listings.services.reviews import review_form_tag_groups
+
+        layout, _ = ReviewTag.objects.update_or_create(code="good-layout", defaults={"name": "Удачная планировка", "category": "plus"})
+        custom = ReviewTag.objects.create(code="custom-condition", name="Особая отделка", category="condition")
+        groups = {group["label"]: group["tags"] for group in review_form_tag_groups()}
+        self.assertIn(layout.pk, [tag["pk"] for tag in groups["Планировка и свет"]])
+        self.assertIn(custom.pk, [tag["pk"] for tag in groups["Отделка"]])
+        layout.refresh_from_db()
+        self.assertEqual(layout.category, "plus")
 
     def test_unavailable_cian_listings_shows_confirmed_detail_removals(self):
         CianDetailPollState.objects.create(
