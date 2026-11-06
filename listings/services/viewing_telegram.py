@@ -77,6 +77,10 @@ def _post_text(apartment):
               .order_by("-updated_at").first())
     if review:
         parts.append(f"<b>Рецензия Home Hunter:</b> {review.rating}/10 · {html.escape(review.get_decision_display())}")
+    links = [("ЦИАН", apartment.cian_url), ("Авито", apartment.avito_url), ("Домклик", apartment.domclick_url)]
+    links = [f'<a href="{html.escape(url, quote=True)}">{label}</a>' for label, url in links if url]
+    if links:
+        parts.append("<b>Объявления:</b> " + " · ".join(links))
     parts.append(f"<a href=\"{settings.PUBLIC_BASE_URL}/viewings/{apartment.pk}/\">Открыть карточку</a>")
     return "\n\n".join(parts)[:1024]
 

@@ -14,6 +14,7 @@ from django.utils import timezone
 from listings.forms_viewings import ApartmentForm, EntryForm
 from listings.models import Listing, ViewingApartment, ViewingEntry, ViewingPhoto, ViewingTelegramPublication
 from listings.services.viewing_photos import prepare_viewing_photos, viewing_media_lock
+from listings.services.viewing_telegram import _post_text
 from listings.services.viewings import (
     apartment_initial, apartment_queryset, change_listing_link, linked_apartments,
     resolve_viewing_listing, save_apartment, save_viewing_entry, update_viewing_photo,
@@ -85,6 +86,17 @@ def test_viewing_detail_queues_telegram_publication(owner, apartment, settings, 
     publication = ViewingTelegramPublication.objects.get(apartment=apartment)
     assert publication.status == ViewingTelegramPublication.Status.PENDING
     assert publication.channel_id == settings.TG_VIEWINGS_CHANNEL_ID
+
+
+def test_viewing_telegram_post_contains_filled_source_links(owner, apartment, settings):
+    settings.PUBLIC_BASE_URL = "http://home.test"
+    apartment.cian_url = "https://cian.example/flat?id=1"
+    apartment.avito_url = "https://avito.example/flat"
+    apartment.save(update_fields=("cian_url", "avito_url"))
+    text = _post_text(apartment)
+    assert 'href="https://cian.example/flat?id=1"' in text
+    assert 'href="https://avito.example/flat"' in text
+    assert "Домклик" not in text
 
 
 @pytest.mark.parametrize("reference", ["999999", "abc", "0", "9" * 20, "https://evil.test/listings/1/", "/admin/", "１２３"])
