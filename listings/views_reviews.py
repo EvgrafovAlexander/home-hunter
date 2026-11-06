@@ -8,12 +8,13 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from .models import CianDetailPollState, Consideration, Listing, ListingReview
 from .services.market import MIN_TARGET_AREA, annotate_market_position
 from .services.personal_filters import annotate_personal_filter
 from .services.reviews import (
-    hide_listing_for_user,
+    hide_listing_for_user as create_user_listing_hide,
     hide_listing_globally,
     personal_candidate_queryset,
     review_queue_queryset,
@@ -56,7 +57,7 @@ def review_queue(request):
         if action == "hide_globally" and not request.user.is_staff:
             raise PermissionDenied
         if action == "hide_personally":
-            hide_listing_for_user(listing, request.user)
+            create_user_listing_hide(listing, request.user)
             return redirect("review_queue")
         if action == "hide_globally":
             reason = request.POST.get("global_reason", "").strip()
@@ -93,6 +94,15 @@ def review_queue(request):
         "review_photos": review_photos,
         "selected_listing_id": listing.pk if listing else None,
     })
+
+
+@login_required
+@require_POST
+def hide_listing_for_user(request, listing_id: int):
+    """Скрывает объявление из личной ленты и очереди оценки пользователя."""
+    listing = get_object_or_404(Listing, pk=listing_id)
+    create_user_listing_hide(listing, request.user)
+    return redirect("listing_feed")
 
 
 @login_required

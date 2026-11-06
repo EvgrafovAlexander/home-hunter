@@ -1,10 +1,11 @@
 from django.urls import path
 
-from . import agent_views, views, views_operations, views_market, views_viewings
+from . import agent_views, views, views_operations, views_market, views_reviews, views_viewings
 
 urlpatterns = [
     path("market-exclusions/", views_operations.market_exclusions, name="market_exclusions"),
     path("listings/<int:listing_id>/market-exclusion/", views_operations.market_exclusion_edit, name="market_exclusion_edit"),
+    path("listings/<int:listing_id>/hide/", views_reviews.hide_listing_for_user, name="hide_listing_for_user"),
     path("viewings/", views_viewings.viewing_list, name="viewing_list"),
     path("viewings/new/", views_viewings.viewing_create, name="viewing_create"),
     path("viewings/<int:pk>/", views_viewings.viewing_detail, name="viewing_detail"),

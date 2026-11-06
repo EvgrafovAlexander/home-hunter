@@ -353,6 +353,21 @@ class ListingViewsTests(TestCase):
         self.assertContains(response, "Похожие квартиры")
         self.assertIn(similar, response.context["similar_listings"])
 
+    def test_listing_detail_can_hide_listing_from_personal_feed_and_review_queue(self):
+        self.client.force_login(self.user)
+        detail_url = reverse("listing_detail", args=[self.match.pk])
+        response = self.client.get(detail_url)
+        self.assertContains(response, "Скрыть из моей ленты и Оценки")
+
+        response = self.client.post(reverse("hide_listing_for_user", args=[self.match.pk]))
+
+        self.assertRedirects(response, reverse("listing_feed"))
+        self.assertTrue(UserListingHide.objects.filter(listing=self.match, user=self.user).exists())
+        self.assertNotIn(self.match, self.client.get(reverse("listing_feed")).context["listings"])
+        self.assertNotEqual(
+            self.client.get(reverse("review_queue")).context["selected_listing_id"], self.match.pk,
+        )
+
     def test_market_position_does_not_mix_microdistricts_inside_one_district(self):
         zaton = Listing.objects.create(
             source="avito", external_id="zaton", url="https://example.test/zaton", title="Затон",
