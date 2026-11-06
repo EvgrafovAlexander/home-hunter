@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from listings.services.telegram_reviews import handle_update
+from listings.services.viewing_telegram import record_discussion_forward
 from listings.models import TelegramPollingState
 
 
@@ -29,6 +30,7 @@ class Command(BaseCommand):
                     offset = update["update_id"] + 1
                     state.offset = offset
                     state.save(update_fields=("offset", "updated_at"))
+                    record_discussion_forward(update)
                     handle_update(update)
             except requests.RequestException as exc:
                 self.stderr.write(f"Telegram polling error: {type(exc).__name__}")

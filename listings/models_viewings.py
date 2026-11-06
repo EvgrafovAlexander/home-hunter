@@ -105,11 +105,15 @@ class ViewingTelegramPublication(models.Model):
         SENDING = "sending", "Отправляется"
         SENT = "sent", "Опубликовано"
         FAILED = "failed", "Ошибка"
+        WAITING_COMMENT = "waiting_comment", "Ждёт комментария"
 
     apartment = models.OneToOneField(ViewingApartment, on_delete=models.CASCADE, related_name="telegram_publication")
     channel_id = models.CharField(max_length=100)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
     message_ids = models.JSONField(default=list, blank=True)
+    channel_message_id = models.BigIntegerField(null=True, blank=True)
+    discussion_message_id = models.BigIntegerField(null=True, blank=True)
+    description_message_id = models.BigIntegerField(null=True, blank=True)
     error = models.TextField(blank=True)
     attempts = models.PositiveIntegerField(default=0)
     queued_at = models.DateTimeField(auto_now_add=True)

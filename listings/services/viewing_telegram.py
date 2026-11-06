@@ -27,7 +27,8 @@ def queue_viewing_publication(owner, apartment_id):
         apartment = ViewingApartment.objects.select_for_update().get(pk=apartment_id, owner=owner)
         publication, _ = ViewingTelegramPublication.objects.update_or_create(
             apartment=apartment,
-            defaults={"channel_id": settings.TG_VIEWINGS_CHANNEL_ID, "status": "pending", "error": "", "published_at": None},
+            defaults={"channel_id": settings.TG_VIEWINGS_CHANNEL_ID, "status": "pending", "error": "", "published_at": None,
+                      "channel_message_id": None, "discussion_message_id": None, "description_message_id": None},
         )
     return publication
 
@@ -110,13 +111,14 @@ def _send_album(apartment, text, channel_id):
             handle.close()
 
 
-def _send_description(apartment, channel_id, root_message_id):
+def _send_description_comment(apartment, discussion_id, discussion_message_id):
+    """Публикует описание ответом в ветке привязанной группы обсуждений."""
     description = _description_text(apartment)
-    if not description:
+    if not description or not discussion_id or not discussion_message_id:
         return None
     result = _api("sendMessage", data={
-        "chat_id": channel_id, "text": description, "parse_mode": "HTML",
-        "reply_parameters": json.dumps({"message_id": root_message_id, "allow_sending_without_reply": True}),
+        "chat_id": discussion_id, "text": description, "parse_mode": "HTML",
+        "reply_parameters": json.dumps({"message_id": discussion_message_id, "allow_sending_without_reply": False}),
     })
     return result["message_id"]
 
@@ -142,12 +144,12 @@ def deliver_viewing_publications(limit=5):
         try:
             apartment = ViewingApartment.objects.get(pk=publication.apartment_id)
             message_ids = _send_album(apartment, _post_text(apartment), publication.channel_id)
-            description_id = _send_description(apartment, publication.channel_id, message_ids[0])
-            publication.message_ids = message_ids + ([description_id] if description_id else [])
-            publication.status = "sent"
+            publication.message_ids = message_ids
+            publication.channel_message_id = message_ids[0]
+            publication.status = "waiting_comment" if _description_text(apartment) and settings.TG_VIEWINGS_DISCUSSION_ID else "sent"
             publication.error = ""
             publication.published_at = timezone.now()
-            publication.save(update_fields=("message_ids", "status", "error", "published_at", "updated_at"))
+            publication.save(update_fields=("message_ids", "channel_message_id", "status", "error", "published_at", "updated_at"))
             delivered += 1
         except Exception as exc:  # отдельная карточка не должна останавливать worker
             publication.status = "failed"
@@ -155,3 +157,34 @@ def deliver_viewing_publications(limit=5):
             publication.save(update_fields=("status", "error", "updated_at"))
             logger.warning("Viewing Telegram publication %s failed: %s", publication.pk, type(exc).__name__)
     return delivered
+
+
+def record_discussion_forward(update):
+    """Находит авто-пересланный пост и отправляет его описание в ветку комментариев."""
+    message = update.get("message") or {}
+    if not message.get("is_automatic_forward"):
+        return False
+    if str(message.get("chat", {}).get("id")) != str(settings.TG_VIEWINGS_DISCUSSION_ID):
+        return False
+    origin = message.get("forward_origin") or {}
+    origin_chat = origin.get("chat") or {}
+    origin_id = origin.get("message_id") or message.get("forward_from_message_id")
+    if str(origin_chat.get("id")) != str(settings.TG_VIEWINGS_CHANNEL_ID) or not origin_id:
+        return False
+    publication = (ViewingTelegramPublication.objects.select_related("apartment")
+                   .filter(channel_message_id=origin_id, status=ViewingTelegramPublication.Status.WAITING_COMMENT).first())
+    if not publication:
+        return False
+    try:
+        description_id = _send_description_comment(publication.apartment, settings.TG_VIEWINGS_DISCUSSION_ID, message["message_id"])
+        publication.discussion_message_id = message["message_id"]
+        publication.description_message_id = description_id
+        publication.message_ids = [*publication.message_ids, description_id] if description_id else publication.message_ids
+        publication.status = ViewingTelegramPublication.Status.SENT
+        publication.save(update_fields=("discussion_message_id", "description_message_id", "message_ids", "status", "updated_at"))
+        return True
+    except Exception as exc:
+        publication.status = ViewingTelegramPublication.Status.FAILED
+        publication.error = f"{type(exc).__name__}: {exc}"[:2000]
+        publication.save(update_fields=("status", "error", "updated_at"))
+        return False

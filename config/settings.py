@@ -124,6 +124,7 @@ TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 TG_CHAT_ID = os.getenv("TG_CHAT_ID", "")
 TG_CHANNEL_ID = os.getenv("TG_CHANNEL_ID", "")
 TG_VIEWINGS_CHANNEL_ID = os.getenv("TG_VIEWINGS_CHANNEL_ID", "")
+TG_VIEWINGS_DISCUSSION_ID = os.getenv("TG_VIEWINGS_DISCUSSION_ID", "")
 TG_BOT_USERNAME = os.getenv("TG_BOT_USERNAME", "")
 TG_REVIEW_USER_IDS = tuple(filter(None, (item.strip() for item in os.getenv("TG_REVIEW_USER_IDS", "").split(","))))
 TG_FULL_SCAN_CHAT_IDS = tuple(filter(None, (item.strip() for item in os.getenv(
