@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from listings.forms_viewings import ApartmentForm, EntryForm
-from listings.models import Listing, ViewingApartment, ViewingEntry, ViewingPhoto
+from listings.models import Listing, ViewingApartment, ViewingEntry, ViewingPhoto, ViewingTelegramPublication
 from listings.services.viewing_photos import prepare_viewing_photos, viewing_media_lock
 from listings.services.viewings import (
     apartment_initial, apartment_queryset, change_listing_link, linked_apartments,
@@ -75,6 +75,16 @@ def test_create_link_prefill_and_manual_fields_do_not_follow_listing(owner, list
     change_listing_link(owner, apartment.pk, listing, remove=True)
     assert not apartment.listing_links.exists()
     assert apartment.address == "Мира, 12"
+
+
+def test_viewing_detail_queues_telegram_publication(owner, apartment, settings, client):
+    settings.TG_VIEWINGS_CHANNEL_ID = "-1004489313379"
+    client.force_login(owner)
+    response = client.post(reverse("viewing_detail", args=[apartment.pk]), {"action": "publish_telegram"})
+    assert response.status_code == 302
+    publication = ViewingTelegramPublication.objects.get(apartment=apartment)
+    assert publication.status == ViewingTelegramPublication.Status.PENDING
+    assert publication.channel_id == settings.TG_VIEWINGS_CHANNEL_ID
 
 
 @pytest.mark.parametrize("reference", ["999999", "abc", "0", "9" * 20, "https://evil.test/listings/1/", "/admin/", "１２３"])

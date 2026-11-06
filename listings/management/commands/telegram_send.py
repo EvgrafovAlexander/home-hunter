@@ -5,6 +5,7 @@ from django.conf import settings
 
 from listings.services.deal_alerts import notify_new_listing
 from listings.services.telegram_delivery import claim_listing_alerts, mark_listing_alert_failed
+from listings.services.viewing_telegram import deliver_viewing_publications
 
 
 class Command(BaseCommand):
@@ -29,6 +30,7 @@ class Command(BaseCommand):
                 except Exception as exc:  # одна плохая карточка не должна остановить очередь
                     mark_listing_alert_failed(alert_id, f"{type(exc).__name__}: {exc}", attempt=attempt)
                     self.stderr.write(f"Telegram listing alert {alert_id} failed: {type(exc).__name__}")
+            deliver_viewing_publications(batch_size)
             if options["once"]:
                 return
             time.sleep(interval)

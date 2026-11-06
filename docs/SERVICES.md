@@ -85,6 +85,7 @@ staff с непустой причиной до 255 символов. POST пр�
 | `telegram_delivery.py` | Очередь доставки без блокировки ожидающими геокодирования, с восстановлением просроченных захватов и защитой результатов номером попытки; при потере ответа возможен дубль | Claims, статусы и Telegram API через delivery workflow |
 | `scan_summary.py` | Личные сводки CIAN/Avito-опросов | Итоги Scan и время следующего запуска через Telegram |
 | `telegram_reviews.py` | Интерактивная review-сессия в Telegram | Telegram API и review-модели |
+| `viewing_telegram.py` | Очередь публикации личных карточек просмотров и фотографий | Telegram Bot API и `ViewingTelegramPublication` |
 
 ## Правила изменения
 

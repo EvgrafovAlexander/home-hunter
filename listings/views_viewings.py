@@ -12,11 +12,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from .forms_viewings import ApartmentDeleteForm, ApartmentPhotoForm, EntryForm, ListingReferenceForm, PhotoCaptionForm
-from .models import Listing, ViewingApartment, ViewingEntry, ViewingPhoto
+from .models import Listing, ViewingApartment, ViewingEntry, ViewingPhoto, ViewingTelegramPublication
 from .services.viewings import (
     apartment_initial, apartment_queryset, change_listing_link, create_apartment, delete_apartment, linked_apartments,
     resolve_viewing_listing, save_apartment_with_photos, save_viewing_entry, update_viewing_photo,
 )
+from .services.viewing_telegram import queue_viewing_publication
 
 
 def _listing(request, reference):
@@ -111,6 +112,13 @@ def viewing_detail(request, pk):
     if request.method == "POST":
         action = request.POST.get("action")
         try:
+            if action == "publish_telegram":
+                if not settings.TG_VIEWINGS_CHANNEL_ID:
+                    error = "Канал просмотров ещё не настроен."
+                else:
+                    queue_viewing_publication(request.user, pk)
+                    messages.success(request, "Карточка поставлена в очередь публикации Telegram.")
+                    return redirect("viewing_detail", pk=pk)
             if action == "entry":
                 is_comment = request.POST.get("kind") == "note"
                 submitted_form = EntryForm(request.POST, request.FILES, fixed_kind="note" if is_comment else "visit",
@@ -137,10 +145,15 @@ def viewing_detail(request, pk):
         except OSError:
             error = "Не удалось сохранить фотографии. Попробуйте ещё раз; запись не была изменена."
     entries = apartment.entries.prefetch_related("photos")
+    try:
+        telegram_publication = apartment.telegram_publication
+    except ViewingTelegramPublication.DoesNotExist:
+        telegram_publication = None
     return render(request, "listings/viewings/detail.html", {
         "apartment": apartment, "entry_form": entry_form, "comment_form": comment_form, "reference_form": reference_form,
         "listing": listing, "linked": linked_apartments(request.user, listing) if listing else [],
         "links": apartment.listing_links.select_related("listing"), "photos": apartment.photos.all(),
+        "telegram_publication": telegram_publication,
         "entries": Paginator(entries.filter(kind="visit"), 20).get_page(request.GET.get("page")),
         "comments": Paginator(entries.filter(kind="note"), 20).get_page(request.GET.get("comments_page")), "error": error,
     }, status=400 if request.method == "POST" else 200)
