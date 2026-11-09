@@ -95,6 +95,22 @@ class ListingViewsTests(TestCase):
         response = self.client.get(reverse("listing_feed"), {"rooms": 2, "price_max": 7_000_000})
         self.assertContains(response, "6\u00a0500\u00a0000")
 
+    def test_feed_filters_by_street_and_exact_house_number(self):
+        match = Listing.objects.create(
+            source="avito", external_id="street-match", url="https://example.test/street-match",
+            title="На Ленина 10", area="60.00", address="Уфа, улица Ленина, 10",
+        )
+        Listing.objects.create(
+            source="avito", external_id="street-nearby", url="https://example.test/street-nearby",
+            title="На Ленина 100", area="60.00", address="Уфа, улица Ленина, 100",
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("listing_feed"), {"street": "ленина", "house": "10"})
+        self.assertIn(match, response.context["listings"])
+        self.assertNotContains(response, "На Ленина 100")
+        self.assertEqual(response.context["filters"]["street"], "ленина")
+        self.assertEqual(response.context["filters"]["house"], "10")
+
     def test_personal_candidates_take_newest_records_before_zone_limit(self):
         """Свежая карточка не теряется за пределами первых 1000 строк базы."""
         GeoZone.objects.create(

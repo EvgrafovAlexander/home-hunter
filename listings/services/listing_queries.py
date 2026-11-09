@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
+import re
 
 from django.db.models import Q
 from django.utils import timezone
@@ -37,7 +38,7 @@ def filtered_listings(request, *, visible=True, include_excluded=False):
         listings = listings.exclude(user_hides__user=request.user)
     if visible is not None:
         listings = listings.filter(is_visible=visible)
-    names = ("source", "district", "rooms", "price_min", "price_max", "sqm_price_min",
+    names = ("source", "district", "street", "house", "rooms", "price_min", "price_max", "sqm_price_min",
              "sqm_price_max", "area_min", "area_max", "kitchen_area_min", "kitchen_area_max",
              "floor_min", "floor_max", "repair_type", "building_material_type", "has_lift",
              "has_balcony", "days", "active")
@@ -48,6 +49,13 @@ def filtered_listings(request, *, visible=True, include_excluded=False):
     for field in ("source", "district"):
         if values[field]:
             listings = listings.filter(**{field: values[field]})
+    if values["street"]:
+        listings = listings.filter(address__icontains=values["street"])
+    if values["house"]:
+        # Граница по цифрам не даёт дому 10 совпасть с адресом дома 100.
+        house = re.escape(values["house"].strip())
+        if house:
+            listings = listings.filter(address__iregex=rf"(^|[^0-9]){house}([^0-9]|$)")
     number = _integer(values["rooms"])
     if number is not None:
         listings = listings.filter(rooms=number)
