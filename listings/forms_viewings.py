@@ -16,6 +16,7 @@ class ApartmentForm(forms.ModelForm):
         model = ViewingApartment
         fields = ("title", "address", "district", "rooms", "area", "floor", "floors_total", "asking_price",
                   "negotiated_price", "price_note", "contact_name", "contact_phone", "contact_role", "decision",
+                  "availability_status",
                   "rating", "pros", "cons", "questions", "description", "cian_url", "avito_url", "domclick_url")
         widgets = {name: forms.Textarea(attrs={"rows": 3}) for name in ("price_note", "pros", "cons", "questions", "description")}
 

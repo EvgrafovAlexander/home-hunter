@@ -15,8 +15,12 @@ class ViewingApartment(models.Model):
         VIEWED = "viewed", "Просмотрена"
         SUITABLE = "suitable", "Подходит"
         REJECTED = "rejected", "Отказ"
-        OFF_MARKET = "off_market", "Снята с продажи"
         ARCHIVED = "archived", "Архив"
+
+    class AvailabilityStatus(models.TextChoices):
+        UNKNOWN = "unknown", "Не проверено"
+        ACTIVE = "active", "В продаже"
+        OFF_MARKET = "off_market", "Снята с продажи"
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="viewing_apartments")
     title = models.CharField("Название", max_length=200)
@@ -39,6 +43,9 @@ class ViewingApartment(models.Model):
     contact_role = models.CharField("Кто показывает", max_length=20, blank=True,
                                    choices=(("owner", "Собственник"), ("agent", "Агент"), ("other", "Другое")))
     decision = models.CharField("Статус карточки", max_length=20, choices=Decision.choices, default=Decision.THINKING)
+    availability_status = models.CharField("Статус объявления", max_length=20,
+                                           choices=AvailabilityStatus.choices,
+                                           default=AvailabilityStatus.UNKNOWN)
     rating = models.PositiveSmallIntegerField("Моя оценка / 10", null=True, blank=True,
                                              validators=[MinValueValidator(1), MaxValueValidator(10)])
     pros = models.TextField("Плюсы", blank=True)
