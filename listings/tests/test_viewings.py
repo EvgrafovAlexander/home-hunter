@@ -90,6 +90,22 @@ def test_apartment_statuses_separate_viewing_progress_and_market_availability():
     }
 
 
+def test_apartment_list_prioritizes_open_work_before_off_market_and_viewed(owner):
+    viewed = ViewingApartment.objects.create(owner=owner, title="Просмотрена",
+                                             decision=ViewingApartment.Decision.VIEWED)
+    off_market = ViewingApartment.objects.create(owner=owner, title="Снята",
+                                                 availability_status=ViewingApartment.AvailabilityStatus.OFF_MARKET)
+    open_work = ViewingApartment.objects.create(owner=owner, title="Новая")
+    viewed_off_market = ViewingApartment.objects.create(
+        owner=owner, title="Просмотрена и снята", decision=ViewingApartment.Decision.VIEWED,
+        availability_status=ViewingApartment.AvailabilityStatus.OFF_MARKET,
+    )
+
+    assert list(apartment_queryset(owner).values_list("pk", flat=True)) == [
+        open_work.pk, off_market.pk, viewed_off_market.pk, viewed.pk,
+    ]
+
+
 def test_viewing_detail_queues_telegram_publication(owner, apartment, settings, client):
     settings.TG_VIEWINGS_CHANNEL_ID = "-1004489313379"
     client.force_login(owner)

@@ -11,7 +11,7 @@ import uuid
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.utils import timezone
 
 from listings.models import Listing, ViewingApartment, ViewingEntry, ViewingListingLink, ViewingPhoto
@@ -37,7 +37,15 @@ def apartment_queryset(owner, *, query="", decision=""):
         apartments = apartments.exclude(decision="archived")
     if query:
         apartments = apartments.filter(Q(title__icontains=query) | Q(address__icontains=query) | Q(district__icontains=query))
-    return apartments.order_by("-updated_at", "-pk")
+    # Сначала показываем варианты, по которым ещё можно принять следующее решение.
+    priority = Case(
+        When(decision__in=(ViewingApartment.Decision.VIEWED, ViewingApartment.Decision.SUITABLE,
+                           ViewingApartment.Decision.REJECTED), then=Value(2)),
+        When(availability_status=ViewingApartment.AvailabilityStatus.OFF_MARKET, then=Value(1)),
+        default=Value(0),
+        output_field=IntegerField(),
+    )
+    return apartments.annotate(list_priority=priority).order_by("list_priority", "-updated_at", "-pk")
 
 
 def resolve_viewing_listing(reference, *, allowed_hosts):
