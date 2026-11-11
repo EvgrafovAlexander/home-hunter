@@ -78,6 +78,15 @@ def test_create_link_prefill_and_manual_fields_do_not_follow_listing(owner, list
     assert apartment.address == "Мира, 12"
 
 
+def test_apartment_statuses_include_viewing_progress_and_off_market():
+    values = dict(ViewingApartment.Decision.choices)
+    assert values[ViewingApartment.Decision.THINKING] == "Не просмотрена"
+    assert values[ViewingApartment.Decision.CONTACT] == "Нужно связаться"
+    assert values[ViewingApartment.Decision.VIEWING_PLANNED] == "Просмотр назначен"
+    assert values[ViewingApartment.Decision.VIEWED] == "Просмотрена"
+    assert values[ViewingApartment.Decision.OFF_MARKET] == "Снята с продажи"
+
+
 def test_viewing_detail_queues_telegram_publication(owner, apartment, settings, client):
     settings.TG_VIEWINGS_CHANNEL_ID = "-1004489313379"
     client.force_login(owner)

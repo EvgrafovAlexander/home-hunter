@@ -9,9 +9,13 @@ from django.db import models
 
 class ViewingApartment(models.Model):
     class Decision(models.TextChoices):
-        THINKING = "thinking", "Думаю"
+        THINKING = "thinking", "Не просмотрена"
+        CONTACT = "contact", "Нужно связаться"
+        VIEWING_PLANNED = "viewing_planned", "Просмотр назначен"
+        VIEWED = "viewed", "Просмотрена"
         SUITABLE = "suitable", "Подходит"
         REJECTED = "rejected", "Отказ"
+        OFF_MARKET = "off_market", "Снята с продажи"
         ARCHIVED = "archived", "Архив"
 
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="viewing_apartments")
@@ -34,7 +38,7 @@ class ViewingApartment(models.Model):
     contact_phone = models.CharField("Телефон", max_length=60, blank=True)
     contact_role = models.CharField("Кто показывает", max_length=20, blank=True,
                                    choices=(("owner", "Собственник"), ("agent", "Агент"), ("other", "Другое")))
-    decision = models.CharField("Решение", max_length=20, choices=Decision.choices, default=Decision.THINKING)
+    decision = models.CharField("Статус карточки", max_length=20, choices=Decision.choices, default=Decision.THINKING)
     rating = models.PositiveSmallIntegerField("Моя оценка / 10", null=True, blank=True,
                                              validators=[MinValueValidator(1), MaxValueValidator(10)])
     pros = models.TextField("Плюсы", blank=True)
