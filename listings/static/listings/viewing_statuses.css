@@ -1,0 +1,14 @@
+/* Цвет отделяет этап работы с квартирой от её доступности на рынке. */
+.vn-badge.thinking { background: #fff3d6; color: #885a00; }
+.vn-badge.contact { background: #e4f0ff; color: #185a9d; }
+.vn-badge.viewing_planned { background: #d9f5ee; color: #08745e; }
+.vn-badge.viewed { background: #eee5ff; color: #65409b; }
+.vn-badge.suitable { background: #dff5e5; color: #1d6c3b; }
+.vn-badge.rejected { background: #fde4e0; color: #a2382c; }
+.vn-badge.archived { background: #edf0ef; color: #63716b; }
+
+.vn-badge.availability.unknown { background: #edf0ef; color: #63716b; }
+.vn-badge.availability.active { background: #d8f5e4; color: #176b3b; }
+.vn-badge.availability.off_market { background: #fde2df; color: #a42d25; }
+
+.vn-card-photo > .vn-badge.availability { top: 48px; }

@@ -2,6 +2,7 @@
 {% block title %}Мои просмотры · Home Hunter{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'listings/viewings.css' %}">
+<link rel="stylesheet" href="{% static 'listings/viewing_statuses.css' %}">
 <div class="vn-page">
 {% for message in messages %}<div class="vn-message {{ message.tags }}" role="status">{{ message }}</div>{% endfor %}
 {% block viewing_content %}{% endblock %}
