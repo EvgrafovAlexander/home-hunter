@@ -437,6 +437,24 @@ class ListingViewsTests(TestCase):
         self.assertEqual(response.context["price_increases"][0]["difference"], 500_000)
         self.assertContains(response, "Самые заметные повышения")
 
+    def test_dashboard_counts_all_price_drops_not_only_top_ten(self):
+        now = timezone.now()
+        for index in range(11):
+            listing = Listing.objects.create(
+                source="cian", external_id=f"drop-count-{index}", url="https://example.test/drop-count",
+                title="Снижение цены", price=8_000_000 - index * 10_000,
+                price_per_sqm=140_000, rooms=2, area="55.00", district="Кировский",
+                first_seen_at=now - timedelta(days=2),
+            )
+            PriceHistory.objects.create(listing=listing, price=8_000_000, observed_at=now - timedelta(days=2))
+            PriceHistory.objects.create(listing=listing, price=7_000_000, observed_at=now - timedelta(days=1))
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("dashboard"), {"stats_days": 7})
+
+        self.assertEqual(response.context["price_drop_count"], 11)
+        self.assertEqual(len(response.context["price_drops"]), 10)
+
     def test_dashboard_shows_median_microdistrict_market_stats(self):
         now = timezone.now()
         created = []

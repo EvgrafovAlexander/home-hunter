@@ -90,7 +90,9 @@ def dashboard(request):
         "microdistrict_stats": microdistrict_stats,
         "area_market_stats": area_market_stats,
         "microdistrict_min_sample": MICRODISTRICT_MARKET_MIN_SAMPLE,
-        "price_drop_count": len(price_drops), "price_unchanged_count": max(0, price_history_count - len(changes)),
+        # Список движений ограничен десятью строками, счётчик должен учитывать все изменения.
+        "price_drop_count": sum(change["difference"] < 0 for change in changes),
+        "price_unchanged_count": max(0, price_history_count - len(changes)),
         "price_increase_count": sum(change["difference"] > 0 for change in changes),
         "price_drops": price_drops, "price_increases": price_increases,
         "price_distribution": price_distribution, "area_distribution": area_distribution,
